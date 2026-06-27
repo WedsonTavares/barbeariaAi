@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@diny/core": ["../../packages/core/src/index.ts"],
+      "@diny/core/services": ["../../packages/core/src/services/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

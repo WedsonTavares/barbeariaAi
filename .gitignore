@@ -1,0 +1,11 @@
+node_modules
+.next
+dist
+.turbo
+.env
+.env*.local
+*.tsbuildinfo
+.DS_Store
+
+# Credenciais — NUNCA versionar (contém secrets do Clerk/Supabase)
+credenciais.md

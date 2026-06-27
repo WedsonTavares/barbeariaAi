@@ -1,0 +1,377 @@
+// Diny SaaS — Fase 1. Tudo isolado por tenantId; RLS aplicado via prisma/rls.sql.
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum SiteMode {
+  SITE_BUILDER
+  EXTERNAL_SITE
+  CUSTOM_DOMAIN
+}
+
+enum ToyCategory {
+  CAMA_ELASTICA
+  PISCINA_BOLINHAS
+  INFLAVEL
+  ESCORREGADOR
+  MESA_CADEIRA
+  OUTRO
+}
+
+enum ToyStatus {
+  AVAILABLE
+  RENTED
+  MAINTENANCE
+  RETIRED
+}
+
+enum LeadSource {
+  INSTAGRAM
+  FACEBOOK
+  GOOGLE
+  INDICATION
+  WHATSAPP
+  WEBSITE
+  PAID_ADS
+  PARTNER
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUOTED
+  WON
+  LOST
+}
+
+enum BookingStatus {
+  LEAD
+  QUOTE_SENT
+  WAITING_DEPOSIT
+  CONFIRMED
+  IN_DELIVERY
+  MOUNTED
+  PICKED_UP
+  FINISHED
+  CANCELED
+}
+
+enum PaymentStatus {
+  PENDING
+  DEPOSIT_PAID
+  PAID
+  OVERDUE
+  REFUNDED
+}
+
+enum PaymentKind {
+  DEPOSIT
+  BALANCE
+  REFUND
+}
+
+enum ExpenseCategory {
+  FUEL
+  HELPER
+  MAINTENANCE
+  CLEANING
+  OTHER
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
+enum ReminderType {
+  PICKUP_1H
+  PICKUP_30M
+  PICKUP_15M
+  PICKUP_NOW
+  PICKUP_DELAYED
+}
+
+enum ReminderStatus {
+  SCHEDULED
+  SENT
+  CANCELED
+}
+
+enum NotificationType {
+  NEW_WHATSAPP_MESSAGE
+  NEW_LEAD
+  BOOKING_ENDING_SOON
+  BOOKING_PICKUP_NOW
+  BOOKING_PICKUP_DELAYED
+  PAYMENT_PENDING
+  MAINTENANCE_ALERT
+  GOOGLE_CALENDAR_SYNC_FAILED
+  INTEGRATION_ERROR
+}
+
+model Tenant {
+  id           String   @id @default(uuid())
+  clerkOrgId   String   @unique
+  slug         String   @unique
+  name         String
+  customDomain String?  @unique
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  settings      TenantSettings?
+  toys          Toy[]
+  customers     Customer[]
+  leads         Lead[]
+  quotes        Quote[]
+  bookings      Booking[]
+  bookingItems  BookingItem[]
+  payments      Payment[]
+  expenses      Expense[]
+  maintenances  Maintenance[]
+  reminders     BookingReminder[]
+  notifications Notification[]
+}
+
+model TenantSettings {
+  id             String   @id @default(uuid())
+  tenantId       String   @unique
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  whatsappMain   String?
+  whatsappAlerts String?
+  email          String?
+  city           String?
+  baseAddress    String?
+  serviceRadiusKm Int?
+  deliveryFee    Decimal? @db.Decimal(10, 2)
+  depositPolicy  String?
+  businessHours  Json?
+  instagram      String?
+  facebook       String?
+  googleMaps     String?
+  logoUrl        String?
+  faviconUrl     String?
+  colorPrimary   String   @default("#2563EB")
+  colorSecondary String   @default("#FBBF24")
+  colorAccent    String   @default("#7C3AED")
+  headline       String?
+  subheadline    String?
+  ctaText        String?
+  siteMode       SiteMode @default(SITE_BUILDER)
+}
+
+model Toy {
+  id               String      @id @default(uuid())
+  tenantId         String
+  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name             String
+  category         ToyCategory
+  description      String?
+  purchasePrice    Decimal     @db.Decimal(10, 2)
+  defaultRentPrice Decimal     @db.Decimal(10, 2)
+  purchaseDate     DateTime?
+  status           ToyStatus   @default(AVAILABLE)
+  imageUrl         String?
+  createdAt        DateTime    @default(now())
+  bookingItems     BookingItem[]
+  maintenances     Maintenance[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model Customer {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String
+  email        String?
+  address      String?
+  neighborhood String?
+  imageConsent Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  bookings     Booking[]
+
+  @@index([tenantId])
+  @@index([tenantId, phone])
+}
+
+model Lead {
+  id            String     @id @default(uuid())
+  tenantId      String
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  phone         String
+  source        LeadSource @default(WEBSITE)
+  message       String?
+  desiredDate   DateTime?
+  neighborhood  String?
+  childrenCount Int?
+  ageRange      String?
+  desiredToy    String?
+  status        LeadStatus @default(NEW)
+  bookingId     String?
+  createdAt     DateTime   @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model Quote {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leadId     String?
+  customerId String?
+  items      Json
+  total      Decimal  @db.Decimal(10, 2)
+  validUntil DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+model Booking {
+  id                    String        @id @default(uuid())
+  tenantId              String
+  tenant                Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId            String
+  customer              Customer      @relation(fields: [customerId], references: [id])
+  eventDate             DateTime
+  setupTime             DateTime?
+  pickupTime            DateTime?
+  address               String?
+  neighborhood          String?
+  total                 Decimal       @db.Decimal(10, 2)
+  depositAmount         Decimal       @db.Decimal(10, 2) @default(0)
+  status                BookingStatus @default(LEAD)
+  paymentStatus         PaymentStatus @default(PENDING)
+  leadSource            LeadSource?
+  notes                 String?
+  googleCalendarEventId String?
+  createdAt             DateTime      @default(now())
+
+  items     BookingItem[]
+  payments  Payment[]
+  expenses  Expense[]
+  reminders BookingReminder[]
+
+  @@index([tenantId])
+  @@index([tenantId, eventDate])
+  @@index([tenantId, status])
+}
+
+model BookingItem {
+  id        String  @id @default(uuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  toyId     String
+  toy       Toy     @relation(fields: [toyId], references: [id])
+  price     Decimal @db.Decimal(10, 2)
+
+  @@index([tenantId])
+  @@index([tenantId, toyId])
+}
+
+model Payment {
+  id        String      @id @default(uuid())
+  tenantId  String
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId String
+  booking   Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount    Decimal     @db.Decimal(10, 2)
+  kind      PaymentKind @default(DEPOSIT)
+  method    String?
+  paidAt    DateTime?
+
+  @@index([tenantId])
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId   String?
+  booking     Booking?        @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  category    ExpenseCategory
+  amount      Decimal         @db.Decimal(10, 2)
+  description String?
+  date        DateTime        @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, category])
+}
+
+model Maintenance {
+  id          String            @id @default(uuid())
+  tenantId    String
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  toyId       String
+  toy         Toy               @relation(fields: [toyId], references: [id], onDelete: Cascade)
+  type        String?
+  cost        Decimal           @db.Decimal(10, 2) @default(0)
+  description String?
+  date        DateTime          @default(now())
+  status      MaintenanceStatus @default(OPEN)
+
+  @@index([tenantId])
+}
+
+model BookingReminder {
+  id        String         @id @default(uuid())
+  tenantId  String
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingId String
+  booking   Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type      ReminderType
+  fireAt    DateTime
+  status    ReminderStatus @default(SCHEDULED)
+  sentAt    DateTime?
+
+  @@index([tenantId])
+  @@index([status, fireAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  bookingId String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([tenantId, read])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  actorId   String?
+  action    String
+  entity    String?
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+}
