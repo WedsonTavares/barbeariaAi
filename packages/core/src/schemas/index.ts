@@ -1,4 +1,15 @@
 import { z } from "zod";
+import { parseLocalDate, parseLocalDateTime } from "../time";
+
+/** Aceita Date pronto ou string sem offset (inputs do navegador), ancorando em SP. */
+const spDateTime = z.preprocess(
+  (v) => (typeof v === "string" && v ? parseLocalDateTime(v) : v),
+  z.date()
+);
+const spDate = z.preprocess(
+  (v) => (typeof v === "string" && v ? parseLocalDate(v) : v),
+  z.date()
+);
 
 export const toyCategory = z.enum([
   "CAMA_ELASTICA", "PISCINA_BOLINHAS", "INFLAVEL", "ESCORREGADOR", "MESA_CADEIRA", "OUTRO",
@@ -30,9 +41,9 @@ export type CustomerInput = z.infer<typeof customerInput>;
 export const bookingInput = z
   .object({
     customerId: z.string().uuid(),
-    eventDate: z.coerce.date(),
-    setupTime: z.coerce.date(),
-    pickupTime: z.coerce.date(),
+    eventDate: spDate,
+    setupTime: spDateTime,
+    pickupTime: spDateTime,
     address: z.string().optional(),
     neighborhood: z.string().optional(),
     total: z.coerce.number().nonnegative(),
@@ -47,15 +58,56 @@ export const bookingInput = z
   });
 export type BookingInput = z.infer<typeof bookingInput>;
 
+/** Edição de reserva: mesmos campos do create, sem trocar o cliente. */
+export const bookingUpdateInput = z
+  .object({
+    eventDate: spDate,
+    setupTime: spDateTime,
+    pickupTime: spDateTime,
+    address: z.string().optional(),
+    neighborhood: z.string().optional(),
+    total: z.coerce.number().nonnegative(),
+    depositAmount: z.coerce.number().nonnegative().default(0),
+    toyIds: z.array(z.string().uuid()).min(1, "Selecione ao menos um brinquedo"),
+    notes: z.string().optional(),
+  })
+  .refine((d) => d.pickupTime > d.setupTime, {
+    message: "A retirada deve ser depois da montagem",
+    path: ["pickupTime"],
+  });
+export type BookingUpdateInput = z.infer<typeof bookingUpdateInput>;
+
 export const leadInput = z.object({
   name: z.string().min(2),
   phone: z.string().min(8),
   source: leadSource.default("WEBSITE"),
   message: z.string().optional(),
-  desiredDate: z.coerce.date().optional(),
+  desiredDate: spDate.optional(),
   neighborhood: z.string().optional(),
   childrenCount: z.coerce.number().int().optional(),
   ageRange: z.string().optional(),
   desiredToy: z.string().optional(),
 });
 export type LeadInput = z.infer<typeof leadInput>;
+
+export const expenseCategory = z.enum(["FUEL", "HELPER", "MAINTENANCE", "CLEANING", "OTHER"]);
+export const toyStatus = z.enum(["AVAILABLE", "RENTED", "MAINTENANCE", "RETIRED"]);
+
+export const paymentInput = z.object({
+  bookingId: z.string().uuid(),
+  amount: z.coerce.number().positive("Informe um valor maior que zero"),
+  method: z.string().max(40).optional(),
+});
+export type PaymentInput = z.infer<typeof paymentInput>;
+
+export const expenseInput = z.object({
+  bookingId: z.string().uuid().optional(),
+  category: expenseCategory,
+  amount: z.coerce.number().positive("Informe um valor maior que zero"),
+  description: z.string().max(300).optional(),
+  date: spDate.optional(),
+});
+export type ExpenseInput = z.infer<typeof expenseInput>;
+
+/** Para ids vindos de formulários (hidden inputs). */
+export const idInput = z.string().uuid();

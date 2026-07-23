@@ -9,5 +9,8 @@ export { withTenant, platformDb, type Tx } from "./db/withTenant";
 export * from "./tenant/resolve";
 export * from "./auth/permissions";
 export * from "./calculations";
+export * from "./time";
 export * as schemas from "./schemas";
 export * as services from "./services";
+// Apps tratam erro de validação sem depender do zod diretamente.
+export { ZodError } from "zod";

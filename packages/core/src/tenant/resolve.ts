@@ -11,18 +11,19 @@ export function slugFromHost(host: string | null, rootDomain: string): string | 
   return null;
 }
 
-export function getTenantBySlug(slug: string) {
-  return prisma.tenant.findUnique({ where: { slug } });
+export async function getTenantBySlug(slug: string) {
+  const t = await prisma.tenant.findUnique({ where: { slug } });
+  return t?.active ? t : null; // tenant desativado = não existe para o app
 }
 
-/** Resolve por domínio personalizado e, se não houver, por subdomínio. */
+/** Resolve por domínio personalizado e, se não houver, por subdomínio. Ignora tenants inativos. */
 export async function getTenantByHost(host: string | null, rootDomain: string) {
   if (host) {
     const hostname = (host.split(":")[0] ?? "").toLowerCase();
     const byDomain = await prisma.tenant
       .findUnique({ where: { customDomain: hostname } })
       .catch(() => null);
-    if (byDomain) return byDomain;
+    if (byDomain?.active) return byDomain;
   }
   const slug = slugFromHost(host, rootDomain);
   return slug ? getTenantBySlug(slug) : null;

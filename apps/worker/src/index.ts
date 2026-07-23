@@ -6,7 +6,17 @@ const SCHEDULER = "scheduler";
 
 // Fila + "tick" repetível (a cada 60s). A comunicação web->worker é pelo banco.
 const queue = new Queue(SCHEDULER, { connection });
-await queue.add("tick", {}, { repeat: { every: 60_000 }, jobId: "reminder-tick" });
+await queue.add(
+  "tick",
+  {},
+  {
+    repeat: { every: 60_000 },
+    jobId: "reminder-tick",
+    // Sem isso o Redis acumula um job concluído por minuto, para sempre.
+    removeOnComplete: true,
+    removeOnFail: 500,
+  }
+);
 
 const worker = new Worker(
   SCHEDULER,

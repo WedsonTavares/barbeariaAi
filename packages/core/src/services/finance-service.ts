@@ -1,17 +1,12 @@
 import { withTenant } from "../db/withTenant";
 import { averageTicket } from "../calculations";
-
-function monthRange(ref: Date) {
-  const start = new Date(ref.getFullYear(), ref.getMonth(), 1);
-  const end = new Date(ref.getFullYear(), ref.getMonth() + 1, 1);
-  return { start, end };
-}
+import { spDayRange, spMonthRange } from "../time";
 
 export const financeService = {
-  /** Resumo financeiro do mês de `ref`. */
+  /** Resumo financeiro do mês de `ref` (mês no fuso de SP, não do servidor). */
   monthSummary: (tenantId: string, ref = new Date()) =>
     withTenant(tenantId, async (tx) => {
-      const { start, end } = monthRange(ref);
+      const { start, end } = spMonthRange(ref);
       const payments = await tx.payment.aggregate({
         where: { paidAt: { gte: start, lt: end } },
         _sum: { amount: true },
@@ -41,11 +36,10 @@ export const financeService = {
       };
     }),
 
-  /** Métricas para os cards do dashboard. */
+  /** Métricas para os cards do dashboard ("hoje" = dia no fuso de SP). */
   dashboard: (tenantId: string, now = new Date()) =>
     withTenant(tenantId, async (tx) => {
-      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endToday = new Date(startToday.getTime() + 86_400_000);
+      const { start: startToday, end: endToday } = spDayRange(now);
       const in48h = new Date(now.getTime() + 48 * 3_600_000);
 
       const [reservasHoje, proximasRetiradas, sinaisPendentes, brinquedosDisponiveis, emManutencao, orcamentosAbertos] =

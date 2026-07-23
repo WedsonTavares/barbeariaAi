@@ -21,4 +21,7 @@ export const tenantService = {
       update: { name, slug },
       create: { clerkOrgId, slug, name, settings: { create: {} } },
     }),
+  /** organization.deleted no Clerk → desativa (soft delete; dados ficam para auditoria). */
+  deactivateByClerkOrg: (clerkOrgId: string) =>
+    prisma.tenant.updateMany({ where: { clerkOrgId }, data: { active: false } }),
 };

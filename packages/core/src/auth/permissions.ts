@@ -14,6 +14,8 @@ const ROLE_MAP: Record<string, AppRole> = {
   "org:owner": "OWNER",
   "org:admin": "ADMIN",
   "org:staff": "STAFF",
+  // Roles padrão do Clerk (instância de produção pode não ter os customizados acima):
+  "org:member": "STAFF",
   admin: "ADMIN",
   basic_member: "STAFF",
 };

@@ -15,9 +15,13 @@ export function reminderTimes(pickup: Date): { type: ReminderType; fireAt: Date 
   ];
 }
 
-export async function createBookingReminders(tx: Tx, tenantId: string, bookingId: string, pickup: Date) {
+export async function createBookingReminders(tx: Tx, tenantId: string, bookingId: string, pickup: Date, now = new Date()) {
+  // Só agenda o que ainda está no futuro: confirmar uma reserva com retirada
+  // próxima não pode disparar uma rajada de lembretes atrasados.
+  const upcoming = reminderTimes(pickup).filter((r) => r.fireAt > now);
+  if (upcoming.length === 0) return;
   await tx.bookingReminder.createMany({
-    data: reminderTimes(pickup).map((r) => ({ tenantId, bookingId, type: r.type, fireAt: r.fireAt })),
+    data: upcoming.map((r) => ({ tenantId, bookingId, type: r.type, fireAt: r.fireAt })),
   });
 }
 
