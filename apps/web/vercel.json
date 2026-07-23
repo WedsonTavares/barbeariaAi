@@ -1,4 +1,5 @@
 {
   "framework": "nextjs",
-  "buildCommand": "cd ../.. && pnpm run build"
+  "buildCommand": "cd ../.. && pnpm run build",
+  "regions": ["gru1"]
 }
