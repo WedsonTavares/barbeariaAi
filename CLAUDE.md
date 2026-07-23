@@ -1,5 +1,7 @@
 # CLAUDE.md — Contexto do projeto (leia antes de tudo)
 
+> **STATUS VIVO em `PENDENTE.md`** — leia lá o que já foi feito e o que falta, e **atualize-o ao fim de toda sessão** (mover itens de "Falta" para "Feito" com data). A lista "O que FALTA" abaixo é histórica; `PENDENTE.md` prevalece.
+
 Você (Claude Code) vai continuar o **Diny SaaS**: plataforma **multi-tenant** para locação de brinquedos de festa. Hoje atende 2 empresas (Dine Play + a da irmã) com **isolamento total de dados**, e a arquitetura está pronta pra virar produto no futuro. Trabalhe sempre respeitando as regras abaixo.
 
 ## Stack (TRAVADA — não troque sem pedir)
@@ -48,7 +50,7 @@ Você (Claude Code) vai continuar o **Diny SaaS**: plataforma **multi-tenant** p
 - `src/middleware.ts` — Clerk + `auth.protect()` em `/admin` e `/super-admin`.
 - `src/lib/tenant.ts` — `getAuthContext()` (do Clerk), `resolveTenant()`, `requireTenant()`.
 - `src/app/layout.tsx` — ClerkProvider. `src/app/sign-in/...` — `<SignIn/>`.
-- `src/app/(site)/page.tsx` — **site público mínimo por tenant** (headline/CTA/brinquedos do banco). NÃO é a landing premium ainda.
+- `src/app/(site)/page.tsx` — **site público por tenant (vitrine completa)**: navbar, hero com cores/cidade do tenant, benefícios, catálogo rico (foto/emoji, categoria, disponibilidade, CTA WhatsApp por brinquedo), como funciona, **form de orçamento** (`(site)/actions.ts` → Lead + Notification NEW_LEAD, honeypot) e footer. `generateMetadata` por tenant. Ainda sem a camada "premium" (animações/galeria/depoimentos).
 - `src/app/admin/*` — layout com guarda, dashboard (cards + próximas retiradas), brinquedos (lista+criar), clientes (lista+criar), reservas (lista+criar com checagem de conflito, confirmar, registrar sinal), financeiro (resumo + lançar custo).
 - `src/app/super-admin/page.tsx` — lista de tenants (só SUPER_ADMIN).
 - `src/app/api/webhooks/clerk/route.ts` — `organization.created` → cria Tenant.
@@ -62,7 +64,7 @@ Você (Claude Code) vai continuar o **Diny SaaS**: plataforma **multi-tenant** p
 
 ## O que FALTA (gaps conhecidos — não assuma que está pronto)
 - **shadcn/ui não instalado** (UI atual é Tailwind cru). Instalar e refazer os componentes com shadcn.
-- **Site público é mínimo** — portar a landing premium da Diny como template do tenant (`SITE_BUILDER`), puxando cores/textos/brinquedos de `TenantSettings`.
+- **Site público**: vitrine + captação de leads prontas (2026-07-23); falta a camada premium (animações, galeria, depoimentos, FAQ) do template `SITE_BUILDER`.
 - **Realtime das notificações** no dashboard (sino/badge/toast) ainda não ligado (Fase 2).
 - **Editar reserva** (e recalcular lembretes via `reminderService.reschedule`) não tem tela.
 - Faltam: agenda (calendário), conversas/WhatsApp, Google Calendar, n8n, manutenção+checklists, relatórios (Recharts), tela de configurações do tenant, upload de imagens (Supabase Storage).
