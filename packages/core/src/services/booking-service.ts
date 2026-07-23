@@ -1,6 +1,27 @@
 import { withTenant, type Tx } from "../db/withTenant";
 import type { BookingInput, BookingUpdateInput } from "../schemas";
 import { createBookingReminders, cancelBookingReminders } from "./reminder-service";
+import { pushNotification } from "./notification-service";
+import { APP_TZ } from "../time";
+
+const SP_DATETIME = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short", timeStyle: "short" });
+
+/** Brinquedo "fora" enquanto a reserva está em entrega/montado; volta a disponível ao retirar. */
+const OUT_STATUSES = new Set(["IN_DELIVERY", "MOUNTED"]);
+const RETURN_STATUSES = new Set(["PICKED_UP", "FINISHED", "CANCELED"]);
+
+/** Sincroniza Toy.status com o ciclo da reserva. Nunca sobrescreve MANUTENÇÃO. */
+async function syncToyStatus(tx: Tx, bookingId: string, nextBookingStatus: string) {
+  if (!OUT_STATUSES.has(nextBookingStatus) && !RETURN_STATUSES.has(nextBookingStatus)) return;
+  const items = await tx.bookingItem.findMany({ where: { bookingId }, select: { toyId: true } });
+  const toyIds = items.map((i) => i.toyId);
+  if (toyIds.length === 0) return;
+  if (OUT_STATUSES.has(nextBookingStatus)) {
+    await tx.toy.updateMany({ where: { id: { in: toyIds }, status: "AVAILABLE" }, data: { status: "RENTED" } });
+  } else {
+    await tx.toy.updateMany({ where: { id: { in: toyIds }, status: "RENTED" }, data: { status: "AVAILABLE" } });
+  }
+}
 
 export class BookingConflictError extends Error {
   conflicts: string[];
@@ -156,10 +177,22 @@ export const bookingService = {
         }
       }
 
-      // Reserva já ativa → lembretes acompanham o novo horário de retirada.
+      // Reserva já ativa → lembretes acompanham o novo horário de entrega/retirada.
+      const timeChanged =
+        existing.setupTime?.getTime() !== input.setupTime.getTime() ||
+        existing.pickupTime?.getTime() !== input.pickupTime.getTime();
       if (["CONFIRMED", "IN_DELIVERY", "MOUNTED"].includes(existing.status)) {
         await cancelBookingReminders(tx, id);
-        await createBookingReminders(tx, tenantId, id, input.pickupTime);
+        await createBookingReminders(tx, tenantId, id, input.setupTime, input.pickupTime);
+        // Só avisa "reagendada" se o horário mudou de verdade (não em toda edição).
+        if (timeChanged) {
+          await pushNotification(tx, tenantId, {
+            type: "BOOKING_RESCHEDULED",
+            title: "Reserva reagendada",
+            body: `Novo horário: entrega ${SP_DATETIME.format(input.setupTime)} · retirada ${SP_DATETIME.format(input.pickupTime)}`,
+            bookingId: id,
+          });
+        }
       }
       return b;
     }),
@@ -173,9 +206,9 @@ export const bookingService = {
         throw new BookingStateError("Reserva encerrada não pode ser confirmada");
       }
       const b = await tx.booking.update({ where: { id }, data: { status: "CONFIRMED" } });
-      if (b.pickupTime) {
+      if (b.setupTime || b.pickupTime) {
         await cancelBookingReminders(tx, id);
-        await createBookingReminders(tx, tenantId, id, b.pickupTime);
+        await createBookingReminders(tx, tenantId, id, b.setupTime, b.pickupTime);
       }
       return b;
     }),
@@ -186,6 +219,7 @@ export const bookingService = {
       if (status === "PICKED_UP" || status === "CANCELED" || status === "FINISHED") {
         await cancelBookingReminders(tx, id);
       }
+      await syncToyStatus(tx, id, status);
       return b;
     }),
 };
