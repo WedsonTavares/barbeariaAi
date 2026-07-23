@@ -1,6 +1,6 @@
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
-import { brl } from "@/lib/format";
+import { brl, fmtDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,7 @@ export default async function DashboardPage() {
         {s.proximasRetiradas.map((b) => (
           <div key={b.id} className="flex items-center justify-between rounded-xl border border-black/5 bg-white p-3">
             <span className="font-semibold">{b.customer.name}</span>
-            <span className="text-sm text-[var(--color-muted)]">{b.pickupTime?.toLocaleString("pt-BR")}</span>
+            <span className="text-sm text-[var(--color-muted)]">{b.pickupTime && fmtDateTime(b.pickupTime)}</span>
           </div>
         ))}
       </div>

@@ -4,13 +4,16 @@ import { createCustomer } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClientesPage() {
+export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ erro?: string; ok?: string }> }) {
   const { tenant } = await requireTenant();
+  const sp = await searchParams;
   const customers = await services.customerService.list(tenant.id);
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
       <div>
         <h1 className="text-2xl font-extrabold">Clientes</h1>
+        {sp?.erro && <p role="alert" className="mt-3 rounded-lg bg-red-100 p-3 text-sm text-red-700">Confira os campos: nome e WhatsApp são obrigatórios.</p>}
+        {sp?.ok && <p role="status" className="mt-3 rounded-lg bg-green-100 p-3 text-sm text-green-700">Cliente adicionado!</p>}
         <div className="mt-4 space-y-2">
           {customers.map((c) => (
             <div key={c.id} className="rounded-xl border border-black/5 bg-white p-3">

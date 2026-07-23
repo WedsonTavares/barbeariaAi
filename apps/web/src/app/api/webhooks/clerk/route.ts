@@ -28,5 +28,9 @@ export async function POST(req: Request) {
     const { id, slug, name } = evt.data;
     await services.tenantService.createFromClerkOrg(id, slug || slugify(name), name);
   }
+  if (evt.type === "organization.deleted") {
+    // Soft delete: desativa o tenant (site e admin somem), dados ficam para auditoria.
+    await services.tenantService.deactivateByClerkOrg(evt.data.id);
+  }
   return new Response("ok");
 }

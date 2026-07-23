@@ -1,15 +1,27 @@
 "use server";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireRole, services, type ExpenseCategory } from "@diny/core";
+
+import { requireRole, services, schemas, ZodError } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
+
+const BASE = "/admin/financeiro";
 
 export async function addExpense(formData: FormData) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN"]);
-  await services.expenseService.add(tenant.id, {
-    category: String(formData.get("category")) as ExpenseCategory,
-    amount: Number(formData.get("amount")),
-    description: String(formData.get("description") || ""),
-  });
-  revalidatePath("/admin/financeiro");
+  let dest = `${BASE}?ok=1`;
+  try {
+    const data = schemas.expenseInput.parse({
+      category: formData.get("category"),
+      amount: formData.get("amount"),
+      description: formData.get("description") || undefined,
+    });
+    await services.expenseService.add(tenant.id, data);
+  } catch (e) {
+    if (e instanceof ZodError) dest = `${BASE}?erro=validacao`;
+    else throw e;
+  }
+  revalidatePath(BASE);
+  redirect(dest);
 }
