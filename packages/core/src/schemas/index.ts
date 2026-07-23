@@ -111,3 +111,11 @@ export type ExpenseInput = z.infer<typeof expenseInput>;
 
 /** Para ids vindos de formulários (hidden inputs). */
 export const idInput = z.string().uuid();
+
+/** Consulta de disponibilidade pelo agente de IA (n8n) — dia + brinquedo ou categoria (opcional). */
+export const agentAvailabilityInput = z.object({
+  date: spDate,
+  toyId: z.string().uuid().optional(),
+  category: toyCategory.optional(),
+});
+export type AgentAvailabilityInput = z.infer<typeof agentAvailabilityInput>;
