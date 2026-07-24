@@ -1,9 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import { withTenant, type Tx } from "../db/withTenant";
 import { agentToolAvailabilityInput, agentToolLeadInput } from "../schemas";
 import { pushNotification } from "./notification-service";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const MAX_TOOL_ITERATIONS = 5;
 const MAX_HISTORY_MESSAGES = 20; // limita custo/tokens de conversas longas
 const RATE_LIMIT_WINDOW_MS = 60 * 60_000; // 1h
@@ -21,48 +22,54 @@ export class AgentRateLimitError extends Error {
 
 export class AgentNotConfiguredError extends Error {
   constructor() {
-    super("Agente de IA não configurado (falta ANTHROPIC_API_KEY)");
+    super("Agente de IA não configurado (falta OPENAI_API_KEY)");
     this.name = "AgentNotConfiguredError";
   }
 }
 
-let client: Anthropic | null | undefined;
-function getClient(): Anthropic | null {
+let client: OpenAI | null | undefined;
+function getClient(): OpenAI | null {
   if (client === undefined) {
-    const key = process.env.ANTHROPIC_API_KEY;
-    client = key ? new Anthropic({ apiKey: key }) : null;
+    const key = process.env.OPENAI_API_KEY;
+    client = key ? new OpenAI({ apiKey: key }) : null;
   }
   return client;
 }
 
-const TOOLS: Anthropic.Tool[] = [
+const TOOLS: ChatCompletionTool[] = [
   {
-    name: "check_availability",
-    description:
-      "Verifica se há brinquedo livre numa data. Use SEMPRE antes de confirmar disponibilidade — nunca afirme que tem vaga sem checar.",
-    input_schema: {
-      type: "object",
-      properties: {
-        date: { type: "string", description: "Data no formato YYYY-MM-DD" },
-        toyName: { type: "string", description: "Nome (ou parte do nome) do brinquedo, se o cliente especificou um" },
+    type: "function",
+    function: {
+      name: "check_availability",
+      description:
+        "Verifica se há brinquedo livre numa data. Use SEMPRE antes de confirmar disponibilidade — nunca afirme que tem vaga sem checar.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "Data no formato YYYY-MM-DD" },
+          toyName: { type: "string", description: "Nome (ou parte do nome) do brinquedo, se o cliente especificou um" },
+        },
+        required: ["date"],
       },
-      required: ["date"],
     },
   },
   {
-    name: "create_lead",
-    description:
-      "Registra o interesse do cliente para um humano da equipe confirmar. Use quando o cliente demonstrar interesse real em reservar (já disse nome e pelo menos data ou brinquedo desejado). NUNCA diz ao cliente que a reserva está confirmada — apenas que a equipe vai confirmar em breve.",
-    input_schema: {
-      type: "object",
-      properties: {
-        name: { type: "string" },
-        desiredDate: { type: "string", description: "YYYY-MM-DD, se souber" },
-        desiredToy: { type: "string" },
-        neighborhood: { type: "string" },
-        summary: { type: "string", description: "Resumo de 1 frase do que o cliente quer" },
+    type: "function",
+    function: {
+      name: "create_lead",
+      description:
+        "Registra o interesse do cliente para um humano da equipe confirmar. Use quando o cliente demonstrar interesse real em reservar (já disse nome e pelo menos data ou brinquedo desejado). NUNCA diz ao cliente que a reserva está confirmada — apenas que a equipe vai confirmar em breve.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          desiredDate: { type: "string", description: "YYYY-MM-DD, se souber" },
+          desiredToy: { type: "string" },
+          neighborhood: { type: "string" },
+          summary: { type: "string", description: "Resumo de 1 frase do que o cliente quer" },
+        },
+        required: ["name"],
       },
-      required: ["name"],
     },
   },
 ];
@@ -87,7 +94,14 @@ ${catalog || "(nenhum brinquedo cadastrado ainda)"}
 `;
 }
 
-async function executeTool(tx: Tx, name: string, input: unknown): Promise<unknown> {
+async function executeTool(tx: Tx, name: string, argsJson: string): Promise<unknown> {
+  let input: unknown;
+  try {
+    input = JSON.parse(argsJson);
+  } catch {
+    return { error: "argumentos inválidos (JSON malformado)" };
+  }
+
   if (name === "check_availability") {
     const parsed = agentToolAvailabilityInput.safeParse(input);
     if (!parsed.success) return { error: "parâmetros inválidos" };
@@ -125,8 +139,8 @@ export const agentService = {
   /** Responde uma mensagem de WhatsApp. Cria/atualiza a conversa, aplica rate limit, roda a IA com ferramentas. */
   handleMessage: (tenantId: string, phone: string, userMessage: string) =>
     withTenant(tenantId, async (tx) => {
-      const anthropic = getClient();
-      if (!anthropic) throw new AgentNotConfiguredError();
+      const openai = getClient();
+      if (!openai) throw new AgentNotConfiguredError();
 
       const [tenant, settings, toys] = await Promise.all([
         tx.tenant.findUniqueOrThrow({ where: { id: tenantId } }),
@@ -135,7 +149,7 @@ export const agentService = {
       ]);
 
       const now = new Date();
-      let convo = await tx.agentConversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      const convo = await tx.agentConversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
 
       // Rate limit: janela desliza de 1h por telefone.
       let windowStartedAt = convo?.windowStartedAt ?? now;
@@ -154,38 +168,40 @@ export const agentService = {
       const minRentalHours = settings?.minRentalHours ?? 4;
       const prompt = systemPrompt(tenant.name, { city: settings?.city ?? null, minRentalHours, minRentalPrice }, toys);
 
-      const apiMessages: Anthropic.MessageParam[] = trimmedHistory.map((m) => ({ role: m.role, content: m.content }));
-      apiMessages.push({ role: "user", content: userMessage });
+      const apiMessages: ChatCompletionMessageParam[] = [
+        { role: "system", content: prompt },
+        ...trimmedHistory.map((m): ChatCompletionMessageParam => ({ role: m.role, content: m.content })),
+        { role: "user", content: userMessage },
+      ];
 
       let replyText = "Desculpe, não consegui responder agora — vou chamar alguém da equipe pra te ajudar.";
       let leadCreatedThisTurn: LeadToolResult | null = null;
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-        const response = await anthropic.messages.create({
+        const response = await openai.chat.completions.create({
           model: MODEL,
           max_tokens: 600,
-          system: prompt,
           tools: TOOLS,
           messages: apiMessages,
         });
 
-        if (response.stop_reason !== "tool_use") {
-          const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-          replyText = textBlock?.text ?? replyText;
+        const choice = response.choices[0]?.message;
+        if (!choice) break;
+
+        if (!choice.tool_calls || choice.tool_calls.length === 0) {
+          replyText = choice.content ?? replyText;
           break;
         }
 
-        apiMessages.push({ role: "assistant", content: response.content });
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-        for (const block of response.content) {
-          if (block.type !== "tool_use") continue;
-          const result = await executeTool(tx, block.name, block.input);
-          if (block.name === "create_lead" && result && typeof result === "object" && "created" in result) {
+        apiMessages.push({ role: "assistant", content: choice.content, tool_calls: choice.tool_calls });
+        for (const call of choice.tool_calls) {
+          if (call.type !== "function") continue;
+          const result = await executeTool(tx, call.function.name, call.function.arguments);
+          if (call.function.name === "create_lead" && result && typeof result === "object" && "created" in result) {
             leadCreatedThisTurn = result as LeadToolResult & { created: true };
           }
-          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result) });
+          apiMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
         }
-        apiMessages.push({ role: "user", content: toolResults });
       }
 
       // Cria o Lead de verdade (fora do loop da IA) — só 1 por conversa, mesmo se pedir de novo.

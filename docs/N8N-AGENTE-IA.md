@@ -1,6 +1,8 @@
 # Agente de IA no WhatsApp (atendimento + lead) via n8n
 
-O n8n só faz o **relay**: recebe a mensagem do WhatsApp, chama nosso endpoint (que tem toda a inteligência — Claude + acesso ao catálogo/disponibilidade real), e manda a resposta de volta. **Nada aqui toca no zeus-estoque nem em qualquer outro app da VPS.**
+O n8n só faz o **relay**: recebe a mensagem do WhatsApp, chama nosso endpoint (que tem toda a inteligência — OpenAI + acesso ao catálogo/disponibilidade real), e manda a resposta de volta. **Nada aqui toca no zeus-estoque nem em qualquer outro app da VPS.**
+
+**Workflow pronto pra importar**: [`n8n-agente-ia-workflow.json`](./n8n-agente-ia-workflow.json) — no n8n, vá em Workflows → Import from File. Já vem com Webhook → extrai telefone/mensagem (Evolution API/Z-API/WPPConnect) → checa se tem conteúdo → chama nosso endpoint. Só falta você: (1) copiar a URL do Webhook pro painel do seu provedor, (2) trocar `SEU-TENANT` e colar o `AGENT_API_SECRET` no node "Chamar agente Diny", (3) substituir o último node pelo envio de WhatsApp do seu provedor. Tudo isso está anotado direto no workflow (sticky notes).
 
 ## Como funciona
 
@@ -28,23 +30,25 @@ O endpoint já faz sozinho: consulta o catálogo e preços reais, checa disponib
 - Não sai do assunto (brinquedos/preços/agendamento desta empresa).
 - Tem limite de 15 mensagens/hora por telefone (rate limit) — depois disso, pede pra tentar mais tarde.
 
-## Passo a passo no n8n (~10 min)
+## Passo a passo no n8n (~5 min, com o workflow pronto)
 
-1. **Novo workflow** → nó **Webhook** (mensagem recebida do seu provedor de WhatsApp — configure no painel do provedor pra apontar pra essa URL do n8n).
-2. Nó **Function/Set**: extrai `phone` e `message` do payload (formato varia por provedor — Evolution/Z-API/WPPConnect têm campos diferentes).
-3. Nó **IF**: ignora mensagens de grupo, do próprio número, ou vazias (evita loop e custo à toa).
-4. Nó **HTTP Request** → `POST https://SEU-TENANT.dinyfestas.com.br/api/agent/mensagem`, header `x-diny-secret`, body `{ phone, message }`.
-5. Nó de **envio de WhatsApp** (o mesmo que você já usa) → manda `{{ $json.reply }}` de volta pro `phone`.
-6. **Ativar** o workflow.
+1. **Workflows → Import from File** → escolha `docs/n8n-agente-ia-workflow.json`.
+2. Abra o node **Webhook - Mensagem Recebida** → copie a **Production URL** → cole no painel do seu provedor de WhatsApp (Evolution API/Z-API/WPPConnect) como webhook de mensagem recebida.
+3. Abra o node **Chamar agente Diny** → troque `SEU-TENANT.dinyfestas.com.br` pelo subdomínio real da empresa e cole o `AGENT_API_SECRET` no header `x-diny-secret`.
+4. Apague o node **"Enviar resposta - SUBSTITUIR"** e coloque no lugar o node de enviar WhatsApp do seu provedor, mandando `{{ $json.reply }}` pro telefone (`{{ $('Extrair telefone e mensagem').item.json.phone }}`).
+5. **Ativar** o workflow (toggle no canto superior direito).
+
+Se seu provedor não for nenhum dos 3 cobertos, abra o node **"Extrair telefone e mensagem"** (Code) e ajusta o trecho `else { ... }` pro formato do seu payload — é só JavaScript simples, dá pra ver o payload cru testando o webhook uma vez (aba "Executions" do n8n mostra o corpo recebido).
 
 ## Ligar no ambiente (Vercel — produção)
 
 ```bash
-ANTHROPIC_API_KEY="sk-ant-..."       # console.anthropic.com → API Keys
+OPENAI_API_KEY="sk-..."              # platform.openai.com → API Keys
+OPENAI_MODEL="gpt-4o-mini"           # opcional, esse é o padrão (rápido e barato)
 AGENT_API_SECRET="gere-uma-string-aleatoria-longa"
 ```
 
-Sem `ANTHROPIC_API_KEY`, o endpoint responde 503 (desligado, não quebra nada). Sem `AGENT_API_SECRET` batendo no header, responde 401.
+Sem `OPENAI_API_KEY`, o endpoint responde 503 (desligado, não quebra nada). Sem `AGENT_API_SECRET` batendo no header, responde 401.
 
 ## Ajustar a locação mínima
 

@@ -94,12 +94,12 @@ importers:
 
   packages/core:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.32.0
-        version: 0.32.1
       '@prisma/client':
         specifier: ^6.1.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      openai:
+        specifier: ^4.77.0
+        version: 4.104.0(zod@3.25.76)
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -125,9 +125,6 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
-
-  '@anthropic-ai/sdk@0.32.1':
-    resolution: {integrity: sha512-U9JwTrDvdQ9iWuABVsMLj8nJVwAyQz6QXvgLsVhryhCEPkLsbcP/MXxm+jYcAwLoV8ESbaTTjnD4kuAFa+Hyjg==}
 
   '@clerk/backend@2.33.5':
     resolution: {integrity: sha512-YOzUYJfb1d4w+0rKKm+LnnNpkJGQ+NI/g7qmF3mgaSN9X9huteuwCZyufdsI7z2DDkwy/yGRgb9eUWV96t7xLg==}
@@ -1493,6 +1490,18 @@ packages:
   ohash@2.0.11:
     resolution: {integrity: sha512-RdR9FQrFwNBNXAr4GixM8YaRZRJ5PUWbKYbE5eOsrwAjJW0q2REGcf79oYPsLyskQCZG1PLN+S/K1V00joZAoQ==}
 
+  openai@4.104.0:
+    resolution: {integrity: sha512-p99EFNsA/yX6UhVO93f5kJsDRLAg+CTA2RBqdHK4RtK8u5IJw32Hyb2dTGKbnnFmnuoBv5r7Z2CURI9sGZpSuA==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.23.8
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   pathe@1.1.2:
     resolution: {integrity: sha512-whLdWMYL2TwI08hn8/ZqAbrVemu0LNaNNJZX73O6qaIdCTfXutsLhMkjdENX0qhsQ9uIimo4/aQOmXkoon2nDQ==}
 
@@ -1764,18 +1773,6 @@ packages:
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
-
-  '@anthropic-ai/sdk@0.32.1':
-    dependencies:
-      '@types/node': 18.19.130
-      '@types/node-fetch': 2.6.13
-      abort-controller: 3.0.0
-      agentkeepalive: 4.6.0
-      form-data-encoder: 1.7.2
-      formdata-node: 4.4.1
-      node-fetch: 2.7.0
-    transitivePeerDependencies:
-      - encoding
 
   '@clerk/backend@2.33.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
@@ -2847,6 +2844,20 @@ snapshots:
       tinyexec: 1.2.4
 
   ohash@2.0.11: {}
+
+  openai@4.104.0(zod@3.25.76):
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.13
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0
+    optionalDependencies:
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - encoding
 
   pathe@1.1.2: {}
 
