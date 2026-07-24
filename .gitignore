@@ -11,4 +11,7 @@ dist
 # Credenciais — NUNCA versionar (contém secrets do Clerk/Supabase)
 credenciais.md
 
+# Docs internas / workflows n8n (incl. modelos de terceiros) — não versionar
+docs/
+
 .vercel
