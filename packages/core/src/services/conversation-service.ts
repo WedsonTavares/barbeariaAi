@@ -12,6 +12,15 @@ export async function recordMessage(
   input: { phone: string; text: string; sender: MessageSender; contactName?: string }
 ) {
   const now = new Date();
+  // Dedup: mesma mensagem (remetente + texto) nos últimos 8s → ignora
+  // (clique duplo no "Enviar" ou webhook repetido do Evolution).
+  const existing = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone: input.phone } } });
+  if (existing) {
+    const dup = await tx.message.findFirst({
+      where: { conversationId: existing.id, sender: input.sender, text: input.text, createdAt: { gte: new Date(now.getTime() - 8000) } },
+    });
+    if (dup) return existing;
+  }
   const convo = await tx.conversation.upsert({
     where: { tenantId_phone: { tenantId, phone: input.phone } },
     create: {

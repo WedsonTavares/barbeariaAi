@@ -4,6 +4,7 @@ import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
 import { fmtDateTime } from "@/lib/format";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { SubmitButton } from "@/components/SubmitButton";
 import { replyAction, takeOverAction, releaseAction, setTagsAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +66,7 @@ export default async function ConversaPage({ params }: { params: Promise<{ id: s
         <input type="hidden" name="id" value={convo.id} />
         <input type="hidden" name="phone" value={convo.phone} />
         <input name="text" required autoComplete="off" placeholder="Escreva uma resposta..." className="flex-1 rounded-full border border-black/10 px-4 py-2" />
-        <button className="rounded-full bg-[#25D366] px-5 py-2 font-semibold text-white">Enviar</button>
+        <SubmitButton className="rounded-full bg-[#25D366] px-5 py-2 font-semibold text-white" pendingText="Enviando...">Enviar</SubmitButton>
       </form>
     </div>
   );
