@@ -3,9 +3,11 @@ import { resolveTenant } from "@/lib/tenant";
 import { services, schemas, ZodError } from "@diny/core";
 
 /**
- * Recebe uma mensagem de WhatsApp (via n8n, que só faz o relay) e responde com a IA.
- * Tenant vem do host (subdomínio) — o workflow do n8n chama a URL da empresa certa.
- * Desligado por padrão: sem AGENT_API_SECRET configurado, toda chamada é rejeitada.
+ * Recebe uma mensagem de WhatsApp (via n8n, que só faz o relay) e SÓ ARMAZENA —
+ * responde rápido pro n8n, sem esperar a IA. O worker processa depois de um
+ * período de silêncio (debounce), agrupando rajadas de mensagens numa resposta só,
+ * e manda a resposta de volta via webhook de saída (ver docs/N8N-AGENTE-IA.md).
+ * Tenant vem do host (subdomínio). Desligado por padrão sem AGENT_API_SECRET.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
@@ -25,16 +27,16 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await services.agentService.handleMessage(tenant.id, input.phone, input.message);
-    return NextResponse.json(result);
+    await services.agentService.bufferMessage(tenant.id, input.phone, input.message);
+    return NextResponse.json({ buffered: true });
   } catch (e) {
     if (e instanceof services.AgentRateLimitError) {
-      return NextResponse.json({ error: "rate_limited", reply: "Recebi muitas mensagens suas em pouco tempo — me manda de novo daqui a pouco, ou fala com a gente direto." }, { status: 429 });
+      return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
     if (e instanceof services.AgentNotConfiguredError) {
       return NextResponse.json({ error: "not_configured" }, { status: 503 });
     }
-    console.error("[agent] erro ao processar mensagem", e);
-    return NextResponse.json({ error: "internal", reply: "Deu um probleminha aqui — a equipe já foi avisada, te respondemos em breve." }, { status: 500 });
+    console.error("[agent] erro ao guardar mensagem", e);
+    return NextResponse.json({ error: "internal" }, { status: 500 });
   }
 }

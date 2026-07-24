@@ -1,11 +1,11 @@
 {
-  "name": "Diny - Agente IA WhatsApp",
+  "name": "Diny - Agente IA WhatsApp (recebido)",
   "nodes": [
     {
       "parameters": {
-        "content": "## Configure antes de ativar\n1. Aponte o webhook do SEU provedor de WhatsApp (Evolution API / Z-API / WPPConnect) pra URL deste node \"Webhook\" (copie em cima do node, botão direito > Webhook URLs > Production).\n2. No node \"Chamar agente\", troque `SEU-TENANT.dinyfestas.com.br` pelo subdomínio real e cole o `AGENT_API_SECRET` no header.\n3. Troque o último node (\"Enviar resposta - SUBSTITUIR\") pelo node de enviar mensagem do SEU provedor, mandando `{{ $json.reply }}` pro `{{ $('Extrair telefone e mensagem').item.json.phone }}`.",
-        "height": 260,
-        "width": 380
+        "content": "## Configure antes de ativar\n1. Aponte o webhook do SEU provedor de WhatsApp (Evolution API / Z-API / WPPConnect) pra URL deste node \"Webhook\" (copie em cima do node, botão direito > Webhook URLs > Production).\n2. No node \"Guardar mensagem\", troque `SEU-TENANT.dinyfestas.com.br` pelo subdomínio real e cole o `AGENT_API_SECRET` no header.\n3. Esse fluxo só GUARDA a mensagem — não manda resposta na hora. A IA espera ~8s de silêncio (agrupa rajadas de mensagens seguidas) e a resposta chega pelo workflow de SAÍDA (o mesmo dos lembretes — ver docs/N8N-LEMBRETES.md). Se ainda não tiver esse workflow de saída configurado, configure primeiro — sem ele a resposta nunca sai.",
+        "height": 300,
+        "width": 400
       },
       "id": "sticky-1",
       "name": "Leia antes de ativar",
@@ -24,7 +24,7 @@
       "name": "Webhook - Mensagem Recebida",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-200, 320]
+      "position": [-200, 340]
     },
     {
       "parameters": {
@@ -34,7 +34,7 @@
       "name": "Extrair telefone e mensagem",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [40, 320]
+      "position": [40, 340]
     },
     {
       "parameters": {
@@ -52,7 +52,7 @@
       "name": "Tem telefone e mensagem?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [280, 320]
+      "position": [280, 340]
     },
     {
       "parameters": {
@@ -71,44 +71,16 @@
         "options": { "timeout": 15000 }
       },
       "id": "http-1",
-      "name": "Chamar agente Diny",
+      "name": "Guardar mensagem",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [520, 260]
-    },
-    {
-      "parameters": {
-        "content": "## SUBSTITUA este node\nTroque por: nó de enviar WhatsApp do seu provedor (Evolution API / Z-API / WPPConnect).\nMande `{{ $json.reply }}` pro telefone `{{ $('Extrair telefone e mensagem').item.json.phone }}`.",
-        "height": 160,
-        "width": 300
-      },
-      "id": "sticky-2",
-      "name": "Lembrete: trocar pelo seu envio de WhatsApp",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [760, 120]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://TROQUE-PELO-SEU-PROVEDOR-DE-WHATSAPP/enviar",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { \"to\": $('Extrair telefone e mensagem').item.json.phone, \"message\": $json.reply } }}",
-        "options": {}
-      },
-      "id": "http-2",
-      "name": "Enviar resposta - SUBSTITUIR",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [760, 320]
+      "position": [520, 340]
     }
   ],
   "connections": {
     "Webhook - Mensagem Recebida": { "main": [[{ "node": "Extrair telefone e mensagem", "type": "main", "index": 0 }]] },
     "Extrair telefone e mensagem": { "main": [[{ "node": "Tem telefone e mensagem?", "type": "main", "index": 0 }]] },
-    "Tem telefone e mensagem?": { "main": [[{ "node": "Chamar agente Diny", "type": "main", "index": 0 }], []] },
-    "Chamar agente Diny": { "main": [[{ "node": "Enviar resposta - SUBSTITUIR", "type": "main", "index": 0 }]] }
+    "Tem telefone e mensagem?": { "main": [[{ "node": "Guardar mensagem", "type": "main", "index": 0 }], []] }
   },
   "pinData": {},
   "meta": { "instanceId": "diny-agente-ia" }

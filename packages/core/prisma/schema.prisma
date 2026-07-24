@@ -391,13 +391,20 @@ model AgentConversation {
   tenantId       String
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   phone          String
-  messages       Json // [{ role: "user"|"assistant", content: string, at: ISO string }]
+  messages       Json // histórico confirmado: [{ role: "user"|"assistant", content: string, at: ISO string }]
   leadId         String? // Lead já criado nesta conversa (evita duplicar)
   windowStartedAt DateTime @default(now()) // início da janela de rate limit
   messageCount   Int      @default(0) // mensagens do usuário na janela atual
+
+  // Debounce: mensagens que chegaram mas ainda não foram respondidas — agrupa
+  // rajadas do cliente (várias mensagens seguidas) numa resposta só.
+  pendingMessages Json     @default("[]") // [{ text: string, at: ISO string }]
+  lastMessageAt   DateTime? // hora da última mensagem recebida (pendente)
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@unique([tenantId, phone])
   @@index([tenantId])
+  @@index([lastMessageAt])
 }

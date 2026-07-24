@@ -27,7 +27,15 @@ export interface ReminderAlert {
   };
 }
 
-export async function sendReminderAlert(alert: ReminderAlert): Promise<void> {
+/** Resposta do agente de IA pronta pra mandar no WhatsApp — mesmo webhook de saída dos lembretes. */
+export interface AgentReplyAlert {
+  event: "agent_reply";
+  tenantId: string;
+  toPhone: string;
+  message: string;
+}
+
+async function postToN8n(payload: ReminderAlert | AgentReplyAlert, errorContext: string): Promise<void> {
   if (!URL) return; // integração desligada
   try {
     const res = await fetch(URL, {
@@ -36,11 +44,14 @@ export async function sendReminderAlert(alert: ReminderAlert): Promise<void> {
         "content-type": "application/json",
         ...(SECRET ? { "x-diny-secret": SECRET } : {}),
       },
-      body: JSON.stringify(alert),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) console.error(`[n8n] webhook respondeu ${res.status}`);
   } catch (err) {
-    console.error("[n8n] falha ao enviar alerta (lembrete segue registrado no painel)", err);
+    console.error(`[n8n] falha ao enviar (${errorContext})`, err);
   }
 }
+
+export const sendReminderAlert = (alert: ReminderAlert) => postToN8n(alert, "lembrete segue registrado no painel");
+export const sendAgentReply = (alert: AgentReplyAlert) => postToN8n(alert, "resposta do agente segue salva na conversa");

@@ -46,3 +46,16 @@ LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   ORDER BY "fireAt" LIMIT 500;
 $$;
 GRANT EXECUTE ON FUNCTION get_due_reminders(timestamptz) TO app_runtime;
+
+-- Debounce do agente de IA: conversas com mensagem pendente e silêncio >= p_debounce_seconds.
+-- Mesmo bypass controlado do scheduler de lembretes — só id + tenantId.
+CREATE OR REPLACE FUNCTION get_due_agent_conversations(p_debounce_seconds int)
+RETURNS TABLE (id text, "tenantId" text)
+LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT id, "tenantId" FROM "AgentConversation"
+  WHERE "pendingMessages" != '[]'::jsonb
+    AND "lastMessageAt" IS NOT NULL
+    AND "lastMessageAt" <= now() - (p_debounce_seconds || ' seconds')::interval
+  ORDER BY "lastMessageAt" LIMIT 200;
+$$;
+GRANT EXECUTE ON FUNCTION get_due_agent_conversations(int) TO app_runtime;
