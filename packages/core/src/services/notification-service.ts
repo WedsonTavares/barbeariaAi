@@ -20,4 +20,14 @@ export const notificationService = {
     withTenant(tenantId, (tx) => tx.notification.update({ where: { id }, data: { read: true } })),
   create: (tenantId: string, n: { type: NotificationType; title: string; body?: string; bookingId?: string }) =>
     withTenant(tenantId, (tx) => pushNotification(tx, tenantId, n)),
+
+  /** Cliente pediu atendimento humano no WhatsApp (via agente de IA). */
+  humanRequested: (tenantId: string, phone: string, name?: string, reason?: string) =>
+    withTenant(tenantId, (tx) =>
+      pushNotification(tx, tenantId, {
+        type: "NEW_WHATSAPP_MESSAGE",
+        title: "Cliente pediu atendimento humano",
+        body: [name, phone, reason].filter(Boolean).join(" · "),
+      })
+    ),
 };

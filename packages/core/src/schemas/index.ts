@@ -136,3 +136,11 @@ export const agentLeadInput = z.object({
   summary: z.string().max(500).optional(),
 });
 export type AgentLeadInput = z.infer<typeof agentLeadInput>;
+
+/** Ferramenta "suporte humano": a IA escala pra equipe (cliente pediu, ou caso difícil). */
+export const agentSupportInput = z.object({
+  phone: z.string().min(8).max(20),
+  name: z.string().max(120).optional(),
+  reason: z.string().max(300).optional(),
+});
+export type AgentSupportInput = z.infer<typeof agentSupportInput>;
