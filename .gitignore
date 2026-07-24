@@ -14,4 +14,7 @@ credenciais.md
 # Docs internas / workflows n8n (incl. modelos de terceiros) — não versionar
 docs/
 
+# Nenhum .md no git (contexto/planejamento ficam só local)
+*.md
+
 .vercel
