@@ -3,10 +3,10 @@ import { resolveTenant } from "@/lib/tenant";
 import { services, schemas, ZodError } from "@diny/core";
 
 /**
- * Ferramenta pro agente de IA (n8n): "esse brinquedo/categoria está livre nesse dia?".
- * Só leitura — nunca cria/altera reserva. Tenant vem do host (subdomínio), igual ao
- * resto do app; nunca confiar em tenantId vindo do corpo da requisição.
- * Desligado por padrão: sem AGENT_API_SECRET configurado, toda chamada é rejeitada.
+ * Ferramenta pro agente de IA (que roda no n8n): "esse brinquedo/categoria está livre
+ * nesse dia?". Só leitura — nunca cria/altera reserva. Tenant vem do host (subdomínio);
+ * nunca confiar em tenantId vindo do corpo. Reaproveita a MESMA checagem de conflito que
+ * bloqueia reserva dupla no painel. Sem AGENT_API_SECRET, toda chamada é rejeitada.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
@@ -29,9 +29,10 @@ export async function POST(req: Request) {
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
 
   const allToys = await services.toyService.list(tenant.id);
+  const term = input.toyName?.toLowerCase();
   const candidates = allToys.filter((t) => {
     if (t.status === "RETIRED") return false;
-    if (input.toyId) return t.id === input.toyId;
+    if (term) return t.name.toLowerCase().includes(term);
     if (input.category) return t.category === input.category;
     return true;
   });
@@ -44,7 +45,6 @@ export async function POST(req: Request) {
   return NextResponse.json({
     date: dayStart.toISOString().slice(0, 10),
     toys: candidates.map((t) => ({
-      id: t.id,
       name: t.name,
       category: t.category,
       price: Number(t.defaultRentPrice),

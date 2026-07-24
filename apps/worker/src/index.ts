@@ -1,11 +1,12 @@
 import { Queue, Worker } from "bullmq";
 import { connection } from "./redis";
 import { processDueReminders } from "./reminder-worker";
-import { processDueAgentConversations } from "./agent-worker";
 
 const SCHEDULER = "scheduler";
 
-// Fila + 2 "ticks" repetíveis. A comunicação web->worker é pelo banco (não Redis exposto).
+// Fila + "tick" repetível (a cada 60s). A comunicação web->worker é pelo banco.
+// (O agente de IA agora roda inteiramente no n8n — ver docs/N8N-AGENTE-IA.md — não é
+// mais responsabilidade deste worker; evita as duas coisas processarem a mesma conversa.)
 const queue = new Queue(SCHEDULER, { connection });
 await queue.add(
   "tick",
@@ -18,29 +19,16 @@ await queue.add(
     removeOnFail: 500,
   }
 );
-await queue.add(
-  "agent-tick",
-  {},
-  {
-    // Mais frequente que o de lembretes: é o que dá a sensação de "conversa" —
-    // resolução do debounce fica entre DEBOUNCE_SECONDS e DEBOUNCE_SECONDS+10s.
-    repeat: { every: 10_000 },
-    jobId: "agent-tick",
-    removeOnComplete: true,
-    removeOnFail: 500,
-  }
-);
 
 const worker = new Worker(
   SCHEDULER,
   async (job) => {
     if (job.name === "tick") await processDueReminders();
-    if (job.name === "agent-tick") await processDueAgentConversations();
   },
   { connection }
 );
 
-worker.on("ready", () => console.log("⚙️  worker pronto — lembretes a cada 60s, agente de IA a cada 10s"));
+worker.on("ready", () => console.log("⚙️  worker pronto — tick a cada 60s"));
 worker.on("failed", (job, err) => console.error("[worker] falhou", job?.id, err));
 
 const shutdown = async () => {

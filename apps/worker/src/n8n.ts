@@ -1,7 +1,10 @@
 /**
- * Ponte worker → n8n (mesma VPS). Se N8N_WEBHOOK_URL não estiver configurada,
- * a integração fica desligada e nada muda no comportamento atual.
+ * Ponte worker → n8n (mesma VPS), usada pelos LEMBRETES. Se N8N_WEBHOOK_URL não
+ * estiver configurada, a integração fica desligada e nada muda no comportamento atual.
  * NUNCA deixa um erro daqui derrubar o processamento de lembretes.
+ *
+ * (O agente de IA de atendimento roda inteiramente dentro do n8n agora — ver
+ * docs/N8N-AGENTE-IA.md — este worker não participa mais desse fluxo.)
  */
 const URL = process.env.N8N_WEBHOOK_URL;
 const SECRET = process.env.N8N_WEBHOOK_SECRET;
@@ -27,15 +30,7 @@ export interface ReminderAlert {
   };
 }
 
-/** Resposta do agente de IA pronta pra mandar no WhatsApp — mesmo webhook de saída dos lembretes. */
-export interface AgentReplyAlert {
-  event: "agent_reply";
-  tenantId: string;
-  toPhone: string;
-  message: string;
-}
-
-async function postToN8n(payload: ReminderAlert | AgentReplyAlert, errorContext: string): Promise<void> {
+export async function sendReminderAlert(alert: ReminderAlert): Promise<void> {
   if (!URL) return; // integração desligada
   try {
     const res = await fetch(URL, {
@@ -44,14 +39,11 @@ async function postToN8n(payload: ReminderAlert | AgentReplyAlert, errorContext:
         "content-type": "application/json",
         ...(SECRET ? { "x-diny-secret": SECRET } : {}),
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(alert),
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) console.error(`[n8n] webhook respondeu ${res.status}`);
   } catch (err) {
-    console.error(`[n8n] falha ao enviar (${errorContext})`, err);
+    console.error("[n8n] falha ao enviar alerta (lembrete segue registrado no painel)", err);
   }
 }
-
-export const sendReminderAlert = (alert: ReminderAlert) => postToN8n(alert, "lembrete segue registrado no painel");
-export const sendAgentReply = (alert: AgentReplyAlert) => postToN8n(alert, "resposta do agente segue salva na conversa");

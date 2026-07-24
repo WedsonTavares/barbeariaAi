@@ -112,32 +112,27 @@ export type ExpenseInput = z.infer<typeof expenseInput>;
 /** Para ids vindos de formulários (hidden inputs). */
 export const idInput = z.string().uuid();
 
-/** Consulta de disponibilidade pelo agente de IA (n8n) — dia + brinquedo ou categoria (opcional). */
+// ===== Ferramentas HTTP do agente de IA (o agente vive no n8n; estes endpoints
+// são as "ferramentas" que ele chama — cada um resolve tenant pelo host + valida). =====
+
+/** Ferramenta "disponibilidade": a IA manda dia + (nome do brinquedo | categoria). */
 export const agentAvailabilityInput = z.object({
-  date: spDate,
-  toyId: z.string().uuid().optional(),
+  date: z.preprocess(
+    (v) => (typeof v === "string" && v ? parseLocalDate(v) : v),
+    z.date()
+  ),
+  toyName: z.string().max(120).optional(),
   category: toyCategory.optional(),
 });
 export type AgentAvailabilityInput = z.infer<typeof agentAvailabilityInput>;
 
-/** Mensagem recebida do WhatsApp (via n8n) pro agente de IA. */
-export const agentMessageInput = z.object({
+/** Ferramenta "criar lead": a IA manda os dados que colheu na conversa. */
+export const agentLeadInput = z.object({
   phone: z.string().min(8).max(20),
-  message: z.string().min(1).max(2000),
-});
-export type AgentMessageInput = z.infer<typeof agentMessageInput>;
-
-/** Parâmetros que a própria IA gera pra chamar a ferramenta "check_availability". */
-export const agentToolAvailabilityInput = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD"),
-  toyName: z.string().optional(),
-});
-
-/** Parâmetros que a própria IA gera pra chamar a ferramenta "create_lead". */
-export const agentToolLeadInput = z.object({
-  name: z.string().min(2),
-  desiredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  desiredToy: z.string().optional(),
-  neighborhood: z.string().optional(),
+  name: z.string().min(2).max(120),
+  desiredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD").optional(),
+  desiredToy: z.string().max(120).optional(),
+  neighborhood: z.string().max(120).optional(),
   summary: z.string().max(500).optional(),
 });
+export type AgentLeadInput = z.infer<typeof agentLeadInput>;

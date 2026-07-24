@@ -147,7 +147,6 @@ model Tenant {
   bookingItems  BookingItem[]
   payments      Payment[]
   expenses      Expense[]
-  agentConversations AgentConversation[]
   maintenances  Maintenance[]
   reminders     BookingReminder[]
   notifications Notification[]
@@ -383,28 +382,4 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([tenantId])
-}
-
-/** Contexto do agente de IA por telefone (WhatsApp). Uma linha por conversa em andamento. */
-model AgentConversation {
-  id             String   @id @default(uuid())
-  tenantId       String
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  phone          String
-  messages       Json // histórico confirmado: [{ role: "user"|"assistant", content: string, at: ISO string }]
-  leadId         String? // Lead já criado nesta conversa (evita duplicar)
-  windowStartedAt DateTime @default(now()) // início da janela de rate limit
-  messageCount   Int      @default(0) // mensagens do usuário na janela atual
-
-  // Debounce: mensagens que chegaram mas ainda não foram respondidas — agrupa
-  // rajadas do cliente (várias mensagens seguidas) numa resposta só.
-  pendingMessages Json     @default("[]") // [{ text: string, at: ISO string }]
-  lastMessageAt   DateTime? // hora da última mensagem recebida (pendente)
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([tenantId, phone])
-  @@index([tenantId])
-  @@index([lastMessageAt])
 }

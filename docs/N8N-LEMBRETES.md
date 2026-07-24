@@ -2,7 +2,7 @@
 
 O worker já dispara um webhook quando um lembrete vence. Falta só criar o fluxo no n8n (que já roda na sua VPS) e ligar 2 variáveis de ambiente. **Nada aqui toca no zeus-estoque nem em qualquer outro app da VPS** — só o processo `diny-worker`.
 
-> **Esse mesmo webhook de saída também carrega as respostas do [agente de IA](./N8N-AGENTE-IA.md)** (`event: "agent_reply"`, mesmo par `toPhone`/`message`). Se você já tem esse fluxo configurado pros lembretes, não precisa configurar de novo pro agente.
+> Os **lembretes** (este doc) e o **[agente de IA](./N8N-AGENTE-IA.md)** são fluxos independentes no n8n: o lembrete é o worker que envia; o agente é o n8n que recebe/responde. Cada um tem seu workflow.
 
 ## Como funciona
 
