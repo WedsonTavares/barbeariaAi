@@ -150,6 +150,8 @@ model Tenant {
   maintenances  Maintenance[]
   reminders     BookingReminder[]
   notifications Notification[]
+  conversations Conversation[]
+  messages      Message[]
 }
 
 model TenantSettings {
@@ -382,4 +384,43 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([tenantId])
+}
+
+enum MessageSender {
+  CONTACT // cliente
+  BOT     // agente de IA
+  AGENT   // atendente humano (equipe)
+}
+
+/** Uma conversa de WhatsApp por telefone (inbox nativo do SaaS). Isolada por tenant (RLS). */
+model Conversation {
+  id            String   @id @default(uuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phone         String
+  contactName   String?
+  customerId    String?
+  tags          String[] @default([]) // desligar-ia, atendimento-humano, cliente-vip, livres
+  botPaused     Boolean  @default(false) // atendente assumiu → bot não responde
+  lastMessageAt DateTime @default(now())
+  unread        Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  messages      Message[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId, lastMessageAt])
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  tenantId       String
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         MessageSender
+  text           String
+  createdAt      DateTime      @default(now())
+
+  @@index([tenantId, conversationId, createdAt])
 }

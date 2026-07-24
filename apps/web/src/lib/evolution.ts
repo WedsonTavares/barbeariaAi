@@ -48,6 +48,21 @@ export async function getQrCode(): Promise<{ base64?: string; pairingCode?: stri
   }
 }
 
+/** Envia uma mensagem de texto pra um número via WhatsApp (Evolution). */
+export async function sendText(phone: string, text: string): Promise<boolean> {
+  if (!evolutionConfigured()) return false;
+  try {
+    const res = await fetch(`${API_URL}/message/sendText/${INSTANCE}`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ number: phone, text }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Desconecta o WhatsApp (logout) — a IA para de receber/responder até reconectar. */
 export async function logoutInstance(): Promise<boolean> {
   if (!evolutionConfigured()) return false;

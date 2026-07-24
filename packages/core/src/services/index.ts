@@ -7,6 +7,7 @@ export { expenseService } from "./expense-service";
 export { financeService } from "./finance-service";
 export { tenantService } from "./tenant-service";
 export { notificationService, pushNotification } from "./notification-service";
+export { conversationService, BOT_SILENCING_TAGS } from "./conversation-service";
 export {
   reminderService,
   reminderTimes,
