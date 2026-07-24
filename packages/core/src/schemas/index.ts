@@ -119,3 +119,25 @@ export const agentAvailabilityInput = z.object({
   category: toyCategory.optional(),
 });
 export type AgentAvailabilityInput = z.infer<typeof agentAvailabilityInput>;
+
+/** Mensagem recebida do WhatsApp (via n8n) pro agente de IA. */
+export const agentMessageInput = z.object({
+  phone: z.string().min(8).max(20),
+  message: z.string().min(1).max(2000),
+});
+export type AgentMessageInput = z.infer<typeof agentMessageInput>;
+
+/** Parâmetros que a própria IA gera pra chamar a ferramenta "check_availability". */
+export const agentToolAvailabilityInput = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD"),
+  toyName: z.string().optional(),
+});
+
+/** Parâmetros que a própria IA gera pra chamar a ferramenta "create_lead". */
+export const agentToolLeadInput = z.object({
+  name: z.string().min(2),
+  desiredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  desiredToy: z.string().optional(),
+  neighborhood: z.string().optional(),
+  summary: z.string().max(500).optional(),
+});

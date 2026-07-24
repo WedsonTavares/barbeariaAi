@@ -21,7 +21,8 @@ DO $$
 DECLARE t text;
 DECLARE tables text[] := ARRAY[
   'TenantSettings','Toy','Customer','Lead','Quote','Booking','BookingItem',
-  'Payment','Expense','Maintenance','BookingReminder','Notification','AuditLog'
+  'Payment','Expense','Maintenance','BookingReminder','Notification','AuditLog',
+  'AgentConversation'
 ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP

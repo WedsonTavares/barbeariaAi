@@ -147,6 +147,7 @@ model Tenant {
   bookingItems  BookingItem[]
   payments      Payment[]
   expenses      Expense[]
+  agentConversations AgentConversation[]
   maintenances  Maintenance[]
   reminders     BookingReminder[]
   notifications Notification[]
@@ -177,6 +178,9 @@ model TenantSettings {
   subheadline    String?
   ctaText        String?
   siteMode       SiteMode @default(SITE_BUILDER)
+  // Regra de precificação usada pelo agente de IA ao responder sobre valores.
+  minRentalHours Int      @default(4)
+  minRentalPrice Decimal  @db.Decimal(10, 2) @default(150)
 }
 
 model Toy {
@@ -378,5 +382,22 @@ model AuditLog {
   meta      Json?
   createdAt DateTime @default(now())
 
+  @@index([tenantId])
+}
+
+/** Contexto do agente de IA por telefone (WhatsApp). Uma linha por conversa em andamento. */
+model AgentConversation {
+  id             String   @id @default(uuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phone          String
+  messages       Json // [{ role: "user"|"assistant", content: string, at: ISO string }]
+  leadId         String? // Lead já criado nesta conversa (evita duplicar)
+  windowStartedAt DateTime @default(now()) // início da janela de rate limit
+  messageCount   Int      @default(0) // mensagens do usuário na janela atual
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, phone])
   @@index([tenantId])
 }

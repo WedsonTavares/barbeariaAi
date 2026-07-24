@@ -16,3 +16,8 @@ export function averageTicket(totalRevenue: number, paidBookings: number): numbe
 export function conversionRate(closedBookings: number, quotesSent: number): number {
   return quotesSent > 0 ? closedBookings / quotesSent : 0;
 }
+
+/** Total de um orçamento respeitando a locação mínima do tenant (piso, não multiplicador). */
+export function quoteWithMinimum(itemPrices: number[], minRentalPrice: number): number {
+  return Math.max(sum(itemPrices), minRentalPrice);
+}

@@ -5,6 +5,7 @@ export { bookingService, BookingConflictError, BookingStateError } from "./booki
 export { paymentService } from "./payment-service";
 export { expenseService } from "./expense-service";
 export { financeService } from "./finance-service";
+export { reportService } from "./report-service";
 export { tenantService } from "./tenant-service";
 export { notificationService, pushNotification } from "./notification-service";
 export {
@@ -13,3 +14,4 @@ export {
   createBookingReminders,
   cancelBookingReminders,
 } from "./reminder-service";
+export { agentService, AgentRateLimitError, AgentNotConfiguredError } from "./agent-service";
