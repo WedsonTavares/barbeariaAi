@@ -27,18 +27,35 @@ export async function POST(req: Request) {
 
   await services.conversationService.recordInbound(tenant.id, parsed.phone, parsed.text, parsed.name);
 
-  // Responde ao Evolution na hora; o bot roda DEPOIS (não trava o webhook nem causa retry).
   const tenantId = tenant.id;
-  const phone = parsed.phone;
+  const { phone, text, name } = parsed;
+  const n8nUrl = process.env.N8N_AGENT_WEBHOOK_URL;
+
+  // Só aciona o cérebro (n8n ou bot nativo) se o bot pode responder (respeita tags/handoff).
   after(async () => {
     try {
-      const reply = await services.botService.generateReply(tenantId, phone);
-      if (reply && reply.trim()) {
-        const sent = await sendText(phone, reply.trim());
-        if (sent) await services.conversationService.recordOutbound(tenantId, phone, reply.trim(), "BOT");
+      if (!(await services.conversationService.botCanReply(tenantId, phone))) return;
+
+      if (n8nUrl) {
+        // HÍBRIDO: o n8n é o cérebro (você controla o workflow). Ele responde chamando
+        // /api/whatsapp/send (que salva no inbox + envia). Passamos o subdomínio do tenant
+        // pra ele saber pra onde devolver a resposta.
+        await fetch(n8nUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ phone, message: text, name, tenantHost: req.headers.get("host") }),
+          signal: AbortSignal.timeout(8_000),
+        });
+      } else {
+        // Fallback: bot nativo (sem n8n configurado).
+        const reply = await services.botService.generateReply(tenantId, phone);
+        if (reply?.trim()) {
+          const sent = await sendText(phone, reply.trim());
+          if (sent) await services.conversationService.recordOutbound(tenantId, phone, reply.trim(), "BOT");
+        }
       }
     } catch (e) {
-      console.error("[bot] falha ao gerar/enviar resposta", e);
+      console.error("[inbound] falha ao acionar o bot", e);
     }
   });
 
