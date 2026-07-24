@@ -3,6 +3,7 @@ import { withTenant } from "../db/withTenant";
 
 /** Operações de plataforma (Tenant não tem RLS) + leitura de settings por tenant. */
 export const tenantService = {
+  get: (tenantId: string) => prisma.tenant.findUnique({ where: { id: tenantId } }),
   getSettings: (tenantId: string) =>
     withTenant(tenantId, (tx) => tx.tenantSettings.findUnique({ where: { tenantId } })),
   updateSettings: (tenantId: string, data: Record<string, unknown>) =>

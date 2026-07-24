@@ -115,4 +115,29 @@ export const conversationService = {
       if (c.botPaused) return false;
       return !c.tags.some((t) => BOT_SILENCING_TAGS.includes(t));
     }),
+
+  /** Histórico recente pro contexto do bot (não zera não-lidas — quem lê é o atendente). */
+  history: (tenantId: string, phone: string, limit = 20) =>
+    withTenant(tenantId, async (tx) => {
+      const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      if (!c) return { contactName: null as string | null, messages: [] as { sender: string; text: string }[] };
+      const rows = await tx.message.findMany({
+        where: { conversationId: c.id },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: { sender: true, text: true },
+      });
+      return { contactName: c.contactName, messages: rows.reverse() };
+    }),
+
+  /** Bot escala pra humano por telefone (pausa o bot + tag). */
+  takeOverByPhone: (tenantId: string, phone: string) =>
+    withTenant(tenantId, async (tx) => {
+      const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      if (!c) return;
+      await tx.conversation.update({
+        where: { id: c.id },
+        data: { botPaused: true, tags: c.tags.includes("atendimento-humano") ? c.tags : { push: "atendimento-humano" } },
+      });
+    }),
 };

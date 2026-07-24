@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
+import { sendText } from "@/lib/evolution";
 
 /**
  * Webhook do Evolution: mensagem recebida no WhatsApp → salva no inbox nativo.
@@ -24,6 +26,22 @@ export async function POST(req: Request) {
   }
 
   await services.conversationService.recordInbound(tenant.id, parsed.phone, parsed.text, parsed.name);
+
+  // Responde ao Evolution na hora; o bot roda DEPOIS (não trava o webhook nem causa retry).
+  const tenantId = tenant.id;
+  const phone = parsed.phone;
+  after(async () => {
+    try {
+      const reply = await services.botService.generateReply(tenantId, phone);
+      if (reply && reply.trim()) {
+        const sent = await sendText(phone, reply.trim());
+        if (sent) await services.conversationService.recordOutbound(tenantId, phone, reply.trim(), "BOT");
+      }
+    } catch (e) {
+      console.error("[bot] falha ao gerar/enviar resposta", e);
+    }
+  });
+
   return NextResponse.json({ ok: true });
 }
 
