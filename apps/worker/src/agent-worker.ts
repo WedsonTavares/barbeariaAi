@@ -7,8 +7,9 @@ import { sendAgentReply } from "./n8n";
  * Processa CADA uma no contexto do seu tenant, e manda a resposta pro n8n.
  */
 export async function processDueAgentConversations() {
+  // Cast explícito: o driver manda number JS como bigint, e a função SQL espera int.
   const due = await prisma.$queryRaw<{ id: string; tenantId: string }[]>`
-    SELECT * FROM get_due_agent_conversations(${services.DEBOUNCE_SECONDS})
+    SELECT * FROM get_due_agent_conversations(${services.DEBOUNCE_SECONDS}::int)
   `;
   let failed = 0;
   for (const r of due) {
