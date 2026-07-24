@@ -144,3 +144,22 @@ export const agentSupportInput = z.object({
   reason: z.string().max(300).optional(),
 });
 export type AgentSupportInput = z.infer<typeof agentSupportInput>;
+
+/**
+ * Ferramenta "agendar": a IA fecha a reserva de verdade no nosso banco.
+ * A checagem de conflito do banco (autoridade) rejeita reserva dupla mesmo que a IA
+ * tenha errado a disponibilidade. Brinquedos vêm por NOME (o que a IA obteve da
+ * ferramenta disponibilidade); resolvidos p/ id no service. Horas em HH:mm no fuso de SP.
+ */
+export const agentBookingInput = z.object({
+  phone: z.string().min(8).max(20),
+  name: z.string().min(2).max(120),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD"),
+  setupTime: z.string().regex(/^\d{2}:\d{2}$/, "use HH:mm"),
+  pickupTime: z.string().regex(/^\d{2}:\d{2}$/, "use HH:mm"),
+  toys: z.array(z.string().min(1).max(120)).min(1, "informe ao menos um brinquedo"),
+  neighborhood: z.string().max(120).optional(),
+  address: z.string().max(200).optional(),
+  notes: z.string().max(500).optional(),
+});
+export type AgentBookingInput = z.infer<typeof agentBookingInput>;

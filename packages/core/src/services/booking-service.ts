@@ -1,8 +1,9 @@
 import { withTenant, type Tx } from "../db/withTenant";
-import type { BookingInput, BookingUpdateInput } from "../schemas";
+import type { BookingInput, BookingUpdateInput, AgentBookingInput } from "../schemas";
 import { createBookingReminders, cancelBookingReminders } from "./reminder-service";
 import { pushNotification } from "./notification-service";
-import { APP_TZ } from "../time";
+import { APP_TZ, parseLocalDateTime } from "../time";
+import { quoteWithMinimum } from "../calculations";
 
 const SP_DATETIME = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short", timeStyle: "short" });
 
@@ -29,6 +30,14 @@ export class BookingConflictError extends Error {
     super("Brinquedo(s) já reservado(s) nesse intervalo");
     this.name = "BookingConflictError";
     this.conflicts = conflicts;
+  }
+}
+
+/** Erro "amigável" que o agente de IA repassa ao cliente (ex.: brinquedo não encontrado). */
+export class BookingAgentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BookingAgentError";
   }
 }
 
@@ -93,6 +102,86 @@ export const bookingService = {
   /** Disponibilidade: retorna lista de toyIds em conflito (vazia = livre). */
   checkAvailability: (tenantId: string, toyIds: string[], setup: Date, pickup: Date, excludeBookingId?: string) =>
     withTenant(tenantId, (tx) => findConflicts(tx, toyIds, setup, pickup, excludeBookingId)),
+
+  /**
+   * Reserva fechada pelo agente de IA (WhatsApp). Fecha DE VERDADE (status CONFIRMED,
+   * segura o brinquedo e gera lembretes), mas com rede de segurança do banco:
+   * - conflito de brinquedo é REJEITADO aqui (autoridade), mesmo que a IA tenha errado;
+   * - cliente é encontrado pelo telefone ou criado na hora;
+   * - total respeita a locação mínima do tenant;
+   * - pagamento fica PENDING e a equipe é notificada (a IA nunca processa pagamento).
+   * Retorna a reserva + um resumo pronto pro n8n espelhar no Google Calendar.
+   */
+  createFromAgent: (tenantId: string, input: AgentBookingInput) =>
+    withTenant(tenantId, async (tx) => {
+      const setup = parseLocalDateTime(`${input.date}T${input.setupTime}`);
+      const pickup = parseLocalDateTime(`${input.date}T${input.pickupTime}`);
+      if (!(pickup > setup)) throw new BookingAgentError("O horário de retirada precisa ser depois do de montagem.");
+
+      // Resolve cada nome de brinquedo → exatamente 1 brinquedo (fora os aposentados).
+      const available = await tx.toy.findMany({ where: { status: { not: "RETIRED" } } });
+      const chosen: { id: string; name: string; price: number }[] = [];
+      for (const wanted of input.toys) {
+        const term = wanted.trim().toLowerCase();
+        const matches = available.filter((t) => t.name.toLowerCase().includes(term));
+        if (matches.length === 0) throw new BookingAgentError(`Não encontrei o brinquedo "${wanted}" no catálogo.`);
+        if (matches.length > 1) throw new BookingAgentError(`"${wanted}" é ambíguo (${matches.map((m) => m.name).join(", ")}). Qual exatamente?`);
+        const toy = matches[0]!;
+        if (!chosen.some((c) => c.id === toy.id)) {
+          chosen.push({ id: toy.id, name: toy.name, price: Number(toy.defaultRentPrice) });
+        }
+      }
+      const toyIds = chosen.map((c) => c.id);
+
+      // Rede de segurança: serializa + rejeita conflito (mesma regra do painel).
+      await lockToys(tx, toyIds);
+      const conflicts = await findConflicts(tx, toyIds, setup, pickup);
+      if (conflicts.length) throw new BookingConflictError(conflicts);
+
+      // Cliente: reaproveita pelo telefone; senão cria.
+      let customer = await tx.customer.findFirst({ where: { phone: input.phone } });
+      if (!customer) {
+        customer = await tx.customer.create({
+          data: { tenantId, name: input.name, phone: input.phone, neighborhood: input.neighborhood, address: input.address },
+        });
+      }
+
+      const settings = await tx.tenantSettings.findUnique({ where: { tenantId } });
+      const total = quoteWithMinimum(chosen.map((c) => c.price), Number(settings?.minRentalPrice ?? 150));
+
+      const booking = await tx.booking.create({
+        data: {
+          tenantId,
+          customerId: customer.id,
+          eventDate: setup,
+          setupTime: setup,
+          pickupTime: pickup,
+          address: input.address,
+          neighborhood: input.neighborhood,
+          total,
+          status: "CONFIRMED",
+          leadSource: "WHATSAPP",
+          notes: input.notes ? `[IA] ${input.notes}` : "[IA] Reserva fechada pelo agente no WhatsApp",
+          items: { create: chosen.map((c) => ({ tenantId, toyId: c.id, price: c.price })) },
+        },
+      });
+      await createBookingReminders(tx, tenantId, booking.id, setup, pickup);
+      await pushNotification(tx, tenantId, {
+        type: "BOOKING_RESCHEDULED",
+        title: "🤖 Reserva fechada pelo agente de IA",
+        body: `${customer.name} · ${SP_DATETIME.format(setup)} · ${chosen.map((c) => c.name).join(", ")} · ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} (sinal pendente)`,
+        bookingId: booking.id,
+      });
+
+      return {
+        bookingId: booking.id,
+        total,
+        toys: chosen.map((c) => c.name),
+        setupISO: setup.toISOString(),
+        pickupISO: pickup.toISOString(),
+        customerName: customer.name,
+      };
+    }),
 
   create: (tenantId: string, input: BookingInput) =>
     withTenant(tenantId, async (tx) => {
