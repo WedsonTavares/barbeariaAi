@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
-import { LayoutDashboard, Boxes, Users, CalendarDays, Wallet, Bell } from "lucide-react";
+import { LayoutDashboard, Boxes, Users, CalendarDays, CalendarRange, Wallet, Bell, BarChart3, MessagesSquare, MessageCircle } from "lucide-react";
 
 const LINKS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/agenda", label: "Agenda", icon: CalendarRange },
   { href: "/admin/reservas", label: "Reservas", icon: CalendarDays },
   { href: "/admin/brinquedos", label: "Brinquedos", icon: Boxes },
   { href: "/admin/clientes", label: "Clientes", icon: Users },
   { href: "/admin/financeiro", label: "Financeiro", icon: Wallet },
+  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/admin/conversas", label: "Conversas", icon: MessagesSquare },
+  { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { href: "/admin/notificacoes", label: "Notificações", icon: Bell },
 ];
 
