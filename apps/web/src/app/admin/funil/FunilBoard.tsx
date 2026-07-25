@@ -1,10 +1,11 @@
 "use client";
 import { useState, useTransition, useRef, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, ChevronLeft, ChevronRight } from "lucide-react";
+import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { initials } from "@/lib/stage";
-import { moveCardAction } from "./actions";
-import { CardDrawer } from "./CardDrawer";
+import { TAG_CATALOG, STAGE_ONLY_TAGS, normalizeTag } from "@/lib/tags";
+import { moveCardAction, toggleTagFromFunilAction } from "./actions";
 
 export type Card = {
   id: string;
@@ -37,10 +38,11 @@ export function FunilBoard({ initial }: { initial: Board }) {
   const [board, setBoard] = useState<Board>(initial);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  const [open, setOpen] = useState<{ id: string; tags?: boolean } | null>(null);
+  const [tagging, setTagging] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [, startTransition] = useTransition();
+  const [tagPending, startTagTransition] = useTransition();
   const router = useRouter();
   const prev = useRef<Board | null>(null);
 
@@ -87,7 +89,41 @@ export function FunilBoard({ initial }: { initial: Board }) {
     });
   }
 
+  function applyTagChange(id: string, changed: { tags: string[]; stage: string; botPaused: boolean }) {
+    setBoard((current) => {
+      const found = Object.entries(current).find(([, cards]) => cards.some((card) => card.id === id));
+      if (!found) return current;
+
+      const [fromStage, cards] = found;
+      const card = cards.find((item) => item.id === id)!;
+      const updated = { ...card, tags: changed.tags, botPaused: changed.botPaused };
+
+      if (fromStage === changed.stage) {
+        return {
+          ...current,
+          [fromStage]: cards.map((item) => (item.id === id ? updated : item)),
+        };
+      }
+
+      return {
+        ...current,
+        [fromStage]: cards.filter((item) => item.id !== id),
+        [changed.stage]: [updated, ...(current[changed.stage] ?? [])],
+      };
+    });
+  }
+
+  function toggleCardTag(id: string, tag: string, on: boolean) {
+    startTagTransition(async () => {
+      const result = await toggleTagFromFunilAction(id, tag, on);
+      if (!result.ok) return;
+      applyTagChange(id, result);
+      router.refresh();
+    });
+  }
+
   const totalCards = Object.values(board).reduce((n, c) => n + c.length, 0);
+  const tagCard = tagging ? findCard(tagging)?.card ?? null : null;
 
   return (
     <>
@@ -175,12 +211,13 @@ export function FunilBoard({ initial }: { initial: Board }) {
                     >
                       {/* título + avatar */}
                       <div className="flex items-start gap-2">
-                        <button
-                          onClick={() => setOpen({ id: c.id })}
+                        <Link
+                          href={`/admin/conversas?c=${c.id}`}
+                          draggable={false}
                           className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:underline"
                         >
                           {c.contactName || c.phone} <span className="font-normal text-[var(--color-muted)]">- {fmtWhen(c.lastMessageAt)}</span>
-                        </button>
+                        </Link>
                         <span
                           className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-[10px] font-bold text-[var(--color-muted)]"
                           title={c.contactName ?? c.phone}
@@ -218,16 +255,23 @@ export function FunilBoard({ initial }: { initial: Board }) {
                         >
                           <Phone className="size-4" />
                         </a>
-                        <button onClick={() => setOpen({ id: c.id })} title="Abrir conversa" className="relative hover:text-[var(--color-primary)]">
+                        <Link
+                          href={`/admin/conversas?c=${c.id}`}
+                          draggable={false}
+                          title="Abrir em Conversas"
+                          className="relative hover:text-[var(--color-primary)]"
+                        >
                           <MessageSquare className="size-4" />
                           {c.unread > 0 && (
                             <span className="absolute -right-1.5 -top-1.5 rounded-full bg-[#25D366] px-1 text-[9px] font-bold leading-3 text-white">
                               {c.unread}
                             </span>
                           )}
-                        </button>
+                        </Link>
                         <button
-                          onClick={() => setOpen({ id: c.id, tags: true })}
+                          type="button"
+                          draggable={false}
+                          onClick={() => setTagging(c.id)}
                           title={livres.length ? `Tags: ${livres.join(", ")}` : "Adicionar tags"}
                           className={`relative hover:text-[var(--color-primary)] ${livres.length ? "text-[var(--color-primary)]" : ""}`}
                         >
@@ -239,9 +283,14 @@ export function FunilBoard({ initial }: { initial: Board }) {
                           )}
                         </button>
                         {c.notes && (
-                          <button onClick={() => setOpen({ id: c.id })} title={c.notes} className="text-amber-600 hover:text-amber-700">
+                          <Link
+                            href={`/admin/conversas?c=${c.id}`}
+                            draggable={false}
+                            title={c.notes}
+                            className="text-amber-600 hover:text-amber-700"
+                          >
                             <FileText className="size-4" />
-                          </button>
+                          </Link>
                         )}
                         <span className="ml-auto" title={c.botPaused ? "IA pausada" : "IA ativa"}>
                           {c.botPaused ? <Pause className="size-4 text-rose-500" /> : <Bot className="size-4 text-sky-500" />}
@@ -261,14 +310,119 @@ export function FunilBoard({ initial }: { initial: Board }) {
         })}
       </div>
 
-      {open && (
-        <CardDrawer
-          id={open.id}
-          openTags={open.tags}
-          onClose={() => setOpen(null)}
-          onChanged={() => router.refresh()}
+      {tagCard && (
+        <CardTagsDialog
+          key={tagCard.id}
+          card={tagCard}
+          pending={tagPending}
+          onClose={() => setTagging(null)}
+          onToggle={(tag, on) => toggleCardTag(tagCard.id, tag, on)}
         />
       )}
     </>
+  );
+}
+
+/** Seletor enxuto do ícone de tag: cada checkbox salva uma única tag na hora. */
+function CardTagsDialog({
+  card, pending, onClose, onToggle,
+}: {
+  card: Card;
+  pending: boolean;
+  onClose: () => void;
+  onToggle: (tag: string, on: boolean) => void;
+}) {
+  const [custom, setCustom] = useState("");
+  const extras = card.tags.filter(
+    (tag) => !STAGE_ONLY_TAGS.has(tag) && !TAG_CATALOG.some((item) => item.tag === tag)
+  );
+  const options = [
+    ...TAG_CATALOG,
+    ...extras.map((tag) => ({ tag, label: tag, hint: undefined })),
+  ];
+
+  function addCustom() {
+    const tag = normalizeTag(custom);
+    if (!tag || card.tags.includes(tag) || STAGE_ONLY_TAGS.has(tag)) {
+      setCustom("");
+      return;
+    }
+    onToggle(tag, true);
+    setCustom("");
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="card-tags-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 id="card-tags-title" className="font-bold">Tags</h3>
+            <p className="truncate text-xs text-[var(--color-muted)]">{card.contactName || card.phone}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-7 shrink-0 place-items-center rounded-full hover:bg-[var(--color-surface)]">
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <p className="mt-3 text-xs text-[var(--color-muted)]">
+          Marque ou desmarque. A alteração é salva na hora.
+        </p>
+
+        <ul className="mt-2 max-h-64 overflow-y-auto">
+          {options.map(({ tag, label, hint }) => {
+            const checked = card.tags.includes(tag);
+            return (
+              <li key={tag}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-[var(--color-surface)]">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={pending}
+                    onChange={(event) => onToggle(tag, event.target.checked)}
+                    className="size-4 accent-[var(--color-primary)]"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  {hint && <span className="shrink-0 text-[9px] font-bold uppercase text-rose-600">{hint}</span>}
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="mt-2 flex gap-2 border-t border-black/5 pt-3">
+          <input
+            value={custom}
+            onChange={(event) => setCustom(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addCustom();
+              }
+            }}
+            placeholder="nova tag"
+            className="min-w-0 flex-1 rounded-lg border border-black/10 px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={addCustom}
+            disabled={pending || !custom.trim()}
+            aria-label="Adicionar tag"
+            className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-40"
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
+
+        <p className="mt-2 text-[10px] text-[var(--color-muted)]">
+          Agendado e Pós-festa continuam sendo controlados ao arrastar o card.
+        </p>
+      </div>
+    </div>
   );
 }

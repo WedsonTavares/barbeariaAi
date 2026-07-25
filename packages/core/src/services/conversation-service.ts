@@ -150,6 +150,45 @@ export const conversationService = {
       })
     ),
 
+  /**
+   * Liga/desliga uma única tag sem substituir a lista inteira. O lock serializa
+   * mudanças simultâneas no mesmo contato. "atendimento-humano" também move o
+   * card, mantendo a tag, a coluna e o estado da IA sincronizados.
+   */
+  toggleTag: (tenantId: string, id: string, tag: string, on: boolean) =>
+    withTenant(tenantId, async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`conversation-tag:${id}`}))`;
+      const c = await tx.conversation.findFirstOrThrow({ where: { id } });
+
+      let stage = c.stage;
+      let tags: string[];
+
+      if (tag === "atendimento-humano") {
+        if (on) {
+          const kept = c.tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
+          tags = [...new Set([...kept, tag])];
+          stage = "SUPORTE_HUMANO";
+        } else {
+          tags = c.tags.filter((t) => t !== tag);
+          if (c.stage === "SUPORTE_HUMANO") {
+            tags = tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
+            stage = "IA_ATENDENDO";
+          }
+        }
+      } else {
+        tags = on
+          ? [...new Set([...c.tags, tag])].slice(0, 20)
+          : c.tags.filter((t) => t !== tag);
+      }
+
+      const botPaused = tags.some((t) => BOT_SILENCING_TAGS.includes(t));
+      return tx.conversation.update({
+        where: { id },
+        data: { tags, stage, botPaused },
+        select: { id: true, tags: true, stage: true, botPaused: true },
+      });
+    }),
+
   /** O bot pode responder este telefone? (não, se pausado ou com tag silenciadora) */
   botCanReply: (tenantId: string, phone: string) =>
     withTenant(tenantId, async (tx) => {
