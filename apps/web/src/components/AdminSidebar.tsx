@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { LayoutDashboard, Boxes, Users, CalendarDays, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings } from "lucide-react";
+import { LayoutDashboard, Boxes, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings } from "lucide-react";
 
+// Reservas não fica no menu: as festas se abrem pelo calendário da Agenda.
 const LINKS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/funil", label: "Funil", icon: KanbanSquare },
   { href: "/admin/conversas", label: "Conversas", icon: MessagesSquare },
   { href: "/admin/agenda", label: "Agenda", icon: CalendarRange },
-  { href: "/admin/reservas", label: "Reservas", icon: CalendarDays },
   { href: "/admin/clientes", label: "Clientes", icon: Users },
   { href: "/admin/brinquedos", label: "Brinquedos", icon: Boxes },
   { href: "/admin/financeiro", label: "Financeiro", icon: Wallet },

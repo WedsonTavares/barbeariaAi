@@ -59,11 +59,8 @@ export function CardDrawer({
   useEffect(() => { feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight }); }, [d?.messages.length]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-stretch justify-center bg-black/30 p-0 sm:p-4" onMouseDown={onClose}>
-      <div
-        onMouseDown={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-none bg-[var(--color-surface)] shadow-2xl sm:rounded-2xl"
-      >
+    <div className="fixed inset-0 z-40 flex items-stretch justify-center bg-[var(--color-surface)]">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--color-surface)]">
         {/* topo */}
         <div className="flex items-center justify-between gap-3 border-b border-black/5 bg-white px-4 py-3">
           <div className="min-w-0">
