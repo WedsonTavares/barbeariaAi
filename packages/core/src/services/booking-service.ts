@@ -91,6 +91,21 @@ export const bookingService = {
       })
     ),
 
+  /**
+   * Ferramenta "meus agendamentos": festas ativas desse telefone (não canceladas),
+   * mais próxima primeiro. Autoridade pra IA responder "quando é minha festa?".
+   */
+  upcomingForPhone: (tenantId: string, phone: string, now = new Date()) =>
+    withTenant(tenantId, async (tx) => {
+      const customer = await tx.customer.findFirst({ where: { phone } });
+      if (!customer) return [];
+      return tx.booking.findMany({
+        where: { customerId: customer.id, status: { not: "CANCELED" }, pickupTime: { gte: now } },
+        orderBy: { eventDate: "asc" },
+        include: { items: { include: { toy: true } } },
+      });
+    }),
+
   get: (tenantId: string, id: string) =>
     withTenant(tenantId, (tx) =>
       tx.booking.findFirst({

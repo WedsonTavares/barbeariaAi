@@ -163,3 +163,9 @@ export const agentBookingInput = z.object({
   notes: z.string().max(500).optional(),
 });
 export type AgentBookingInput = z.infer<typeof agentBookingInput>;
+
+/** Ferramenta "meus agendamentos": a IA consulta as festas já marcadas desse telefone. */
+export const agentLookupInput = z.object({
+  phone: z.string().min(8).max(20),
+});
+export type AgentLookupInput = z.infer<typeof agentLookupInput>;
