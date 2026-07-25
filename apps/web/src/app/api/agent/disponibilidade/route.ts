@@ -31,7 +31,9 @@ export async function POST(req: Request) {
   const allToys = await services.toyService.list(tenant.id);
   const term = input.toyName?.toLowerCase();
   const candidates = allToys.filter((t) => {
-    if (t.status === "RETIRED") return false;
+    // Fora do catálogo da IA: aposentado (removido) e em manutenção — assim a IA
+    // nunca oferece o que a equipe tirou de circulação no painel.
+    if (t.status === "RETIRED" || t.status === "MAINTENANCE") return false;
     if (term) return t.name.toLowerCase().includes(term);
     if (input.category) return t.category === input.category;
     return true;

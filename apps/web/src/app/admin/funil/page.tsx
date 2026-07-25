@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
 import { FunilBoard, type Board } from "./FunilBoard";
@@ -20,16 +19,11 @@ export default async function FunilPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-extrabold">Funil</h1>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">
-            Arraste os cards entre as colunas — as tags e a IA acompanham automaticamente.
-          </p>
-        </div>
-        <Link href="/admin/conversas" className="rounded-xl border border-black/10 px-3 py-2 text-sm font-semibold hover:bg-[var(--color-surface)]">
-          Ver como lista
-        </Link>
+      <div>
+        <h1 className="text-2xl font-extrabold">Funil</h1>
+        <p className="mt-1 text-sm text-[var(--color-muted)]">
+          Arraste os cards entre as colunas — as tags e a IA acompanham automaticamente.
+        </p>
       </div>
 
       {total === 0 ? (

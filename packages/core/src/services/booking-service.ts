@@ -118,8 +118,9 @@ export const bookingService = {
       const pickup = parseLocalDateTime(`${input.date}T${input.pickupTime}`);
       if (!(pickup > setup)) throw new BookingAgentError("O horário de retirada precisa ser depois do de montagem.");
 
-      // Resolve cada nome de brinquedo → exatamente 1 brinquedo (fora os aposentados).
-      const available = await tx.toy.findMany({ where: { status: { not: "RETIRED" } } });
+      // Resolve cada nome de brinquedo → exatamente 1 brinquedo. Fora do catálogo
+      // da IA: aposentados e em manutenção (o painel é a autoridade do que existe).
+      const available = await tx.toy.findMany({ where: { status: { notIn: ["RETIRED", "MAINTENANCE"] } } });
       const chosen: { id: string; name: string; price: number }[] = [];
       for (const wanted of input.toys) {
         const term = wanted.trim().toLowerCase();

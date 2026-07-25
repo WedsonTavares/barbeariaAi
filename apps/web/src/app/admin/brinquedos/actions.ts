@@ -101,3 +101,23 @@ export async function setToyStatus(formData: FormData) {
   }
   revalidatePath(BASE);
 }
+
+/**
+ * Remove um brinquedo. Se ele já foi usado em reservas, o histórico manda:
+ * aposenta em vez de apagar (some do site e da IA, mas o passado fica).
+ */
+export async function removeToy(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  let dest = `${BASE}?ok=removido`;
+  try {
+    const id = schemas.idInput.parse(formData.get("id"));
+    const r = await services.toyService.remove(tenant.id, id);
+    if (r.retired) dest = `${BASE}?ok=aposentado`;
+  } catch (e) {
+    if (e instanceof ZodError) dest = `${BASE}?erro=validacao`;
+    else throw e;
+  }
+  revalidatePath(BASE);
+  redirect(dest);
+}
