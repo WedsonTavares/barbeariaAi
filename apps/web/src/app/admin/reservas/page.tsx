@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
 import { brl, fmtDate, fmtDateTime } from "@/lib/format";
 import { BOOKING_STATUS, PAYMENT_STATUS, label } from "@/lib/labels";
-import { createBooking, confirmBooking, cancelBooking, payBooking } from "./actions";
+import { createBooking, confirmBooking, cancelBooking, payBooking, advanceBooking } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +18,20 @@ const OKS: Record<string, string> = {
   confirmada: "Reserva confirmada — lembretes de retirada agendados.",
   cancelada: "Reserva cancelada e lembretes desligados.",
   pagamento: "Pagamento registrado!",
+  editada: "Reserva atualizada — lembretes reagendados se necessário.",
+  andamento: "Status atualizado!",
 };
 
 /** Status em que ainda faz sentido confirmar. */
 const CONFIRMABLE = new Set(["LEAD", "QUOTE_SENT", "WAITING_DEPOSIT"]);
 const OPEN = new Set(["LEAD", "QUOTE_SENT", "WAITING_DEPOSIT", "CONFIRMED", "IN_DELIVERY", "MOUNTED"]);
+/** Rótulo do botão de avanço da operação, por status atual. */
+const ADVANCE_LABEL: Record<string, string> = {
+  CONFIRMED: "🚚 Saiu pra entrega",
+  IN_DELIVERY: "🔧 Montado",
+  MOUNTED: "📦 Retirado",
+  PICKED_UP: "✅ Finalizar",
+};
 
 export default async function ReservasPage({ searchParams }: { searchParams: Promise<{ erro?: string; ok?: string }> }) {
   const { tenant } = await requireTenant();
@@ -60,6 +70,12 @@ export default async function ReservasPage({ searchParams }: { searchParams: Pro
                 <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 font-semibold">{label(PAYMENT_STATUS, b.paymentStatus)}</span>
                 {CONFIRMABLE.has(b.status) && (
                   <form action={confirmBooking}><input type="hidden" name="id" value={b.id} /><button className="rounded-full bg-[var(--color-primary)] px-3 py-1 font-semibold text-white">Confirmar</button></form>
+                )}
+                {ADVANCE_LABEL[b.status] && (
+                  <form action={advanceBooking}><input type="hidden" name="id" value={b.id} /><button className="rounded-full bg-[var(--color-ink)] px-3 py-1 font-semibold text-white hover:opacity-80">{ADVANCE_LABEL[b.status]}</button></form>
+                )}
+                {b.status !== "CANCELED" && b.status !== "FINISHED" && (
+                  <Link href={`/admin/reservas/${b.id}`} className="rounded-full border border-black/10 px-3 py-1 font-semibold hover:bg-[var(--color-surface)]">Editar</Link>
                 )}
                 {OPEN.has(b.status) && b.paymentStatus !== "PAID" && (
                   <form action={payBooking} className="flex items-center gap-1">

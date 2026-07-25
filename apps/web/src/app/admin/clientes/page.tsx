@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
 import { createCustomer } from "./actions";
@@ -16,10 +17,13 @@ export default async function ClientesPage({ searchParams }: { searchParams: Pro
         {sp?.ok && <p role="status" className="mt-3 rounded-lg bg-green-100 p-3 text-sm text-green-700">Cliente adicionado!</p>}
         <div className="mt-4 space-y-2">
           {customers.map((c) => (
-            <div key={c.id} className="rounded-xl border border-black/5 bg-white p-3">
-              <div className="font-semibold">{c.name}</div>
+            <Link key={c.id} href={`/admin/clientes/${c.id}`} className="block rounded-xl border border-black/5 bg-white p-3 transition-colors hover:bg-[var(--color-surface)]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{c.name}</span>
+                <span className="text-xs font-semibold text-[var(--color-primary)]">Ver ficha →</span>
+              </div>
               <div className="text-sm text-[var(--color-muted)]">{c.phone} · {c.neighborhood ?? "-"}</div>
-            </div>
+            </Link>
           ))}
           {customers.length === 0 && <p className="text-[var(--color-muted)]">Nenhum cliente ainda.</p>}
         </div>

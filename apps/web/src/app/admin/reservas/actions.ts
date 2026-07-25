@@ -34,6 +34,64 @@ export async function createBooking(formData: FormData) {
   redirect(dest);
 }
 
+export async function updateBooking(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
+
+  let id = "";
+  let dest = `${BASE}?ok=editada`;
+  try {
+    id = schemas.idInput.parse(formData.get("id"));
+    const data = schemas.bookingUpdateInput.parse({
+      eventDate: formData.get("eventDate"),
+      setupTime: formData.get("setupTime"),
+      pickupTime: formData.get("pickupTime"),
+      total: formData.get("total"),
+      depositAmount: formData.get("depositAmount") || 0,
+      neighborhood: formData.get("neighborhood") || undefined,
+      address: formData.get("address") || undefined,
+      notes: formData.get("notes") || undefined,
+      toyIds: formData.getAll("toyIds").map(String),
+    });
+    await services.bookingService.update(tenant.id, id, data);
+  } catch (e) {
+    // Erros voltam pra tela de edição, preservando o contexto.
+    const back = id ? `${BASE}/${id}` : BASE;
+    if (e instanceof services.BookingConflictError) dest = `${back}?erro=conflito`;
+    else if (e instanceof services.BookingStateError) dest = `${back}?erro=estado`;
+    else if (e instanceof ZodError) dest = `${back}?erro=validacao`;
+    else throw e;
+  }
+  revalidatePath(BASE);
+  redirect(dest);
+}
+
+/** Avança o status na ordem da operação. O próximo passo é decidido AQUI, nunca pelo cliente. */
+const NEXT_STATUS: Record<string, "IN_DELIVERY" | "MOUNTED" | "PICKED_UP" | "FINISHED"> = {
+  CONFIRMED: "IN_DELIVERY",
+  IN_DELIVERY: "MOUNTED",
+  MOUNTED: "PICKED_UP",
+  PICKED_UP: "FINISHED",
+};
+
+export async function advanceBooking(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
+  let dest = `${BASE}?ok=andamento`;
+  try {
+    const id = schemas.idInput.parse(formData.get("id"));
+    const booking = await services.bookingService.get(tenant.id, id);
+    const next = booking ? NEXT_STATUS[booking.status] : undefined;
+    if (!next) throw new services.BookingStateError("Sem próximo passo para esse status");
+    await services.bookingService.setStatus(tenant.id, id, next);
+  } catch (e) {
+    if (e instanceof services.BookingStateError || e instanceof ZodError) dest = `${BASE}?erro=estado`;
+    else throw e;
+  }
+  revalidatePath(BASE);
+  redirect(dest);
+}
+
 export async function confirmBooking(formData: FormData) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN"]);

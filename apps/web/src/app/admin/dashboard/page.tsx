@@ -1,6 +1,7 @@
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
 import { brl, fmtDateTime } from "@/lib/format";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function DashboardPage() {
   ]);
   return (
     <div>
+      <AutoRefresh seconds={60} />
       <h1 className="text-2xl font-extrabold">Dashboard</h1>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card label="Faturamento do mês" value={brl(m.faturamentoBruto)} />

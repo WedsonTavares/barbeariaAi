@@ -1,6 +1,7 @@
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
 import { fmtDateTime } from "@/lib/format";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { markNotificationRead } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export default async function NotificacoesPage() {
 
   return (
     <div className="max-w-3xl">
+      <AutoRefresh seconds={60} />
       <h1 className="text-2xl font-extrabold">Notificações</h1>
       <div className="mt-4 space-y-2">
         {notifications.map((n) => (
