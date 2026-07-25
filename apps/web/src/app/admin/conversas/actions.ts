@@ -45,28 +45,17 @@ export async function replyAction(id: string, phone: string, text: string) {
   return { ok: sent };
 }
 
-/**
- * Liga/desliga UMA tag pelo checkbox. Lê a lista atual no servidor antes de
- * gravar — o cliente manda só qual tag mudou, então dois atendentes mexendo ao
- * mesmo tempo não apagam a marcação um do outro.
- */
+/** Liga/desliga UMA tag sem zerar não-lidas nem substituir as demais. */
 export async function toggleTagAction(id: string, tag: string, on: boolean) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
   const t = normalizeTag(tag);
   if (!t) return { ok: false as const, tags: [] as string[] };
 
-  const current = await services.conversationService.get(tenant.id, id);
-  if (!current) return { ok: false as const, tags: [] as string[] };
-
-  const next = on
-    ? [...new Set([...current.tags, t])].slice(0, 20)
-    : current.tags.filter((x) => x !== t);
-
-  await services.conversationService.setTags(tenant.id, id, next);
+  const changed = await services.conversationService.toggleTag(tenant.id, id, t, on);
   revalidatePath("/admin/conversas");
   revalidatePath("/admin/funil");
-  return { ok: true as const, tags: next };
+  return { ok: true as const, tags: changed.tags };
 }
 
 /** Assumir (pausa a IA) / devolver pro bot. */

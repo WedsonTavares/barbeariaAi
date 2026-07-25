@@ -115,15 +115,50 @@ export const idInput = z.string().uuid();
 // ===== Ferramentas HTTP do agente de IA (o agente vive no n8n; estes endpoints
 // são as "ferramentas" que ele chama — cada um resolve tenant pelo host + valida). =====
 
-/** Ferramenta "disponibilidade": a IA manda dia + (nome do brinquedo | categoria). */
-export const agentAvailabilityInput = z.object({
-  date: z.preprocess(
-    (v) => (typeof v === "string" && v ? parseLocalDate(v) : v),
-    z.date()
-  ),
-  toyName: z.string().max(120).optional(),
-  category: toyCategory.optional(),
-});
+const agentDateText = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD")
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(year!, month! - 1, day!));
+    return (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month! - 1 &&
+      date.getUTCDate() === day
+    );
+  }, "data inexistente");
+
+const agentTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:mm");
+
+/**
+ * Ferramenta "disponibilidade": aceita o dia inteiro (compatibilidade) ou,
+ * preferencialmente, o intervalo exato que o cliente escolheu.
+ */
+export const agentAvailabilityInput = z
+  .object({
+    date: agentDateText.transform(parseLocalDate),
+    setupTime: agentTime.optional(),
+    pickupTime: agentTime.optional(),
+    toyName: z.string().max(120).optional(),
+    category: toyCategory.optional(),
+  })
+  .superRefine((data, ctx) => {
+    const hasSetup = Boolean(data.setupTime);
+    const hasPickup = Boolean(data.pickupTime);
+    if (hasSetup !== hasPickup) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: hasSetup ? ["pickupTime"] : ["setupTime"],
+        message: "informe montagem e retirada juntas",
+      });
+    } else if (data.setupTime && data.pickupTime && data.pickupTime <= data.setupTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pickupTime"],
+        message: "a retirada deve ser depois da montagem",
+      });
+    }
+  });
 export type AgentAvailabilityInput = z.infer<typeof agentAvailabilityInput>;
 
 /** Ferramenta "criar lead": a IA manda os dados que colheu na conversa. */
@@ -154,9 +189,9 @@ export type AgentSupportInput = z.infer<typeof agentSupportInput>;
 export const agentBookingInput = z.object({
   phone: z.string().min(8).max(20),
   name: z.string().min(2).max(120),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD"),
-  setupTime: z.string().regex(/^\d{2}:\d{2}$/, "use HH:mm"),
-  pickupTime: z.string().regex(/^\d{2}:\d{2}$/, "use HH:mm"),
+  date: agentDateText,
+  setupTime: agentTime,
+  pickupTime: agentTime,
   toys: z.array(z.string().min(1).max(120)).min(1, "informe ao menos um brinquedo"),
   neighborhood: z.string().max(120).optional(),
   address: z.string().max(200).optional(),

@@ -3,7 +3,6 @@ import { useState, useTransition, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
-import { initials } from "@/lib/stage";
 import { TAG_CATALOG, STAGE_ONLY_TAGS, normalizeTag } from "@/lib/tags";
 import { moveCardAction, toggleTagFromFunilAction } from "./actions";
 
@@ -15,6 +14,7 @@ export type Card = {
   botPaused: boolean;
   unread: number;
   lastMessageAt: string;
+  activeBookingAt: string | null;
   notes?: string | null;
 };
 export type Board = Record<string, Card[]>;
@@ -30,9 +30,44 @@ const COLUMNS = [
 /** Tags de etapa não viram chip no card (a coluna já diz isso). */
 const STAGE_TAGS = ["novo-lead", "atendimento-humano", "agendado", "pos-festa"];
 
-const fmtWhen = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours()}`;
+const fmtActivity = (iso: string) => {
+  const elapsed = Math.max(0, Date.now() - new Date(iso).getTime());
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "agora";
+  if (minutes < 60) return `há ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return `há ${Math.floor(hours / 24)}d`;
+};
+
+const bookingDate = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "short",
+});
+
+const bookingTime = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const fullDateTime = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  dateStyle: "short",
+  timeStyle: "short",
+});
+
+const fmtBooking = (iso: string) => {
+  const value = new Date(iso);
+  const dateParts = bookingDate.formatToParts(value);
+  const day = dateParts.find((part) => part.type === "day")?.value ?? "";
+  const month = (dateParts.find((part) => part.type === "month")?.value ?? "").replace(".", "");
+  const timeParts = bookingTime.formatToParts(value);
+  const hour = timeParts.find((part) => part.type === "hour")?.value ?? "";
+  const minute = timeParts.find((part) => part.type === "minute")?.value ?? "";
+  return `${day} ${month} · ${minute === "00" ? `${hour}h` : `${hour}:${minute}`}`;
 };
 export function FunilBoard({ initial }: { initial: Board }) {
   const [board, setBoard] = useState<Board>(initial);
@@ -209,20 +244,21 @@ export function FunilBoard({ initial }: { initial: Board }) {
                         dragging === c.id ? "opacity-40" : "hover:shadow-md"
                       }`}
                     >
-                      {/* título + avatar */}
+                      {/* título + última atividade */}
                       <div className="flex items-start gap-2">
                         <Link
                           href={`/admin/conversas?c=${c.id}`}
                           draggable={false}
                           className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:underline"
                         >
-                          {c.contactName || c.phone} <span className="font-normal text-[var(--color-muted)]">- {fmtWhen(c.lastMessageAt)}</span>
+                          {c.contactName || c.phone}
                         </Link>
                         <span
-                          className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-[10px] font-bold text-[var(--color-muted)]"
-                          title={c.contactName ?? c.phone}
+                          suppressHydrationWarning
+                          className="shrink-0 text-[10px] font-medium text-[var(--color-muted)]"
+                          title={`Última interação: ${fullDateTime.format(new Date(c.lastMessageAt))}`}
                         >
-                          {initials(c.contactName, c.phone)}
+                          {fmtActivity(c.lastMessageAt)}
                         </span>
                       </div>
 
@@ -291,6 +327,14 @@ export function FunilBoard({ initial }: { initial: Board }) {
                           >
                             <FileText className="size-4" />
                           </Link>
+                        )}
+                        {c.activeBookingAt && (
+                          <span
+                            className="whitespace-nowrap text-[10px] font-semibold text-emerald-700"
+                            title={`Reserva ativa: ${fullDateTime.format(new Date(c.activeBookingAt))}`}
+                          >
+                            {fmtBooking(c.activeBookingAt)}
+                          </span>
                         )}
                         <span className="ml-auto" title={c.botPaused ? "IA pausada" : "IA ativa"}>
                           {c.botPaused ? <Pause className="size-4 text-rose-500" /> : <Bot className="size-4 text-sky-500" />}

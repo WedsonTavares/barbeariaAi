@@ -12,7 +12,11 @@ export default async function FunilPage() {
   const initial: Board = Object.fromEntries(
     Object.entries(grouped).map(([stage, cards]) => [
       stage,
-      cards.map((c) => ({ ...c, lastMessageAt: c.lastMessageAt.toISOString() })),
+      cards.map((c) => ({
+        ...c,
+        lastMessageAt: c.lastMessageAt.toISOString(),
+        activeBookingAt: c.activeBookingAt?.toISOString() ?? null,
+      })),
     ])
   );
   const total = Object.values(initial).reduce((n, cards) => n + cards.length, 0);

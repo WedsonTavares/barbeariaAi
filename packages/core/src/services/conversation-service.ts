@@ -28,6 +28,65 @@ export const STAGE_TAG: Record<ConversationStage, string | null> = {
 
 const ALL_STAGE_TAGS = Object.values(STAGE_TAG).filter((t): t is string => Boolean(t));
 
+async function lockConversation(tx: Tx, id: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`conversation-tag:${id}`}))`;
+}
+
+async function takeOverConversation(tx: Tx, id: string) {
+  await lockConversation(tx, id);
+  const conversation = await tx.conversation.findFirstOrThrow({ where: { id } });
+  const kept = conversation.tags.filter((tag) => !ALL_STAGE_TAGS.includes(tag));
+  const tags = [...new Set([...kept, "atendimento-humano"])];
+  return tx.conversation.update({
+    where: { id },
+    data: { botPaused: true, tags, stage: "SUPORTE_HUMANO" },
+  });
+}
+
+/**
+ * Fecha o ciclo do atendimento quando uma reserva é criada pelo agente.
+ * Recebe a transação da reserva para que booking + etapa + contexto sejam atômicos:
+ * ou tudo é persistido, ou tudo sofre rollback.
+ */
+export async function markConversationScheduled(
+  tx: Tx,
+  tenantId: string,
+  input: { phone: string; customerId: string; note: string; repairOnly?: boolean }
+) {
+  const found = await tx.conversation.findUnique({
+    where: { tenantId_phone: { tenantId, phone: input.phone } },
+    select: { id: true },
+  });
+  if (!found) return null;
+
+  // Usa o mesmo lock de toggleTag para não perder uma tag marcada por outro
+  // atendente enquanto a reserva muda o card de coluna.
+  await lockConversation(tx, found.id);
+  const conversation = await tx.conversation.findUnique({
+    where: { tenantId_phone: { tenantId, phone: input.phone } },
+  });
+  if (!conversation) return null;
+  // Retry de uma reserva antiga pode reparar cards que ainda ficaram no fluxo
+  // da IA, mas nunca desfaz uma tomada humana nem regride um pós-festa.
+  if (input.repairOnly && !["NOVO_LEAD", "IA_ATENDENDO"].includes(conversation.stage)) {
+    return conversation;
+  }
+
+  const kept = conversation.tags.filter((tag) => !ALL_STAGE_TAGS.includes(tag));
+  const tags = [...new Set([...kept, STAGE_TAG.AGENDADO!])];
+  return tx.conversation.update({
+    where: { id: conversation.id },
+    data: {
+      customerId: input.customerId,
+      stage: "AGENDADO",
+      tags,
+      botPaused: tags.some((tag) => BOT_SILENCING_TAGS.includes(tag)),
+      notes: input.note.slice(0, 2000),
+      notesAt: new Date(),
+    },
+  });
+}
+
 /** Registra uma mensagem numa conversa (cria a conversa se for a primeira do telefone). */
 export async function recordMessage(
   tx: Tx,
@@ -111,23 +170,25 @@ export const conversationService = {
 
   /** Atendente assume a conversa: pausa o bot, marca a tag e move o card. */
   takeOver: (tenantId: string, id: string) =>
-    withTenant(tenantId, (tx) =>
-      tx.conversation.update({
-        where: { id },
-        data: { botPaused: true, tags: { push: "atendimento-humano" }, stage: "SUPORTE_HUMANO" },
-      })
-    ),
+    withTenant(tenantId, (tx) => takeOverConversation(tx, id)),
 
   /** Devolve a conversa pro bot: religa, tira a tag de humano e volta o card. */
   releaseToBot: (tenantId: string, id: string) =>
     withTenant(tenantId, async (tx) => {
+      await lockConversation(tx, id);
       const c = await tx.conversation.findFirstOrThrow({ where: { id } });
+      let tags = c.tags.filter((t) => t !== "atendimento-humano");
+      let stage = c.stage;
+      if (c.stage === "SUPORTE_HUMANO") {
+        tags = tags.filter((tag) => !ALL_STAGE_TAGS.includes(tag));
+        stage = "IA_ATENDENDO";
+      }
       return tx.conversation.update({
         where: { id },
         data: {
-          botPaused: false,
-          tags: c.tags.filter((t) => t !== "atendimento-humano"),
-          ...(c.stage === "SUPORTE_HUMANO" ? { stage: "IA_ATENDENDO" as const } : {}),
+          botPaused: tags.some((tag) => BOT_SILENCING_TAGS.includes(tag)),
+          tags,
+          stage,
         },
       });
     }),
@@ -143,12 +204,13 @@ export const conversationService = {
 
   /** Define as tags do contato (substitui a lista). */
   setTags: (tenantId: string, id: string, tags: string[]) =>
-    withTenant(tenantId, (tx) =>
-      tx.conversation.update({
+    withTenant(tenantId, async (tx) => {
+      await lockConversation(tx, id);
+      return tx.conversation.update({
         where: { id },
         data: { tags, botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)) },
-      })
-    ),
+      });
+    }),
 
   /**
    * Liga/desliga uma única tag sem substituir a lista inteira. O lock serializa
@@ -157,7 +219,7 @@ export const conversationService = {
    */
   toggleTag: (tenantId: string, id: string, tag: string, on: boolean) =>
     withTenant(tenantId, async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`conversation-tag:${id}`}))`;
+      await lockConversation(tx, id);
       const c = await tx.conversation.findFirstOrThrow({ where: { id } });
 
       let stage = c.stage;
@@ -225,18 +287,62 @@ export const conversationService = {
   /** Quadro do funil: as conversas agrupadas por etapa (colunas do Kanban). */
   board: (tenantId: string) =>
     withTenant(tenantId, async (tx) => {
+      const now = new Date();
       const rows = await tx.conversation.findMany({
         orderBy: { lastMessageAt: "desc" },
         take: 300,
         select: {
-          id: true, phone: true, contactName: true, tags: true,
+          id: true, phone: true, contactName: true, customerId: true, tags: true,
           botPaused: true, unread: true, lastMessageAt: true, stage: true, notes: true,
         },
       });
+      const phones = [...new Set(rows.map((row) => row.phone))];
+      const customerIds = [...new Set(rows.map((row) => row.customerId).filter((id): id is string => Boolean(id)))];
+      const activeBookings = rows.length
+        ? await tx.booking.findMany({
+            where: {
+              status: { in: ["CONFIRMED", "IN_DELIVERY", "MOUNTED"] },
+              pickupTime: { gte: now },
+              OR: [
+                ...(customerIds.length ? [{ customerId: { in: customerIds } }] : []),
+                { customer: { phone: { in: phones } } },
+              ],
+            },
+            orderBy: [{ setupTime: "asc" }, { eventDate: "asc" }, { id: "asc" }],
+            select: {
+              customerId: true,
+              eventDate: true,
+              setupTime: true,
+              customer: { select: { phone: true } },
+            },
+          })
+        : [];
+      const activeBookingByCustomer = new Map<string, Date>();
+      const activeBookingByPhone = new Map<string, Date>();
+      for (const booking of activeBookings) {
+        const at = booking.setupTime ?? booking.eventDate;
+        if (!activeBookingByCustomer.has(booking.customerId)) {
+          activeBookingByCustomer.set(booking.customerId, at);
+        }
+        const phone = booking.customer.phone.replace(/\D/g, "");
+        if (!activeBookingByPhone.has(phone)) {
+          activeBookingByPhone.set(phone, at);
+        }
+      }
+      const cards = rows.map(({ customerId, ...row }) => {
+        const phone = row.phone.replace(/\D/g, "");
+        return {
+          ...row,
+          activeBookingAt:
+            (customerId ? activeBookingByCustomer.get(customerId) : undefined) ??
+            activeBookingByPhone.get(phone) ??
+            null,
+        };
+      });
       const byStage = Object.fromEntries(
-        CONVERSATION_STAGES.map((s) => [s, [] as typeof rows])
-      ) as Record<ConversationStage, typeof rows>;
-      for (const r of rows) (byStage[r.stage] ??= []).push(r);
+        CONVERSATION_STAGES.map((s) => [s, [] as typeof cards])
+      ) as Record<ConversationStage, typeof cards>;
+      for (const card of cards) (byStage[card.stage] ??= []).push(card);
       return byStage;
     }),
 
@@ -247,6 +353,7 @@ export const conversationService = {
    */
   setStage: (tenantId: string, id: string, stage: ConversationStage) =>
     withTenant(tenantId, async (tx) => {
+      await lockConversation(tx, id);
       const c = await tx.conversation.findFirstOrThrow({ where: { id } });
       const kept = c.tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
       const tag = STAGE_TAG[stage];
@@ -276,13 +383,6 @@ export const conversationService = {
     withTenant(tenantId, async (tx) => {
       const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
       if (!c) return;
-      await tx.conversation.update({
-        where: { id: c.id },
-        data: {
-          botPaused: true,
-          tags: c.tags.includes("atendimento-humano") ? c.tags : { push: "atendimento-humano" },
-          stage: "SUPORTE_HUMANO",
-        },
-      });
+      await takeOverConversation(tx, c.id);
     }),
 };

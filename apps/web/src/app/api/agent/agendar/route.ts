@@ -28,31 +28,26 @@ export async function POST(req: Request) {
 
   try {
     const result = await services.bookingService.createFromAgent(tenant.id, input);
-    // Grava o contexto sozinho — não depende da IA lembrar de chamar a tool "notas".
-    const local = [input.address, input.neighborhood].filter(Boolean).join(", ");
-    await services.conversationService.setNote(
-      tenant.id,
-      input.phone,
-      `Reserva fechada: ${result.toys.join(", ")} — ${input.date} das ${input.setupTime} às ${input.pickupTime}` +
-        (local ? ` em ${local}` : "") +
-        `. Total R$ ${result.total}. Sinal a combinar.`
-    );
     return NextResponse.json({
       ok: true,
       ...result,
-      message: `Reserva confirmada para ${result.customerName} — ${result.toys.join(", ")}. Sinal a combinar com a equipe.`,
+      message: result.alreadyExists
+        ? `Essa reserva já estava confirmada para ${result.customerName} — ${result.toys.join(", ")}.`
+        : `Reserva confirmada para ${result.customerName} — ${result.toys.join(", ")}. Sinal a combinar com a equipe.`,
       // Pronto pro n8n criar o evento no Google Calendar:
-      calendar: {
-        title: `${result.toys.join(", ")} — ${result.customerName}`,
-        start: result.setupISO,
-        end: result.pickupISO,
-        description: `Reserva Diny (agente IA). Total ${result.total}. Sinal pendente.`,
-      },
+      calendar: result.alreadyExists
+        ? null
+        : {
+            title: `${result.toys.join(", ")} — ${result.customerName}`,
+            start: result.setupISO,
+            end: result.pickupISO,
+            description: `Reserva Diny (agente IA). Total ${result.total}. Sinal pendente.`,
+          },
     });
   } catch (e) {
     // Conflito e erro "amigável" viram mensagem que a IA repassa ao cliente (não é 500).
     if (e instanceof services.BookingConflictError) {
-      return NextResponse.json({ ok: false, reason: "conflito", message: "Esse brinquedo já está reservado nesse dia. Quer ver outra data ou outro brinquedo?" }, { status: 409 });
+      return NextResponse.json({ ok: false, reason: "conflito", message: "Esse brinquedo já está reservado nesse horário. Quer ver outro horário, data ou brinquedo?" }, { status: 409 });
     }
     if (e instanceof services.BookingAgentError) {
       return NextResponse.json({ ok: false, reason: "dados", message: e.message }, { status: 422 });

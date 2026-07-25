@@ -4,6 +4,7 @@ import { createBookingReminders, cancelBookingReminders } from "./reminder-servi
 import { pushNotification } from "./notification-service";
 import { APP_TZ, parseLocalDateTime } from "../time";
 import { quoteWithMinimum } from "../calculations";
+import { markConversationScheduled } from "./conversation-service";
 
 const SP_DATETIME = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short", timeStyle: "short" });
 
@@ -82,6 +83,25 @@ async function findConflicts(
   return [...new Set(rows.map((r) => r.toyId))];
 }
 
+function sameToySet(current: string[], wanted: string[]) {
+  if (current.length !== wanted.length) return false;
+  const a = [...current].sort();
+  const b = [...wanted].sort();
+  return a.every((id, index) => id === b[index]);
+}
+
+function agentBookingNote(
+  input: AgentBookingInput,
+  result: { toys: string[]; total: number }
+) {
+  const local = [input.address, input.neighborhood].filter(Boolean).join(", ");
+  return (
+    `Reserva fechada: ${result.toys.join(", ")} — ${input.date} das ${input.setupTime} às ${input.pickupTime}` +
+    (local ? ` em ${local}` : "") +
+    `. Total R$ ${result.total}. Sinal a combinar.`
+  );
+}
+
 export const bookingService = {
   list: (tenantId: string) =>
     withTenant(tenantId, (tx) =>
@@ -149,8 +169,53 @@ export const bookingService = {
       }
       const toyIds = chosen.map((c) => c.id);
 
-      // Rede de segurança: serializa + rejeita conflito (mesma regra do painel).
+      // Rede de segurança: serializa chamadas dos mesmos brinquedos. Depois do
+      // lock, um retry consegue enxergar a reserva que a primeira chamada criou.
       await lockToys(tx, toyIds);
+      const replayCandidates = await tx.booking.findMany({
+        where: {
+          leadSource: "WHATSAPP",
+          status: { in: ["CONFIRMED", "IN_DELIVERY", "MOUNTED"] },
+          setupTime: setup,
+          pickupTime: pickup,
+          customer: { phone: input.phone },
+        },
+        include: { customer: true, items: { include: { toy: true } } },
+      });
+      const replay = replayCandidates.find((booking) =>
+        sameToySet(booking.items.map((item) => item.toyId), toyIds)
+      );
+      if (replay) {
+        const result = {
+          bookingId: replay.id,
+          total: Number(replay.total),
+          toys: replay.items.map((item) => item.toy.name),
+          setupISO: setup.toISOString(),
+          pickupISO: pickup.toISOString(),
+          customerName: replay.customer.name,
+          alreadyExists: true,
+          replayed: true,
+        };
+        await markConversationScheduled(tx, tenantId, {
+          phone: input.phone,
+          customerId: replay.customerId,
+          note: agentBookingNote(input, result),
+          repairOnly: true,
+        });
+        // Repara apenas leads que já existiam quando essa reserva foi criada;
+        // um novo interesse posterior do mesmo telefone não pode ser fechado.
+        await tx.lead.updateMany({
+          where: {
+            phone: input.phone,
+            status: { in: ["NEW", "CONTACTED", "QUOTED"] },
+            createdAt: { lte: replay.createdAt },
+          },
+          data: { status: "WON", bookingId: replay.id },
+        });
+        return result;
+      }
+
+      // Não é repetição: qualquer sobreposição continua sendo conflito real.
       const conflicts = await findConflicts(tx, toyIds, setup, pickup);
       if (conflicts.length) throw new BookingConflictError(conflicts);
 
@@ -189,14 +254,29 @@ export const bookingService = {
         bookingId: booking.id,
       });
 
-      return {
+      const result = {
         bookingId: booking.id,
         total,
         toys: chosen.map((c) => c.name),
         setupISO: setup.toISOString(),
         pickupISO: pickup.toISOString(),
         customerName: customer.name,
+        alreadyExists: false,
+        replayed: false,
       };
+      await markConversationScheduled(tx, tenantId, {
+        phone: input.phone,
+        customerId: customer.id,
+        note: agentBookingNote(input, result),
+      });
+      await tx.lead.updateMany({
+        where: {
+          phone: input.phone,
+          status: { in: ["NEW", "CONTACTED", "QUOTED"] },
+        },
+        data: { status: "WON", bookingId: booking.id },
+      });
+      return result;
     }),
 
   create: (tenantId: string, input: BookingInput) =>

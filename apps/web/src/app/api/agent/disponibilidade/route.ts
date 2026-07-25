@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services, schemas, ZodError } from "@diny/core";
+import { parseLocalDateTime, services, schemas, ZodError } from "@diny/core";
 
 /**
  * Ferramenta pro agente de IA (que roda no n8n): "esse brinquedo/categoria está livre
@@ -26,7 +26,14 @@ export async function POST(req: Request) {
   }
 
   const dayStart = input.date;
-  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+  const date = dayStart.toISOString().slice(0, 10);
+  const exactInterval = Boolean(input.setupTime && input.pickupTime);
+  const rangeStart = exactInterval
+    ? parseLocalDateTime(`${date}T${input.setupTime}`)
+    : dayStart;
+  const rangeEnd = exactInterval
+    ? parseLocalDateTime(`${date}T${input.pickupTime}`)
+    : new Date(dayStart.getTime() + 86_400_000);
 
   const allToys = await services.toyService.list(tenant.id);
   const term = input.toyName?.toLowerCase();
@@ -40,12 +47,15 @@ export async function POST(req: Request) {
   });
 
   const conflicts = candidates.length
-    ? await services.bookingService.checkAvailability(tenant.id, candidates.map((t) => t.id), dayStart, dayEnd)
+    ? await services.bookingService.checkAvailability(tenant.id, candidates.map((t) => t.id), rangeStart, rangeEnd)
     : [];
   const conflictSet = new Set(conflicts);
 
   return NextResponse.json({
-    date: dayStart.toISOString().slice(0, 10),
+    date,
+    scope: exactInterval ? "interval" : "day",
+    setupTime: input.setupTime ?? null,
+    pickupTime: input.pickupTime ?? null,
     toys: candidates.map((t) => ({
       name: t.name,
       category: t.category,
