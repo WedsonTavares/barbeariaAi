@@ -116,6 +116,16 @@ export const conversationService = {
       return !c.tags.some((t) => BOT_SILENCING_TAGS.includes(t));
     }),
 
+  /** Status do contato pro filtro inicial do n8n: se o bot pode falar + as tags. */
+  status: (tenantId: string, phone: string) =>
+    withTenant(tenantId, async (tx) => {
+      const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      const tags = c?.tags ?? [];
+      const botPaused = c?.botPaused ?? false;
+      const silenced = botPaused || tags.some((t) => BOT_SILENCING_TAGS.includes(t));
+      return { canReply: !silenced, botPaused, tags, silencedBy: BOT_SILENCING_TAGS };
+    }),
+
   /** Histórico recente pro contexto do bot (não zera não-lidas — quem lê é o atendente). */
   history: (tenantId: string, phone: string, limit = 20) =>
     withTenant(tenantId, async (tx) => {
