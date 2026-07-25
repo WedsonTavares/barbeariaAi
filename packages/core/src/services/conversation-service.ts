@@ -162,6 +162,20 @@ export const conversationService = {
       return { canReply: !silenced, botPaused, tags, silencedBy: BOT_SILENCING_TAGS };
     }),
 
+  /**
+   * A IA grava o resumo do atendimento (tool "notas") pra equipe ter o contexto
+   * sem ler a conversa toda. Guarda o resumo mais recente por telefone.
+   */
+  setNote: (tenantId: string, phone: string, note: string) =>
+    withTenant(tenantId, async (tx) => {
+      const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      if (!c) return null;
+      return tx.conversation.update({
+        where: { id: c.id },
+        data: { notes: note.slice(0, 2000), notesAt: new Date() },
+      });
+    }),
+
   /** Quadro do funil: as conversas agrupadas por etapa (colunas do Kanban). */
   board: (tenantId: string) =>
     withTenant(tenantId, async (tx) => {
@@ -170,7 +184,7 @@ export const conversationService = {
         take: 300,
         select: {
           id: true, phone: true, contactName: true, tags: true,
-          botPaused: true, unread: true, lastMessageAt: true, stage: true,
+          botPaused: true, unread: true, lastMessageAt: true, stage: true, notes: true,
         },
       });
       const byStage = Object.fromEntries(

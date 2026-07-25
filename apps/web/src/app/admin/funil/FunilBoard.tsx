@@ -11,6 +11,7 @@ export type Card = {
   botPaused: boolean;
   unread: number;
   lastMessageAt: string;
+  notes?: string | null;
 };
 export type Board = Record<string, Card[]>;
 
@@ -135,6 +136,11 @@ export function FunilBoard({ initial }: { initial: Board }) {
                       </div>
                     ) : null;
                   })()}
+                  {c.notes && (
+                    <p className="mt-2 line-clamp-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] text-amber-900" title={c.notes}>
+                      📝 {c.notes}
+                    </p>
+                  )}
                   {c.botPaused && (
                     <div className="mt-2 text-[10px] font-bold text-amber-700">IA pausada</div>
                   )}

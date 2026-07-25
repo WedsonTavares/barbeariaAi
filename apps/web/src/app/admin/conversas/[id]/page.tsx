@@ -49,6 +49,16 @@ export default async function ConversaPage({ params }: { params: Promise<{ id: s
         <button className="rounded-full bg-[var(--color-surface)] px-3 py-1 text-xs font-semibold hover:bg-black/10">Salvar</button>
       </form>
 
+      {/* Resumo do atendimento escrito pela IA (tool "notas") */}
+      {convo.notes && (
+        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+            📝 Resumo da IA{convo.notesAt ? ` · ${fmtDateTime(convo.notesAt)}` : ""}
+          </div>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{convo.notes}</p>
+        </div>
+      )}
+
       {/* Mensagens */}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto py-4">
         {convo.messages.map((m) => (

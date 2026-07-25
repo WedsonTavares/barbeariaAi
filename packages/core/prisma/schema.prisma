@@ -415,6 +415,8 @@ model Conversation {
   tags          String[] @default([]) // desligar-ia, atendimento-humano, cliente-vip, livres
   botPaused     Boolean  @default(false) // atendente assumiu → bot não responde
   stage         ConversationStage @default(NOVO_LEAD) // coluna no funil (/admin/funil)
+  notes         String?  // resumo do atendimento escrito pela IA (tool "notas")
+  notesAt       DateTime?
   lastMessageAt DateTime @default(now())
   unread        Int      @default(0)
   createdAt     DateTime @default(now())
