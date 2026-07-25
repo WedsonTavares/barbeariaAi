@@ -3,9 +3,11 @@ import { resolveTenant } from "@/lib/tenant";
 import { services, schemas, ZodError } from "@diny/core";
 
 /**
- * Ferramenta pro agente de IA (n8n): escala pra atendimento humano. Cria uma
- * notificação pra equipe assumir a conversa no WhatsApp. Tenant pelo host.
- * Protegido por AGENT_API_SECRET. (Pausar o bot é feito no n8n, via flag no Redis.)
+ * Ferramenta pro agente de IA (n8n): escala pra atendimento humano. Marca a
+ * conversa com a tag "atendimento-humano" (pausa o bot) e notifica a equipe.
+ * O n8n consulta essa tag a cada execução (buscar_tags → /api/agent/status),
+ * então a próxima mensagem do cliente já não passa mais pela IA. Tenant pelo
+ * host. Protegido por AGENT_API_SECRET.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
@@ -24,6 +26,7 @@ export async function POST(req: Request) {
     throw e;
   }
 
+  await services.conversationService.takeOverByPhone(tenant.id, input.phone);
   await services.notificationService.humanRequested(tenant.id, input.phone, input.name, input.reason);
   return NextResponse.json({ ok: true, message: "Um atendente humano foi avisado e vai continuar por aqui em breve." });
 }
