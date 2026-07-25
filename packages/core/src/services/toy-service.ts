@@ -22,4 +22,7 @@ export const toyService = {
     ),
   setStatus: (tenantId: string, id: string, status: ToyStatus) =>
     withTenant(tenantId, (tx) => tx.toy.update({ where: { id }, data: { status } })),
+  /** Foto do brinquedo (URL pública do Supabase Storage). */
+  setImage: (tenantId: string, id: string, imageUrl: string) =>
+    withTenant(tenantId, (tx) => tx.toy.update({ where: { id }, data: { imageUrl } })),
 };
