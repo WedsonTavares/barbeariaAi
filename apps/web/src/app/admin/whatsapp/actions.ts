@@ -1,22 +1,26 @@
 "use server";
-import { requireRole } from "@diny/core";
+import { requireRole, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
-import { getQrCode, getConnectionState, logoutInstance } from "@/lib/evolution";
+import { getQrCode, getConnectionState, logoutInstance, ensureInstance } from "@/lib/evolution";
+
+/** Instância do Evolution DESTE tenant (nunca uma global — isolamento entre empresas). */
+async function tenantInstance() {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  return services.tenantService.evolutionInstance(tenant.id, tenant.slug);
+}
 
 export async function fetchQrAction() {
-  const { ctx } = await requireTenant();
-  requireRole(ctx, ["OWNER", "ADMIN"]);
-  return getQrCode();
+  const instance = await tenantInstance();
+  // tenant novo: cria a instância dele antes de pedir o QR
+  await ensureInstance(instance);
+  return getQrCode(instance);
 }
 
 export async function fetchStatusAction() {
-  const { ctx } = await requireTenant();
-  requireRole(ctx, ["OWNER", "ADMIN"]);
-  return getConnectionState();
+  return getConnectionState(await tenantInstance());
 }
 
 export async function disconnectAction() {
-  const { ctx } = await requireTenant();
-  requireRole(ctx, ["OWNER", "ADMIN"]);
-  return logoutInstance();
+  return logoutInstance(await tenantInstance());
 }

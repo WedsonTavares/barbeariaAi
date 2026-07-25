@@ -50,7 +50,8 @@ export async function POST(req: Request) {
         // Fallback: bot nativo (sem n8n configurado).
         const reply = await services.botService.generateReply(tenantId, phone);
         if (reply?.trim()) {
-          const sent = await sendText(phone, reply.trim());
+          const instance = await services.tenantService.evolutionInstance(tenantId, tenant.slug);
+          const sent = await sendText(instance, phone, reply.trim());
           if (sent) await services.conversationService.recordOutbound(tenantId, phone, reply.trim(), "BOT");
         }
       }

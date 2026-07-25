@@ -3,11 +3,14 @@
  * (evo.dinyfestas.com.br). Toda chamada leva DOIS segredos: a apikey do Evolution e o
  * x-diny-proxy (exigido pelo nginx). Nenhum deles vai pro navegador — só é usado em
  * server actions / server components.
+ *
+ * MULTI-TENANT: a `instance` é SEMPRE por tenant (vem de TenantSettings.evolutionInstance,
+ * com fallback pro slug). Nunca use uma instância global — é o que impede uma empresa
+ * de ler ou desconectar o WhatsApp da outra.
  */
 const API_URL = process.env.EVOLUTION_API_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 const PROXY = process.env.EVOLUTION_PROXY_SECRET;
-const INSTANCE = process.env.EVOLUTION_INSTANCE || "diny-festas";
 
 export type WhatsappState = "open" | "connecting" | "close" | "unknown";
 
@@ -20,10 +23,10 @@ function headers(): Record<string, string> {
 }
 
 /** Estado da conexão: open = conectado, connecting = aguardando QR, close = desconectado. */
-export async function getConnectionState(): Promise<WhatsappState> {
-  if (!evolutionConfigured()) return "unknown";
+export async function getConnectionState(instance: string): Promise<WhatsappState> {
+  if (!evolutionConfigured() || !instance) return "unknown";
   try {
-    const res = await fetch(`${API_URL}/instance/connectionState/${INSTANCE}`, { headers: headers(), cache: "no-store" });
+    const res = await fetch(`${API_URL}/instance/connectionState/${instance}`, { headers: headers(), cache: "no-store" });
     if (!res.ok) return "unknown";
     const j = await res.json();
     return (j?.instance?.state as WhatsappState) ?? "unknown";
@@ -32,11 +35,35 @@ export async function getConnectionState(): Promise<WhatsappState> {
   }
 }
 
-/** Dispara a conexão e devolve o QR (base64) e/ou código de pareamento. */
-export async function getQrCode(): Promise<{ base64?: string; pairingCode?: string; state: WhatsappState }> {
-  if (!evolutionConfigured()) return { state: "unknown" };
+/**
+ * Cria a instância no Evolution se ainda não existir (tenant novo conectando pela
+ * primeira vez). Idempotente: se já existe, o Evolution devolve erro e seguimos.
+ */
+export async function ensureInstance(instance: string, webhookUrl?: string): Promise<void> {
+  if (!evolutionConfigured() || !instance) return;
   try {
-    const res = await fetch(`${API_URL}/instance/connect/${INSTANCE}`, { headers: headers(), cache: "no-store" });
+    const state = await getConnectionState(instance);
+    if (state !== "unknown") return; // já existe
+    await fetch(`${API_URL}/instance/create`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        instanceName: instance,
+        integration: "WHATSAPP-BAILEYS",
+        qrcode: true,
+        ...(webhookUrl ? { webhook: { url: webhookUrl, enabled: true, events: ["MESSAGES_UPSERT"] } } : {}),
+      }),
+    });
+  } catch {
+    // se falhar, o connect abaixo ainda tenta — não travamos a tela do usuário
+  }
+}
+
+/** Dispara a conexão e devolve o QR (base64) e/ou código de pareamento. */
+export async function getQrCode(instance: string): Promise<{ base64?: string; pairingCode?: string; state: WhatsappState }> {
+  if (!evolutionConfigured() || !instance) return { state: "unknown" };
+  try {
+    const res = await fetch(`${API_URL}/instance/connect/${instance}`, { headers: headers(), cache: "no-store" });
     const j = await res.json().catch(() => ({}));
     return {
       base64: j?.base64 ?? j?.qrcode?.base64,
@@ -49,10 +76,10 @@ export async function getQrCode(): Promise<{ base64?: string; pairingCode?: stri
 }
 
 /** Envia uma mensagem de texto pra um número via WhatsApp (Evolution). */
-export async function sendText(phone: string, text: string): Promise<boolean> {
-  if (!evolutionConfigured()) return false;
+export async function sendText(instance: string, phone: string, text: string): Promise<boolean> {
+  if (!evolutionConfigured() || !instance) return false;
   try {
-    const res = await fetch(`${API_URL}/message/sendText/${INSTANCE}`, {
+    const res = await fetch(`${API_URL}/message/sendText/${instance}`, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({ number: phone, text }),
@@ -64,10 +91,10 @@ export async function sendText(phone: string, text: string): Promise<boolean> {
 }
 
 /** Desconecta o WhatsApp (logout) — a IA para de receber/responder até reconectar. */
-export async function logoutInstance(): Promise<boolean> {
-  if (!evolutionConfigured()) return false;
+export async function logoutInstance(instance: string): Promise<boolean> {
+  if (!evolutionConfigured() || !instance) return false;
   try {
-    const res = await fetch(`${API_URL}/instance/logout/${INSTANCE}`, { method: "DELETE", headers: headers() });
+    const res = await fetch(`${API_URL}/instance/logout/${instance}`, { method: "DELETE", headers: headers() });
     return res.ok;
   } catch {
     return false;

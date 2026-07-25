@@ -160,6 +160,9 @@ model TenantSettings {
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   whatsappMain   String?
   whatsappAlerts String?
+  // Nome da instância do Evolution API deste tenant (multi-tenant: cada empresa
+  // tem seu próprio número/instância). Se vazio, cai pro slug do tenant.
+  evolutionInstance String?
   email          String?
   city           String?
   baseAddress    String?

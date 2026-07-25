@@ -13,7 +13,8 @@ export async function replyAction(formData: FormData) {
   const text = String(formData.get("text") || "").trim();
   if (!text || !phone) return;
 
-  const sent = await sendText(phone, text);
+  const instance = await services.tenantService.evolutionInstance(tenant.id, tenant.slug);
+  const sent = await sendText(instance, phone, text);
   if (sent) await services.conversationService.recordOutbound(tenant.id, phone, text, "AGENT");
   revalidatePath(`/admin/conversas/${id}`);
 }

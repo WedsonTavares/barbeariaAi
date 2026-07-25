@@ -26,7 +26,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ skipped: "bot pausado / atendimento humano" });
   }
 
-  const sent = await sendText(phone, text);
+  const instance = await services.tenantService.evolutionInstance(tenant.id, tenant.slug);
+  const sent = await sendText(instance, phone, text);
   if (sent) await services.conversationService.recordOutbound(tenant.id, phone, text, "BOT");
   return NextResponse.json({ ok: sent });
 }

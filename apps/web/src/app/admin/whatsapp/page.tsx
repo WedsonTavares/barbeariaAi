@@ -1,13 +1,15 @@
 import { requireTenant } from "@/lib/tenant";
+import { services } from "@diny/core";
 import { getConnectionState, evolutionConfigured } from "@/lib/evolution";
 import { WhatsappConnect } from "./WhatsappConnect";
 
 export const dynamic = "force-dynamic";
 
 export default async function WhatsappPage() {
-  await requireTenant();
+  const { tenant } = await requireTenant();
   const configured = evolutionConfigured();
-  const state = configured ? await getConnectionState() : "unknown";
+  const instance = await services.tenantService.evolutionInstance(tenant.id, tenant.slug);
+  const state = configured ? await getConnectionState(instance) : "unknown";
 
   return (
     <div className="max-w-2xl">

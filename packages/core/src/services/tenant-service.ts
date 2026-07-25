@@ -6,6 +6,17 @@ export const tenantService = {
   get: (tenantId: string) => prisma.tenant.findUnique({ where: { id: tenantId } }),
   getSettings: (tenantId: string) =>
     withTenant(tenantId, (tx) => tx.tenantSettings.findUnique({ where: { tenantId } })),
+  /**
+   * Instância do Evolution (WhatsApp) deste tenant. Cada empresa tem a sua —
+   * é o que impede uma empresa de ver/desconectar o WhatsApp da outra.
+   * Fallback: o slug do tenant (assim um tenant novo já nasce isolado).
+   */
+  evolutionInstance: async (tenantId: string, slug: string) => {
+    const s = await withTenant(tenantId, (tx) =>
+      tx.tenantSettings.findUnique({ where: { tenantId }, select: { evolutionInstance: true } })
+    );
+    return s?.evolutionInstance?.trim() || slug;
+  },
   updateSettings: (tenantId: string, data: Record<string, unknown>) =>
     withTenant(tenantId, (tx) =>
       tx.tenantSettings.upsert({
