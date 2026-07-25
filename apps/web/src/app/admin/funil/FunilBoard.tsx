@@ -2,6 +2,7 @@
 import { useState, useTransition, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, ChevronLeft, ChevronRight } from "lucide-react";
+import { initials } from "@/lib/stage";
 import { moveCardAction } from "./actions";
 import { CardDrawer } from "./CardDrawer";
 
@@ -32,13 +33,6 @@ const fmtWhen = (iso: string) => {
   const d = new Date(iso);
   return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} ${d.getHours()}`;
 };
-function initials(name: string | null, phone: string) {
-  const base = (name ?? "").trim();
-  if (!base) return phone.slice(-2);
-  const p = base.split(/\s+/);
-  return ((p[0]?.[0] ?? "") + (p[1]?.[0] ?? "")).toUpperCase() || base.slice(0, 2).toUpperCase();
-}
-
 export function FunilBoard({ initial }: { initial: Board }) {
   const [board, setBoard] = useState<Board>(initial);
   const [dragging, setDragging] = useState<string | null>(null);
