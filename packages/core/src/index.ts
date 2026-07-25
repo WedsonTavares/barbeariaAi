@@ -3,6 +3,7 @@ export type {
   ExpenseCategory,
   ReminderType,
   NotificationType,
+  ConversationStage,
 } from "@prisma/client";
 export { prisma } from "./db/prisma";
 export { withTenant, platformDb, type Tx } from "./db/withTenant";

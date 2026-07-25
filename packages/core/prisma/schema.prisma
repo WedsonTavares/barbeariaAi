@@ -395,6 +395,15 @@ enum MessageSender {
   AGENT   // atendente humano (equipe)
 }
 
+/** Etapa da conversa no funil (colunas do quadro em /admin/funil). */
+enum ConversationStage {
+  NOVO_LEAD      // chegou agora, ainda não foi atendido
+  IA_ATENDENDO   // a Dinha está conduzindo
+  SUPORTE_HUMANO // equipe assumiu (bot pausado)
+  AGENDADO       // festa fechada
+  POS_FESTA      // acompanhamento pós-evento
+}
+
 /** Uma conversa de WhatsApp por telefone (inbox nativo do SaaS). Isolada por tenant (RLS). */
 model Conversation {
   id            String   @id @default(uuid())
@@ -405,6 +414,7 @@ model Conversation {
   customerId    String?
   tags          String[] @default([]) // desligar-ia, atendimento-humano, cliente-vip, livres
   botPaused     Boolean  @default(false) // atendente assumiu → bot não responde
+  stage         ConversationStage @default(NOVO_LEAD) // coluna no funil (/admin/funil)
   lastMessageAt DateTime @default(now())
   unread        Int      @default(0)
   createdAt     DateTime @default(now())
