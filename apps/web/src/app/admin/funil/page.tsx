@@ -21,9 +21,6 @@ export default async function FunilPage() {
     <div>
       <div>
         <h1 className="text-2xl font-extrabold">Funil</h1>
-        <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Arraste os cards entre as colunas — as tags e a IA acompanham automaticamente.
-        </p>
       </div>
 
       {total === 0 ? (
