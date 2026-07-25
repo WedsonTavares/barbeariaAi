@@ -100,7 +100,7 @@ export function CardDrawer({
         {loading || !d ? (
           <div className="grid flex-1 place-items-center text-[var(--color-muted)]">Carregando…</div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[220px_1fr_260px]">
+          <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[220px_1fr_340px]">
             {/* ESQUERDA — contato */}
             <aside className={`min-h-0 flex-1 overflow-y-auto border-black/5 bg-white p-4 md:flex-none md:border-r ${tab === "contato" ? "block" : "hidden"} md:block`}>
               <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--color-muted)]">Contato</h3>
