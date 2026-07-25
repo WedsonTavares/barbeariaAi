@@ -2,12 +2,30 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Search, Send, Plus, Check, Pencil, Bot, UserRound, MessageSquare, X, ChevronLeft,
+  Search,
+  Send,
+  Plus,
+  Check,
+  Pencil,
+  Bot,
+  UserRound,
+  MessageSquare,
+  X,
+  ChevronLeft,
 } from "lucide-react";
 import { stageUi, initials } from "@/lib/stage";
-import { TAG_CATALOG, STAGE_ONLY_TAGS, SILENCING_TAGS, normalizeTag } from "@/lib/tags";
 import {
-  loadConversationAction, replyAction, toggleTagAction, toggleBotAction, updateContactAction,
+  TAG_CATALOG,
+  STAGE_ONLY_TAGS,
+  SILENCING_TAGS,
+  normalizeTag,
+} from "@/lib/tags";
+import {
+  loadConversationAction,
+  replyAction,
+  toggleTagAction,
+  toggleBotAction,
+  updateContactAction,
 } from "./actions";
 
 export type ConversaRow = {
@@ -29,7 +47,11 @@ const BUBBLE: Record<string, string> = {
   BOT: "self-end bg-[#dcf8c6]",
   AGENT: "self-end bg-[#d1e7ff]",
 };
-const WHO: Record<string, string> = { CONTACT: "", BOT: "🤖 IA", AGENT: "🧑 Equipe" };
+const WHO: Record<string, string> = {
+  CONTACT: "",
+  BOT: "🤖 IA",
+  AGENT: "🧑 Equipe",
+};
 
 function timeAgo(iso: string) {
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -42,7 +64,10 @@ function timeAgo(iso: string) {
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -52,10 +77,16 @@ function fmt(iso: string) {
  * (a lista é a "home"; escolher um contato abre a conversa).
  */
 export function ConversasWorkspace({
-  items, initialId,
-}: { items: ConversaRow[]; initialId?: string }) {
+  items,
+  initialId,
+}: {
+  items: ConversaRow[];
+  initialId?: string;
+}) {
   const router = useRouter();
-  const [selected, setSelected] = useState<string | null>(initialId ?? items[0]?.id ?? null);
+  const [selected, setSelected] = useState<string | null>(
+    initialId ?? items[0]?.id ?? null
+  );
   const [d, setD] = useState<Detail>(null);
   const [loading, setLoading] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>("todos");
@@ -93,7 +124,10 @@ export function ConversasWorkspace({
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
   }, [d?.messages.length, d?.id]);
 
-  const naoLidos = useMemo(() => items.reduce((n, c) => n + (c.unread > 0 ? 1 : 0), 0), [items]);
+  const naoLidos = useMemo(
+    () => items.reduce((n, c) => n + (c.unread > 0 ? 1 : 0), 0),
+    [items]
+  );
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -131,11 +165,13 @@ export function ConversasWorkspace({
     <div className="flex h-[calc(100dvh-9rem)] min-h-[30rem] flex-col md:h-[calc(100dvh-6.5rem)]">
       {/* Abas: só abaixo do md, onde as 3 colunas não cabem lado a lado */}
       <div className="mb-2 flex items-center gap-1 md:hidden">
-        {([
-          { key: "lista", label: "Conversas", badge: naoLidos },
-          { key: "conversa", label: "Conversa" },
-          { key: "detalhes", label: "Detalhes" },
-        ] as const).map((t) => (
+        {(
+          [
+            { key: "lista", label: "Conversas", badge: naoLidos },
+            { key: "conversa", label: "Conversa" },
+            { key: "detalhes", label: "Detalhes" },
+          ] as const
+        ).map((t) => (
           <button
             key={t.key}
             onClick={() => setPane(t.key)}
@@ -148,7 +184,9 @@ export function ConversasWorkspace({
           >
             {t.label}
             {"badge" in t && t.badge ? (
-              <span className="ml-1 rounded-full bg-[#25D366] px-1.5 text-[10px] text-white">{t.badge}</span>
+              <span className="ml-1 rounded-full bg-[#25D366] px-1.5 text-[10px] text-white">
+                {t.badge}
+              </span>
             ) : null}
           </button>
         ))}
@@ -156,11 +194,15 @@ export function ConversasWorkspace({
 
       <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-black/5 bg-white md:grid-cols-[220px_minmax(0,1fr)_minmax(260px,320px)] xl:grid-cols-[240px_minmax(0,1fr)_minmax(260px,320px)]">
         {/* ─────────── ESQUERDA: lista ─────────── */}
-        <aside className={`flex min-h-0 flex-col border-black/5 md:flex md:border-r ${pane === "lista" ? "flex" : "hidden"}`}>
+        <aside
+          className={`flex min-h-0 flex-col border-black/5 md:flex md:border-r ${pane === "lista" ? "flex" : "hidden"}`}
+        >
           <div className="border-b border-black/5 px-3 py-3">
             <div className="flex items-baseline justify-between">
               <h1 className="text-base font-extrabold">Conversas</h1>
-              <span className="text-xs text-[var(--color-muted)]">{items.length}</span>
+              <span className="text-xs text-[var(--color-muted)]">
+                {items.length}
+              </span>
             </div>
 
             <div className="relative mt-2">
@@ -174,11 +216,13 @@ export function ConversasWorkspace({
             </div>
 
             <div className="mt-2 flex items-center gap-0.5">
-              {([
-                { key: "todos", label: "Todos" },
-                { key: "nao-lidos", label: "Não lidos", n: naoLidos },
-                { key: "pausadas", label: "IA pausada" },
-              ] as const).map((f) => (
+              {(
+                [
+                  { key: "todos", label: "Todos" },
+                  { key: "nao-lidos", label: "Não lidos", n: naoLidos },
+                  { key: "pausadas", label: "IA pausada" },
+                ] as const
+              ).map((f) => (
                 <button
                   key={f.key}
                   onClick={() => setFiltro(f.key)}
@@ -205,31 +249,55 @@ export function ConversasWorkspace({
                   key={c.id}
                   onClick={() => abrir(c.id)}
                   className={`flex w-full items-start gap-2.5 border-b border-black/5 px-3 py-2.5 text-left transition ${
-                    active ? "bg-[var(--color-surface)]" : "hover:bg-black/[0.02]"
+                    active
+                      ? "bg-[var(--color-surface)]"
+                      : "hover:bg-black/[0.02]"
                   }`}
                 >
-                  <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-[11px] font-bold text-[var(--color-muted)]" aria-hidden>
+                  <span
+                    className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-[11px] font-bold text-[var(--color-muted)]"
+                    aria-hidden
+                  >
                     {initials(c.contactName, c.phone)}
                   </span>
 
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm ${c.unread > 0 ? "font-extrabold" : "font-semibold"}`}>
+                      <span
+                        className={`min-w-0 flex-1 truncate text-sm ${c.unread > 0 ? "font-extrabold" : "font-semibold"}`}
+                      >
                         {c.contactName || c.phone}
                       </span>
-                      <span className="shrink-0 text-[10px] text-[var(--color-muted)]">{timeAgo(c.lastMessageAt)}</span>
+                      <span className="shrink-0 text-[10px] text-[var(--color-muted)]">
+                        {timeAgo(c.lastMessageAt)}
+                      </span>
                     </span>
                     <span className="mt-0.5 flex flex-wrap items-center gap-1">
-                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${s.chip}`}>{s.label}</span>
-                      {c.botPaused && <span className="text-[9px] font-bold text-rose-600">⏸ IA</span>}
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${s.chip}`}
+                      >
+                        {s.label}
+                      </span>
+                      {c.botPaused && (
+                        <span className="text-[9px] font-bold text-rose-600">
+                          ⏸ IA
+                        </span>
+                      )}
                       {tags.slice(0, 2).map((t) => (
-                        <span key={t} className="rounded border border-black/10 px-1 py-0.5 text-[9px] font-medium text-[var(--color-muted)]">{t}</span>
+                        <span
+                          key={t}
+                          className="rounded border border-black/10 px-1 py-0.5 text-[9px] font-medium text-[var(--color-muted)]"
+                        >
+                          {t}
+                        </span>
                       ))}
                     </span>
                   </span>
 
                   {c.unread > 0 && (
-                    <span className="mt-1 shrink-0 rounded-full bg-[#25D366] px-1.5 py-0.5 text-[10px] font-bold text-white">{c.unread}</span>
+                    <span className="mt-1 shrink-0 rounded-full bg-[#25D366] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {c.unread}
+                    </span>
                   )}
                 </button>
               );
@@ -245,51 +313,92 @@ export function ConversasWorkspace({
         </aside>
 
         {/* ─────────── MEIO: conversa ─────────── */}
-        <section className={`min-h-0 flex-col bg-[var(--color-surface)] md:flex ${pane === "conversa" ? "flex" : "hidden"}`}>
+        <section
+          className={`min-h-0 flex-col bg-[var(--color-surface)] md:flex ${pane === "conversa" ? "flex" : "hidden"}`}
+        >
           {!d ? (
             <div className="grid flex-1 place-items-center px-4 text-center text-sm text-[var(--color-muted)]">
-              {loading ? "Carregando…" : <><MessageSquare className="mx-auto mb-2 size-8 opacity-40" />Escolha uma conversa à esquerda.</>}
+              {loading ? (
+                "Carregando…"
+              ) : (
+                <>
+                  <MessageSquare className="mx-auto mb-2 size-8 opacity-40" />
+                  Escolha uma conversa à esquerda.
+                </>
+              )}
             </div>
           ) : (
             <>
               <header className="flex items-center gap-2 border-b border-black/5 bg-white px-3 py-2.5">
-                <button onClick={() => setPane("lista")} aria-label="Voltar" className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-[var(--color-surface)] md:hidden">
+                <button
+                  onClick={() => setPane("lista")}
+                  aria-label="Voltar"
+                  className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-[var(--color-surface)] md:hidden"
+                >
                   <ChevronLeft className="size-5" />
                 </button>
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-[11px] font-bold text-[var(--color-muted)]" aria-hidden>
+                <span
+                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-[11px] font-bold text-[var(--color-muted)]"
+                  aria-hidden
+                >
                   {initials(d.contactName, d.phone)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-extrabold">{d.contactName || d.phone}</div>
+                  <div className="truncate text-sm font-extrabold">
+                    {d.contactName || d.phone}
+                  </div>
                   <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-muted)]">
-                    <span className={`size-1.5 rounded-full ${d.botPaused ? "bg-rose-500" : "bg-emerald-500"}`} />
-                    {d.botPaused ? "Você no comando" : "IA respondendo"}
+                    <span
+                      className={`size-1.5 rounded-full ${d.botPaused ? "bg-rose-500" : "bg-emerald-500"}`}
+                    />
+                    {d.botPaused ? "Você no comando" : "IA atendendo"}
                   </div>
                 </div>
                 <AssumirButton
                   paused={d.botPaused}
                   pending={pending}
-                  onClick={() => start(async () => {
-                    await toggleBotAction(d.id, !d.botPaused);
-                    await refresh(d.id);
-                    router.refresh();
-                  })}
+                  onClick={() =>
+                    start(async () => {
+                      await toggleBotAction(d.id, !d.botPaused);
+                      await refresh(d.id);
+                      router.refresh();
+                    })
+                  }
                 />
               </header>
 
-              <div ref={feedRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
+              <div
+                ref={feedRef}
+                className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4"
+              >
                 {d.messages.map((m) => (
-                  <div key={m.id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${BUBBLE[m.sender] ?? "self-start bg-white"}`}>
-                    {WHO[m.sender] && <div className="text-[10px] font-bold text-[var(--color-muted)]">{WHO[m.sender]}</div>}
+                  <div
+                    key={m.id}
+                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${BUBBLE[m.sender] ?? "self-start bg-white"}`}
+                  >
+                    {WHO[m.sender] && (
+                      <div className="text-[10px] font-bold text-[var(--color-muted)]">
+                        {WHO[m.sender]}
+                      </div>
+                    )}
                     <div className="whitespace-pre-wrap">{m.text}</div>
-                    <div className="mt-0.5 text-right text-[10px] text-[var(--color-muted)]">{fmt(m.createdAt)}</div>
+                    <div className="mt-0.5 text-right text-[10px] text-[var(--color-muted)]">
+                      {fmt(m.createdAt)}
+                    </div>
                   </div>
                 ))}
-                {d.messages.length === 0 && <p className="my-auto text-center text-[var(--color-muted)]">Sem mensagens.</p>}
+                {d.messages.length === 0 && (
+                  <p className="my-auto text-center text-[var(--color-muted)]">
+                    Sem mensagens.
+                  </p>
+                )}
               </div>
 
               <form
-                onSubmit={(e) => { e.preventDefault(); enviar(); }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  enviar();
+                }}
                 className="flex items-center gap-2 border-t border-black/5 bg-white p-3"
               >
                 <input
@@ -299,7 +408,11 @@ export function ConversasWorkspace({
                   autoComplete="off"
                   className="min-w-0 flex-1 rounded-full border border-black/10 px-4 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
                 />
-                <button disabled={pending || !reply.trim()} aria-label="Enviar" className="grid size-10 shrink-0 place-items-center rounded-full bg-[#25D366] text-white transition disabled:opacity-40">
+                <button
+                  disabled={pending || !reply.trim()}
+                  aria-label="Enviar"
+                  className="grid size-10 shrink-0 place-items-center rounded-full bg-[#25D366] text-white transition disabled:opacity-40"
+                >
                   <Send className="size-4" />
                 </button>
               </form>
@@ -308,24 +421,32 @@ export function ConversasWorkspace({
         </section>
 
         {/* ─────────── DIREITA: detalhes do contato ─────────── */}
-        <aside className={`min-h-0 flex-col overflow-y-auto border-black/5 md:flex md:border-l ${pane === "detalhes" ? "flex" : "hidden"}`}>
+        <aside
+          className={`min-h-0 flex-col overflow-y-auto border-black/5 md:flex md:border-l ${pane === "detalhes" ? "flex" : "hidden"}`}
+        >
           {d ? (
             <DetalhesContato
               d={d}
               pending={pending}
-              onSaveName={(name) => start(async () => {
-                await updateContactAction(d.id, name);
-                await refresh(d.id);
-                router.refresh();
-              })}
-              onToggleTag={(tag, on) => start(async () => {
-                await toggleTagAction(d.id, tag, on);
-                await refresh(d.id);
-                router.refresh();
-              })}
+              onSaveName={(name) =>
+                start(async () => {
+                  await updateContactAction(d.id, name);
+                  await refresh(d.id);
+                  router.refresh();
+                })
+              }
+              onToggleTag={(tag, on) =>
+                start(async () => {
+                  await toggleTagAction(d.id, tag, on);
+                  await refresh(d.id);
+                  router.refresh();
+                })
+              }
             />
           ) : (
-            <p className="p-4 text-sm text-[var(--color-muted)]">Sem contato selecionado.</p>
+            <p className="p-4 text-sm text-[var(--color-muted)]">
+              Sem contato selecionado.
+            </p>
           )}
         </aside>
       </div>
@@ -334,26 +455,49 @@ export function ConversasWorkspace({
 }
 
 /** Botão de assumir/devolver: cor e ícone mudam com o estado, rótulo curto. */
-function AssumirButton({ paused, pending, onClick }: { paused: boolean; pending: boolean; onClick: () => void }) {
+function AssumirButton({
+  paused,
+  pending,
+  onClick,
+}: {
+  paused: boolean;
+  pending: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
       disabled={pending}
-      title={paused ? "A IA volta a responder este contato" : "Pausa a IA e você assume o atendimento"}
+      title={
+        paused
+          ? "A IA volta a responder este contato"
+          : "Pausa a IA e você assume o atendimento"
+      }
       className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
         paused
           ? "bg-[var(--color-primary)] text-white hover:brightness-110"
           : "border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
       }`}
     >
-      {paused ? <><Bot className="size-3.5" /> Devolver à IA</> : <><UserRound className="size-3.5" /> Assumir</>}
+      {paused ? (
+        <>
+          <Bot className="size-3.5" /> Devolver à IA
+        </>
+      ) : (
+        <>
+          <UserRound className="size-3.5" /> Assumir
+        </>
+      )}
     </button>
   );
 }
 
 /** Coluna da direita: identificação no topo, tags, e o contexto logo abaixo. */
 function DetalhesContato({
-  d, pending, onSaveName, onToggleTag,
+  d,
+  pending,
+  onSaveName,
+  onToggleTag,
 }: {
   d: NonNullable<Detail>;
   pending: boolean;
@@ -364,13 +508,19 @@ function DetalhesContato({
   const [draft, setDraft] = useState(d.contactName ?? "");
   const s = stageUi(d.stage);
 
-  useEffect(() => { setDraft(d.contactName ?? ""); setEditing(false); }, [d.id, d.contactName]);
+  useEffect(() => {
+    setDraft(d.contactName ?? "");
+    setEditing(false);
+  }, [d.id, d.contactName]);
 
   return (
     <div className="p-4">
       {/* Dados básicos */}
       <div className="flex items-start gap-2">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-xs font-bold text-[var(--color-muted)]" aria-hidden>
+        <span
+          className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--color-surface)] text-xs font-bold text-[var(--color-muted)]"
+          aria-hidden
+        >
           {initials(d.contactName, d.phone)}
         </span>
         <div className="min-w-0 flex-1">
@@ -380,26 +530,49 @@ function DetalhesContato({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") onSaveName(draft); if (e.key === "Escape") setEditing(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onSaveName(draft);
+                  if (e.key === "Escape") setEditing(false);
+                }}
                 className="min-w-0 flex-1 rounded-lg border border-black/10 px-2 py-1 text-sm"
               />
-              <button aria-label="Salvar nome" disabled={pending} onClick={() => onSaveName(draft)} className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--color-primary)] text-white">
+              <button
+                aria-label="Salvar nome"
+                disabled={pending}
+                onClick={() => onSaveName(draft)}
+                className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--color-primary)] text-white"
+              >
                 <Check className="size-3.5" />
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
-              <span className="min-w-0 flex-1 truncate font-extrabold">{d.contactName || "Sem nome"}</span>
-              <button aria-label="Editar nome" onClick={() => setEditing(true)} className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-ink)]">
+              <span className="min-w-0 flex-1 truncate font-extrabold">
+                {d.contactName || "Sem nome"}
+              </span>
+              <button
+                aria-label="Editar nome"
+                onClick={() => setEditing(true)}
+                className="shrink-0 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+              >
                 <Pencil className="size-3.5" />
               </button>
             </div>
           )}
-          <a href={`https://wa.me/${d.phone}`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--color-primary)] hover:underline">
+          <a
+            href={`https://wa.me/${d.phone}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-semibold text-[var(--color-primary)] hover:underline"
+          >
             {d.phone}
           </a>
           <div className="mt-1">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${s.chip}`}>{s.label}</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${s.chip}`}
+            >
+              {s.label}
+            </span>
           </div>
         </div>
       </div>
@@ -408,18 +581,29 @@ function DetalhesContato({
 
       {/* Contexto da conversa */}
       <div className="mt-5 border-t border-black/5 pt-4">
-        <h3 className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-muted)]">Contexto da conversa</h3>
+        <h3 className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-muted)]">
+          Contexto da conversa
+        </h3>
 
         <div className="mt-2">
           {d.notes ? (
             <div className="rounded-xl bg-amber-50 p-3">
-              <div className="text-[10px] font-bold uppercase text-amber-700">📝 Resumo da IA</div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{d.notes}</p>
-              {d.notesAt && <div className="mt-1 text-[10px] text-amber-700">{fmt(d.notesAt)}</div>}
+              <div className="text-[10px] font-bold uppercase text-amber-700">
+                📝 Resumo da IA
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">
+                {d.notes}
+              </p>
+              {d.notesAt && (
+                <div className="mt-1 text-[10px] text-amber-700">
+                  {fmt(d.notesAt)}
+                </div>
+              )}
             </div>
           ) : (
             <p className="rounded-xl border border-dashed border-black/10 p-3 text-xs text-[var(--color-muted)]">
-              Ainda sem resumo — aparece aqui quando uma reserva, lead ou escalonamento acontecer.
+              Ainda sem resumo — aparece aqui quando uma reserva, lead ou
+              escalonamento acontecer.
             </p>
           )}
         </div>
@@ -435,7 +619,9 @@ function DetalhesContato({
           </div>
           <div className="flex justify-between">
             <dt className="text-[var(--color-muted)]">Atendimento</dt>
-            <dd className={`font-semibold ${d.botPaused ? "text-rose-600" : "text-emerald-600"}`}>
+            <dd
+              className={`font-semibold ${d.botPaused ? "text-rose-600" : "text-emerald-600"}`}
+            >
               {d.botPaused ? "Humano" : "IA"}
             </dd>
           </div>
@@ -450,8 +636,14 @@ function DetalhesContato({
  * O + abre a lista com checkbox — marcar/desmarcar grava na hora, uma tag por vez.
  */
 function TagsBox({
-  tags, pending, onToggle,
-}: { tags: string[]; pending: boolean; onToggle: (tag: string, on: boolean) => void }) {
+  tags,
+  pending,
+  onToggle,
+}: {
+  tags: string[];
+  pending: boolean;
+  onToggle: (tag: string, on: boolean) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
@@ -461,15 +653,25 @@ function TagsBox({
     const onDown = (e: MouseEvent) => {
       if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   // Catálogo + as tags soltas que já existem no contato (pra poderem ser desmarcadas).
-  const extras = tags.filter((t) => !STAGE_ONLY_TAGS.has(t) && !TAG_CATALOG.some((c) => c.tag === t));
-  const lista = [...TAG_CATALOG, ...extras.map((t) => ({ tag: t, label: t, hint: undefined }))];
+  const extras = tags.filter(
+    (t) => !STAGE_ONLY_TAGS.has(t) && !TAG_CATALOG.some((c) => c.tag === t)
+  );
+  const lista = [
+    ...TAG_CATALOG,
+    ...extras.map((t) => ({ tag: t, label: t, hint: undefined })),
+  ];
   const visiveis = tags.filter((t) => !STAGE_ONLY_TAGS.has(t));
 
   function addCustom() {
@@ -482,7 +684,9 @@ function TagsBox({
   return (
     <div ref={boxRef} className="relative mt-4">
       <div className="flex items-center gap-1">
-        <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-muted)]">Tags</span>
+        <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-muted)]">
+          Tags
+        </span>
         <button
           onClick={() => setOpen((v) => !v)}
           aria-label="Escolher tags"
@@ -499,7 +703,9 @@ function TagsBox({
             <span
               key={t}
               className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                SILENCING_TAGS.has(t) ? "bg-rose-100 text-rose-700" : "bg-[var(--color-surface)]"
+                SILENCING_TAGS.has(t)
+                  ? "bg-rose-100 text-rose-700"
+                  : "bg-[var(--color-surface)]"
               }`}
             >
               {t}
@@ -513,8 +719,14 @@ function TagsBox({
       {open && (
         <div className="absolute left-0 top-6 z-20 w-64 rounded-xl border border-black/10 bg-white p-2 shadow-xl">
           <div className="flex items-center justify-between px-1 pb-1">
-            <span className="text-[11px] font-bold text-[var(--color-muted)]">Marcar tags</span>
-            <button onClick={() => setOpen(false)} aria-label="Fechar" className="text-[var(--color-muted)] hover:text-[var(--color-ink)]">
+            <span className="text-[11px] font-bold text-[var(--color-muted)]">
+              Marcar tags
+            </span>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Fechar"
+              className="text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            >
               <X className="size-3.5" />
             </button>
           </div>
@@ -533,7 +745,11 @@ function TagsBox({
                       className="size-3.5 accent-[var(--color-primary)]"
                     />
                     <span className="min-w-0 flex-1 truncate">{label}</span>
-                    {hint && <span className="shrink-0 text-[9px] font-bold uppercase text-rose-600">{hint}</span>}
+                    {hint && (
+                      <span className="shrink-0 text-[9px] font-bold uppercase text-rose-600">
+                        {hint}
+                      </span>
+                    )}
                   </label>
                 </li>
               );
@@ -544,11 +760,20 @@ function TagsBox({
             <input
               value={custom}
               onChange={(e) => setCustom(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustom();
+                }
+              }}
               placeholder="nova tag"
               className="min-w-0 flex-1 rounded-lg border border-black/10 px-2 py-1 text-xs"
             />
-            <button onClick={addCustom} disabled={pending || !custom.trim()} className="shrink-0 rounded-lg bg-[var(--color-primary)] px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">
+            <button
+              onClick={addCustom}
+              disabled={pending || !custom.trim()}
+              className="shrink-0 rounded-lg bg-[var(--color-primary)] px-2 py-1 text-xs font-semibold text-white disabled:opacity-40"
+            >
               Criar
             </button>
           </div>
