@@ -7,7 +7,6 @@ export const BOT_SILENCING_TAGS = ["desligar-ia", "atendimento-humano"];
 
 /** Colunas do funil, na ordem em que aparecem no quadro. */
 export const CONVERSATION_STAGES = [
-  "NOVO_LEAD",
   "IA_ATENDENDO",
   "SUPORTE_HUMANO",
   "AGENDADO",
@@ -20,7 +19,7 @@ export const CONVERSATION_STAGES = [
  * pausa o bot hoje, então mover pra essa coluna silencia a IA automaticamente.
  */
 export const STAGE_TAG: Record<ConversationStage, string | null> = {
-  NOVO_LEAD: "novo-lead",
+  NOVO_LEAD: "novo-lead", // legado: mantido só pra limpar a tag antiga ao mover o card
   IA_ATENDENDO: null, // fluxo normal: sem tag (a IA responde)
   SUPORTE_HUMANO: "atendimento-humano",
   AGENDADO: "agendado",
@@ -103,9 +102,8 @@ export const conversationService = {
   recordOutbound: (tenantId: string, phone: string, text: string, sender: "BOT" | "AGENT") =>
     withTenant(tenantId, async (tx) => {
       const convo = await recordMessage(tx, tenantId, { phone, text, sender });
-      // O funil acompanha a realidade: assim que a IA responde, o card sai de
-      // "Novo lead" e vai pra "IA atendendo". Só isso — não mexe nas outras etapas.
-      if (sender === "BOT" && convo.stage === "NOVO_LEAD") {
+      // Conversa antiga que ficou no estágio legado volta pro fluxo normal.
+      if (convo.stage === "NOVO_LEAD") {
         await tx.conversation.update({ where: { id: convo.id }, data: { stage: "IA_ATENDENDO" } });
       }
       return convo;

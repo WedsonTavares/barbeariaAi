@@ -20,7 +20,6 @@ export type Board = Record<string, Card[]>;
 /** Colunas do funil: rótulo + cor da faixa. A ordem é a do quadro. */
 /** Cada coluna tem um tom suave: o card herda a cor da etapa em que está. */
 const COLUMNS = [
-  { key: "NOVO_LEAD",      label: "Novo lead",      accent: "#2563EB", card: "bg-blue-50/70 border-blue-200/70",       hint: "Chegou agora" },
   { key: "IA_ATENDENDO",   label: "IA atendendo",   accent: "#7C3AED", card: "bg-violet-50/70 border-violet-200/70",   hint: "Dinha conduzindo" },
   { key: "SUPORTE_HUMANO", label: "Suporte humano", accent: "#EF4444", card: "bg-red-50/70 border-red-200/70",         hint: "IA pausada" },
   { key: "AGENDADO",       label: "Agendado",       accent: "#16A34A", card: "bg-green-50/70 border-green-200/70",     hint: "Festa fechada" },

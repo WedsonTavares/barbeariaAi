@@ -397,8 +397,8 @@ enum MessageSender {
 
 /** Etapa da conversa no funil (colunas do quadro em /admin/funil). */
 enum ConversationStage {
-  NOVO_LEAD      // chegou agora, ainda não foi atendido
-  IA_ATENDENDO   // a Dinha está conduzindo
+  NOVO_LEAD      // legado: não é mais usado (toda conversa nova já nasce em IA_ATENDENDO)
+  IA_ATENDENDO   // a Dinha está conduzindo — primeira coluna do funil
   SUPORTE_HUMANO // equipe assumiu (bot pausado)
   AGENDADO       // festa fechada
   POS_FESTA      // acompanhamento pós-evento
@@ -414,7 +414,7 @@ model Conversation {
   customerId    String?
   tags          String[] @default([]) // desligar-ia, atendimento-humano, cliente-vip, livres
   botPaused     Boolean  @default(false) // atendente assumiu → bot não responde
-  stage         ConversationStage @default(NOVO_LEAD) // coluna no funil (/admin/funil)
+  stage         ConversationStage @default(IA_ATENDENDO) // coluna no funil (/admin/funil)
   notes         String?  // resumo do atendimento escrito pela IA (tool "notas")
   notesAt       DateTime?
   lastMessageAt DateTime @default(now())
