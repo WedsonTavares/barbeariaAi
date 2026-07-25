@@ -36,7 +36,7 @@ async function tenantSeed(slug: string, name: string, clerkOrgId: string) {
 }
 
 async function main() {
-  await tenantSeed("dineplay", "Dine Play", "org_demo_dineplay");
+  await tenantSeed("dinyplay", "Diny Play", "org_demo_dinyplay");
   await tenantSeed("irma", "Festas da Irmã", "org_demo_irma");
 }
 
