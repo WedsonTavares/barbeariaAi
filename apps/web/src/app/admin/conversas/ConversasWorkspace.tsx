@@ -154,7 +154,7 @@ export function ConversasWorkspace({
         ))}
       </div>
 
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-black/5 bg-white md:grid-cols-[minmax(240px,300px)_1fr_minmax(260px,320px)]">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-black/5 bg-white md:grid-cols-[220px_minmax(0,1fr)_minmax(260px,320px)] xl:grid-cols-[240px_minmax(0,1fr)_minmax(260px,320px)]">
         {/* ─────────── ESQUERDA: lista ─────────── */}
         <aside className={`flex min-h-0 flex-col border-black/5 md:flex md:border-r ${pane === "lista" ? "flex" : "hidden"}`}>
           <div className="border-b border-black/5 px-3 py-3">
@@ -173,7 +173,7 @@ export function ConversasWorkspace({
               />
             </div>
 
-            <div className="mt-2 flex items-center gap-1">
+            <div className="mt-2 flex items-center gap-0.5">
               {([
                 { key: "todos", label: "Todos" },
                 { key: "nao-lidos", label: "Não lidos", n: naoLidos },
@@ -182,7 +182,7 @@ export function ConversasWorkspace({
                 <button
                   key={f.key}
                   onClick={() => setFiltro(f.key)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                  className={`rounded-full px-2 py-1 text-[11px] font-semibold transition ${
                     filtro === f.key
                       ? "bg-[var(--color-primary)] text-white"
                       : "bg-[var(--color-surface)] text-[var(--color-muted)] hover:bg-black/5"

@@ -16,7 +16,7 @@ const LINKS = [
 /** Sidebar no desktop; vira barra de navegação horizontal no celular. */
 export function AdminSidebar({ tenantName }: { tenantName: string }) {
   return (
-    <aside className="flex w-full shrink-0 flex-col gap-2 border-b border-black/5 bg-white p-3 md:min-h-screen md:w-56 md:border-b-0 md:border-r md:p-4">
+    <aside className="flex w-full shrink-0 flex-col gap-2 border-b border-black/5 bg-white p-3 md:min-h-screen md:w-48 md:border-b-0 md:border-r md:p-4">
       <div className="px-2 py-1 md:py-3">
         <span className="truncate font-extrabold">{tenantName}</span>
       </div>
