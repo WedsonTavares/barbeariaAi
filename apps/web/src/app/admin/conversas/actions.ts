@@ -1,51 +1,91 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { requireRole, services, ZodError } from "@diny/core";
+import { requireRole, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
 import { sendText } from "@/lib/evolution";
+import { normalizeTag } from "@/lib/tags";
 
-/** Atendente responde: envia no WhatsApp + salva no inbox. Assumir pausa o bot. */
-export async function replyAction(formData: FormData) {
+/** Abre a conversa selecionada (thread + contexto). Zera o não-lido. */
+export async function loadConversationAction(id: string) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
-  const id = String(formData.get("id"));
-  const phone = String(formData.get("phone")).replace(/\D/g, "");
-  const text = String(formData.get("text") || "").trim();
-  if (!text || !phone) return;
+  const c = await services.conversationService.get(tenant.id, id);
+  if (!c) return null;
+  return {
+    id: c.id,
+    phone: c.phone,
+    contactName: c.contactName,
+    tags: c.tags,
+    botPaused: c.botPaused,
+    stage: c.stage as string,
+    notes: c.notes,
+    notesAt: c.notesAt ? c.notesAt.toISOString() : null,
+    createdAt: c.createdAt.toISOString(),
+    messages: c.messages.map((m) => ({
+      id: m.id,
+      sender: m.sender as string,
+      text: m.text,
+      createdAt: m.createdAt.toISOString(),
+    })),
+  };
+}
+
+/** Atendente responde: envia no WhatsApp e registra no inbox como 🧑 Equipe. */
+export async function replyAction(id: string, phone: string, text: string) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
+  const msg = text.trim();
+  const to = phone.replace(/\D/g, "");
+  if (!msg || !to) return { ok: false as const };
 
   const instance = await services.tenantService.evolutionInstance(tenant.id, tenant.slug);
-  const sent = await sendText(instance, phone, text);
-  if (sent) await services.conversationService.recordOutbound(tenant.id, phone, text, "AGENT");
-  revalidatePath(`/admin/conversas/${id}`);
+  const sent = await sendText(instance, to, msg);
+  if (sent) await services.conversationService.recordOutbound(tenant.id, to, msg, "AGENT");
+  revalidatePath("/admin/conversas");
+  return { ok: sent };
 }
 
-export async function takeOverAction(formData: FormData) {
+/**
+ * Liga/desliga UMA tag pelo checkbox. Lê a lista atual no servidor antes de
+ * gravar — o cliente manda só qual tag mudou, então dois atendentes mexendo ao
+ * mesmo tempo não apagam a marcação um do outro.
+ */
+export async function toggleTagAction(id: string, tag: string, on: boolean) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
-  const id = String(formData.get("id"));
-  await services.conversationService.takeOver(tenant.id, id);
-  revalidatePath(`/admin/conversas/${id}`);
+  const t = normalizeTag(tag);
+  if (!t) return { ok: false as const, tags: [] as string[] };
+
+  const current = await services.conversationService.get(tenant.id, id);
+  if (!current) return { ok: false as const, tags: [] as string[] };
+
+  const next = on
+    ? [...new Set([...current.tags, t])].slice(0, 20)
+    : current.tags.filter((x) => x !== t);
+
+  await services.conversationService.setTags(tenant.id, id, next);
+  revalidatePath("/admin/conversas");
+  revalidatePath("/admin/funil");
+  return { ok: true as const, tags: next };
 }
 
-export async function releaseAction(formData: FormData) {
+/** Assumir (pausa a IA) / devolver pro bot. */
+export async function toggleBotAction(id: string, pause: boolean) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
-  const id = String(formData.get("id"));
-  await services.conversationService.releaseToBot(tenant.id, id);
-  revalidatePath(`/admin/conversas/${id}`);
+  if (pause) await services.conversationService.takeOver(tenant.id, id);
+  else await services.conversationService.releaseToBot(tenant.id, id);
+  revalidatePath("/admin/conversas");
+  revalidatePath("/admin/funil");
+  return { ok: true as const };
 }
 
-/** Salva as tags do contato (uma por linha / separadas por vírgula). */
-export async function setTagsAction(formData: FormData) {
+/** Edita o nome exibido do contato no painel de detalhes. */
+export async function updateContactAction(id: string, contactName: string) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
-  const id = String(formData.get("id"));
-  try {
-    const raw = String(formData.get("tags") || "");
-    const tags = [...new Set(raw.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 20);
-    await services.conversationService.setTags(tenant.id, id, tags);
-  } catch (e) {
-    if (!(e instanceof ZodError)) throw e;
-  }
-  revalidatePath(`/admin/conversas/${id}`);
+  await services.conversationService.updateContact(tenant.id, id, { contactName });
+  revalidatePath("/admin/conversas");
+  revalidatePath("/admin/funil");
+  return { ok: true as const };
 }
