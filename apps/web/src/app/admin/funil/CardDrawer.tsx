@@ -75,9 +75,9 @@ export function CardDrawer({
         {loading || !d ? (
           <div className="grid flex-1 place-items-center text-[var(--color-muted)]">Carregando…</div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_1fr_280px]">
+          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[220px_1fr_260px]">
             {/* ESQUERDA — contato */}
-            <aside className="min-h-0 overflow-y-auto border-black/5 bg-white p-4 lg:border-r">
+            <aside className="min-h-0 overflow-y-auto border-black/5 bg-white p-4 md:border-r">
               <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--color-muted)]">Contato</h3>
 
               <div className="mt-3">
@@ -140,8 +140,8 @@ export function CardDrawer({
               </div>
             </aside>
 
-            {/* MEIO — conversa */}
-            <section className="flex min-h-0 flex-col bg-[var(--color-surface)]">
+            {/* MEIO — conversa (altura limitada quando empilhado em telas estreitas) */}
+            <section className="flex max-h-[60vh] min-h-0 flex-col bg-[var(--color-surface)] md:max-h-none">
               <div ref={feedRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
                 {d.messages.map((m) => (
                   <div key={m.id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${BUBBLE[m.sender] ?? "self-start bg-white"}`}>
@@ -176,7 +176,7 @@ export function CardDrawer({
             </section>
 
             {/* DIREITA — contexto */}
-            <aside className="min-h-0 overflow-y-auto border-black/5 bg-white p-4 lg:border-l">
+            <aside className="min-h-0 overflow-y-auto border-black/5 bg-white p-4 md:border-l">
               <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--color-muted)]">Contexto</h3>
 
               <div className="mt-3">
