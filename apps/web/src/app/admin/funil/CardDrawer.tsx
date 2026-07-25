@@ -32,6 +32,7 @@ export function CardDrawer({
 }: { id: string; openTags?: boolean; onClose: () => void; onChanged: () => void }) {
   const [d, setD] = useState<Detail>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"contato" | "conversa" | "contexto">("conversa");
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [tagsOpen, setTagsOpen] = useState(Boolean(openTags));
@@ -72,12 +73,36 @@ export function CardDrawer({
           </button>
         </div>
 
+        {/* abas: só em telas estreitas (abaixo do md, as 3 colunas já aparecem lado a lado) */}
+        {d && (
+          <div className="flex items-center gap-1 border-b border-black/5 bg-white px-3 py-2 md:hidden">
+            {([
+              { key: "contato", label: "Contato" },
+              { key: "conversa", label: "Conversa" },
+              { key: "contexto", label: "Contexto", dot: Boolean(d.notes) },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`relative flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  tab === t.key ? "bg-[var(--color-primary)] text-white" : "text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
+                }`}
+              >
+                {t.label}
+                {"dot" in t && t.dot && tab !== t.key && (
+                  <span className="absolute right-2 top-1.5 size-1.5 rounded-full bg-amber-500" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading || !d ? (
           <div className="grid flex-1 place-items-center text-[var(--color-muted)]">Carregando…</div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[220px_1fr_260px]">
+          <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[220px_1fr_260px]">
             {/* ESQUERDA — contato */}
-            <aside className="min-h-0 overflow-y-auto border-black/5 bg-white p-4 md:border-r">
+            <aside className={`min-h-0 flex-1 overflow-y-auto border-black/5 bg-white p-4 md:flex-none md:border-r ${tab === "contato" ? "block" : "hidden"} md:block`}>
               <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--color-muted)]">Contato</h3>
 
               <div className="mt-3">
@@ -140,8 +165,8 @@ export function CardDrawer({
               </div>
             </aside>
 
-            {/* MEIO — conversa (altura limitada quando empilhado em telas estreitas) */}
-            <section className="flex max-h-[60vh] min-h-0 flex-col bg-[var(--color-surface)] md:max-h-none">
+            {/* MEIO — conversa */}
+            <section className={`min-h-0 flex-1 flex-col bg-[var(--color-surface)] md:flex ${tab === "conversa" ? "flex" : "hidden"}`}>
               <div ref={feedRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
                 {d.messages.map((m) => (
                   <div key={m.id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${BUBBLE[m.sender] ?? "self-start bg-white"}`}>
@@ -176,7 +201,7 @@ export function CardDrawer({
             </section>
 
             {/* DIREITA — contexto */}
-            <aside className="min-h-0 overflow-y-auto border-black/5 bg-white p-4 md:border-l">
+            <aside className={`min-h-0 flex-1 overflow-y-auto border-black/5 bg-white p-4 md:flex-none md:border-l ${tab === "contexto" ? "block" : "hidden"} md:block`}>
               <h3 className="text-xs font-bold uppercase tracking-wide text-[var(--color-muted)]">Contexto</h3>
 
               <div className="mt-3">
