@@ -134,6 +134,15 @@ export const conversationService = {
       });
     }),
 
+  /** Edita os dados do contato direto do painel (nome exibido na conversa/funil). */
+  updateContact: (tenantId: string, id: string, data: { contactName?: string | null }) =>
+    withTenant(tenantId, (tx) =>
+      tx.conversation.update({
+        where: { id },
+        data: { contactName: data.contactName?.trim() || null },
+      })
+    ),
+
   /** Define as tags do contato (substitui a lista). */
   setTags: (tenantId: string, id: string, tags: string[]) =>
     withTenant(tenantId, (tx) =>

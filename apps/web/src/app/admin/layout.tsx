@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AccessError, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
 import { AdminSidebar } from "@/components/AdminSidebar";
+import { AdminTopbar } from "@/components/AdminTopbar";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +26,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <AdminSidebar tenantName={tenantName} unreadCount={unreadCount} />
-      <main className="flex-1 p-4 md:p-6">{children}</main>
+      <AdminSidebar tenantName={tenantName} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <AdminTopbar unreadCount={unreadCount} />
+        <main className="flex-1 p-4 md:p-6">{children}</main>
+      </div>
     </div>
   );
 }

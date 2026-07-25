@@ -1,7 +1,9 @@
 "use client";
 import { useState, useTransition, useRef } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Tag } from "lucide-react";
 import { moveCardAction } from "./actions";
+import { CardDrawer } from "./CardDrawer";
 
 export type Card = {
   id: string;
@@ -39,8 +41,9 @@ export function FunilBoard({ initial }: { initial: Board }) {
   const [board, setBoard] = useState<Board>(initial);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [open, setOpen] = useState<{ id: string; tags?: boolean } | null>(null);
   const [, startTransition] = useTransition();
-  // guarda o estado anterior pra desfazer se o servidor recusar
+  const router = useRouter();
   const prev = useRef<Board | null>(null);
 
   function findCard(id: string): { card: Card; from: string } | null {
@@ -59,7 +62,6 @@ export function FunilBoard({ initial }: { initial: Board }) {
     const found = findCard(id);
     if (!found || found.from === toStage) return;
 
-    // move na hora (otimista) e persiste em segundo plano
     prev.current = board;
     setBoard((b) => ({
       ...b,
@@ -73,88 +75,120 @@ export function FunilBoard({ initial }: { initial: Board }) {
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-4">
-      {COLUMNS.map((col) => {
-        const cards = board[col.key] ?? [];
-        const isOver = over === col.key;
-        return (
-          <section
-            key={col.key}
-            onDragOver={(e) => { e.preventDefault(); setOver(col.key); }}
-            onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
-            onDrop={() => drop(col.key)}
-            className={`flex w-72 shrink-0 flex-col rounded-2xl border bg-[var(--color-surface)] p-2 transition ${
-              isOver ? "border-dashed border-black/30 bg-black/5" : "border-black/5"
-            }`}
-          >
-            <header className="flex items-center gap-2 px-2 py-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: col.accent }} />
-              <h2 className="text-sm font-bold">{col.label}</h2>
-              <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-bold text-[var(--color-muted)]">
-                {cards.length}
-              </span>
-            </header>
-            <p className="px-2 pb-2 text-[11px] text-[var(--color-muted)]">{col.hint}</p>
+    <>
+      <div className="flex gap-3 overflow-x-auto pb-4">
+        {COLUMNS.map((col) => {
+          const cards = board[col.key] ?? [];
+          const isOver = over === col.key;
+          return (
+            <section
+              key={col.key}
+              onDragOver={(e) => { e.preventDefault(); setOver(col.key); }}
+              onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
+              onDrop={() => drop(col.key)}
+              className={`flex w-72 shrink-0 flex-col rounded-2xl border bg-[var(--color-surface)] p-2 transition ${
+                isOver ? "border-dashed border-black/30 bg-black/5" : "border-black/5"
+              }`}
+            >
+              <header className="flex items-center gap-2 px-2 py-2">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: col.accent }} />
+                <h2 className="text-sm font-bold">{col.label}</h2>
+                <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-bold text-[var(--color-muted)]">
+                  {cards.length}
+                </span>
+              </header>
+              <p className="px-2 pb-2 text-[11px] text-[var(--color-muted)]">{col.hint}</p>
 
-            <div className="flex min-h-24 flex-col gap-2">
-              {cards.map((c) => (
-                <article
-                  key={c.id}
-                  draggable
-                  onDragStart={() => setDragging(c.id)}
-                  onDragEnd={() => { setDragging(null); setOver(null); }}
-                  className={`group cursor-grab rounded-xl border border-black/5 bg-white p-3 shadow-sm transition active:cursor-grabbing ${
-                    dragging === c.id ? "opacity-40" : "hover:shadow-md"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <Link
-                      href={`/admin/conversas/${c.id}`}
-                      draggable={false}
-                      className="min-w-0 font-semibold hover:underline"
+              <div className="flex min-h-24 flex-col gap-2">
+                {cards.map((c) => {
+                  const livres = c.tags.filter((t) => !STAGE_TAGS.includes(t));
+                  return (
+                    <article
+                      key={c.id}
+                      draggable
+                      onDragStart={() => setDragging(c.id)}
+                      onDragEnd={() => { setDragging(null); setOver(null); }}
+                      className={`group/card relative cursor-grab rounded-xl border border-black/5 bg-white p-3 shadow-sm transition active:cursor-grabbing ${
+                        dragging === c.id ? "opacity-40" : "hover:shadow-md"
+                      }`}
                     >
-                      {c.contactName || c.phone}
-                    </Link>
-                    {c.unread > 0 && (
-                      <span className="shrink-0 rounded-full bg-[#25D366] px-2 py-0.5 text-[11px] font-bold text-white">
-                        {c.unread}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-                    {c.phone} · {timeAgo(c.lastMessageAt)}
-                  </div>
-                  {(() => {
-                    const livres = c.tags.filter((t) => !STAGE_TAGS.includes(t));
-                    return livres.length ? (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {livres.map((t) => (
-                          <span key={t} className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[10px] font-semibold">
-                            {t}
+                      <div className="flex items-start justify-between gap-2">
+                        {/* nome: hover mostra prévia, clique abre o workspace */}
+                        <div className="group/name relative min-w-0">
+                          <button
+                            onClick={() => setOpen({ id: c.id })}
+                            className="min-w-0 max-w-full truncate text-left font-semibold hover:underline"
+                          >
+                            {c.contactName || c.phone}
+                          </button>
+
+                          <div className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-60 rounded-xl border border-black/10 bg-white p-3 text-left shadow-xl group-hover/name:block">
+                            <div className="text-xs font-bold">{c.contactName || "Sem nome"}</div>
+                            <div className="text-[11px] text-[var(--color-muted)]">{c.phone}</div>
+                            {c.notes && <p className="mt-1 line-clamp-3 text-[11px] text-amber-900">📝 {c.notes}</p>}
+                            <div className="mt-2 text-[10px] font-semibold text-[var(--color-primary)]">Clique para abrir</div>
+                          </div>
+                        </div>
+
+                        {c.unread > 0 && (
+                          <span className="shrink-0 rounded-full bg-[#25D366] px-2 py-0.5 text-[11px] font-bold text-white">
+                            {c.unread}
                           </span>
-                        ))}
+                        )}
                       </div>
-                    ) : null;
-                  })()}
-                  {c.notes && (
-                    <p className="mt-2 line-clamp-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] text-amber-900" title={c.notes}>
-                      📝 {c.notes}
-                    </p>
-                  )}
-                  {c.botPaused && (
-                    <div className="mt-2 text-[10px] font-bold text-amber-700">IA pausada</div>
-                  )}
-                </article>
-              ))}
-              {cards.length === 0 && (
-                <p className="rounded-xl border border-dashed border-black/10 px-3 py-6 text-center text-xs text-[var(--color-muted)]">
-                  Arraste um card pra cá
-                </p>
-              )}
-            </div>
-          </section>
-        );
-      })}
-    </div>
+
+                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--color-muted)]">
+                        <span className="truncate">{c.phone} · {timeAgo(c.lastMessageAt)}</span>
+
+                        {/* ícone de tags: hover lista, clique abre o modal */}
+                        <span className="group/tag relative ml-auto shrink-0">
+                          <button
+                            onClick={() => setOpen({ id: c.id, tags: true })}
+                            aria-label={livres.length ? `Tags: ${livres.join(", ")}` : "Adicionar tags"}
+                            className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 hover:bg-[var(--color-surface)] ${
+                              livres.length ? "text-[var(--color-primary)]" : "text-[var(--color-muted)]"
+                            }`}
+                          >
+                            <Tag className="size-3.5" />
+                            {livres.length > 0 && <span className="text-[10px] font-bold">{livres.length}</span>}
+                          </button>
+                          <span className="pointer-events-none absolute right-0 top-full z-20 mt-1 hidden w-44 rounded-xl border border-black/10 bg-white p-2 shadow-xl group-hover/tag:block">
+                            {livres.length ? (
+                              <span className="flex flex-wrap gap-1">
+                                {livres.map((t) => (
+                                  <span key={t} className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[10px] font-semibold">{t}</span>
+                                ))}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-[var(--color-muted)]">Sem tags — clique para adicionar</span>
+                            )}
+                          </span>
+                        </span>
+                      </div>
+
+                      {c.botPaused && <div className="mt-2 text-[10px] font-bold text-amber-700">IA pausada</div>}
+                    </article>
+                  );
+                })}
+                {cards.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-black/10 px-3 py-6 text-center text-xs text-[var(--color-muted)]">
+                    Arraste um card pra cá
+                  </p>
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      {open && (
+        <CardDrawer
+          id={open.id}
+          openTags={open.tags}
+          onClose={() => setOpen(null)}
+          onChanged={() => router.refresh()}
+        />
+      )}
+    </>
   );
 }
