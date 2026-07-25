@@ -28,6 +28,15 @@ export async function POST(req: Request) {
 
   try {
     const result = await services.bookingService.createFromAgent(tenant.id, input);
+    // Grava o contexto sozinho — não depende da IA lembrar de chamar a tool "notas".
+    const local = [input.address, input.neighborhood].filter(Boolean).join(", ");
+    await services.conversationService.setNote(
+      tenant.id,
+      input.phone,
+      `Reserva fechada: ${result.toys.join(", ")} — ${input.date} das ${input.setupTime} às ${input.pickupTime}` +
+        (local ? ` em ${local}` : "") +
+        `. Total R$ ${result.total}. Sinal a combinar.`
+    );
     return NextResponse.json({
       ok: true,
       ...result,

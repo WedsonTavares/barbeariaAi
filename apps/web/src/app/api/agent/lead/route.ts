@@ -25,5 +25,17 @@ export async function POST(req: Request) {
   }
 
   const lead = await services.leadService.createFromAgent(tenant.id, input);
+  // Grava o contexto sozinho — não depende da IA lembrar de chamar a tool "notas".
+  const partes = [
+    input.desiredDate && `data desejada ${input.desiredDate}`,
+    input.desiredToy && `interesse em ${input.desiredToy}`,
+    input.neighborhood && `bairro ${input.neighborhood}`,
+    input.summary,
+  ].filter(Boolean);
+  await services.conversationService.setNote(
+    tenant.id,
+    input.phone,
+    `Lead registrado (${input.name})${partes.length ? ": " + partes.join(", ") : ""}.`
+  );
   return NextResponse.json({ ok: true, leadId: lead.id, message: "Lead registrado — a equipe vai confirmar em breve." });
 }

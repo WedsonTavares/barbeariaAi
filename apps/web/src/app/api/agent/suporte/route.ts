@@ -28,5 +28,7 @@ export async function POST(req: Request) {
 
   await services.conversationService.takeOverByPhone(tenant.id, input.phone);
   await services.notificationService.humanRequested(tenant.id, input.phone, input.name, input.reason);
+  // Grava o contexto sozinho — não depende da IA lembrar de chamar a tool "notas".
+  if (input.reason) await services.conversationService.setNote(tenant.id, input.phone, `Escalado para a equipe: ${input.reason}`);
   return NextResponse.json({ ok: true, message: "Um atendente humano foi avisado e vai continuar por aqui em breve." });
 }

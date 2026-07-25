@@ -74,15 +74,17 @@ export default async function ConversaPage({ params }: { params: Promise<{ id: s
         </form>
       </div>
 
-      {/* Resumo do atendimento escrito pela IA (tool "notas") */}
-      {convo.notes && (
-        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
-            📝 Resumo da IA{convo.notesAt ? ` · ${fmtDateTime(convo.notesAt)}` : ""}
-          </div>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{convo.notes}</p>
+      {/* Resumo do atendimento (gravado ao fechar reserva/lead/escalar, ou pela tool "notas") */}
+      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+          📝 Resumo da IA{convo.notesAt ? ` · ${fmtDateTime(convo.notesAt)}` : ""}
         </div>
-      )}
+        {convo.notes ? (
+          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">{convo.notes}</p>
+        ) : (
+          <p className="mt-1 text-sm text-amber-700/70">Ainda sem resumo — aparece aqui assim que uma reserva, lead ou escalonamento acontecer.</p>
+        )}
+      </div>
 
       {/* Mensagens */}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto py-4">
