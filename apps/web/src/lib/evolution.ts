@@ -51,6 +51,7 @@ export async function ensureInstance(instance: string, webhookUrl?: string): Pro
         instanceName: instance,
         integration: "WHATSAPP-BAILEYS",
         qrcode: true,
+        groupsIgnore: true,
         ...(webhookUrl ? { webhook: { url: webhookUrl, enabled: true, events: ["MESSAGES_UPSERT"] } } : {}),
       }),
     });

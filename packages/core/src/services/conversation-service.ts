@@ -1,5 +1,4 @@
 import { withTenant, type Tx } from "../db/withTenant";
-import { pushNotification } from "./notification-service";
 import type { MessageSender, ConversationStage } from "@prisma/client";
 
 /** Tags que pausam o bot (a IA não responde quando o contato tem uma dessas). */
@@ -147,15 +146,11 @@ export const conversationService = {
 
   /** Mensagem recebida do cliente (via webhook do WhatsApp). */
   recordInbound: (tenantId: string, phone: string, text: string, contactName?: string) =>
-    withTenant(tenantId, async (tx) => {
-      const convo = await recordMessage(tx, tenantId, { phone, text, sender: "CONTACT", contactName });
-      await pushNotification(tx, tenantId, {
-        type: "NEW_WHATSAPP_MESSAGE",
-        title: "Nova mensagem no WhatsApp",
-        body: `${contactName || phone}: ${text.slice(0, 80)}`,
-      });
-      return convo;
-    }),
+    withTenant(tenantId, (tx) =>
+      // Mensagem comum pertence ao Inbox: Message + Conversation.unread já
+      // informam o atendente. O sino fica reservado para eventos acionáveis.
+      recordMessage(tx, tenantId, { phone, text, sender: "CONTACT", contactName })
+    ),
 
   /** Resposta enviada (pela IA ou por um atendente). */
   recordOutbound: (tenantId: string, phone: string, text: string, sender: "BOT" | "AGENT") =>

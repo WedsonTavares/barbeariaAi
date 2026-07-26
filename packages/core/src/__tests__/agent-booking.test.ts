@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { withTenant } from "../db/withTenant";
 import { bookingService, BookingConflictError } from "../services/booking-service";
 import { conversationService } from "../services/conversation-service";
+import { notificationService } from "../services/notification-service";
 
 const PRODUCTION_MARKERS = ["rzezilteejznqnmonhyi"];
 const owner = new PrismaClient({
@@ -99,6 +100,134 @@ describe("reserva criada pelo agente", () => {
     );
     expect(unmarked.tags).toEqual(["cliente-vip"]);
     expect(unmarked.stage).toBe("IA_ATENDENDO");
+  });
+
+  it("mantém mensagens comuns somente no Inbox, inclusive em retry", async () => {
+    const phone = "5516999990088";
+    await conversationService.recordInbound(tenantId, phone, "Olá", "Cliente Inbox");
+    await conversationService.recordInbound(tenantId, phone, "Olá", "Cliente Inbox");
+    await conversationService.recordInbound(tenantId, phone, "Quero informações", "Cliente Inbox");
+
+    const state = await withTenant(tenantId, async (tx) => {
+      const conversation = await tx.conversation.findUniqueOrThrow({
+        where: { tenantId_phone: { tenantId, phone } },
+      });
+      return {
+        conversation,
+        messages: await tx.message.count({ where: { conversationId: conversation.id } }),
+        genericNotifications: await tx.notification.count({
+          where: {
+            type: "NEW_WHATSAPP_MESSAGE",
+            title: "Nova mensagem no WhatsApp",
+            body: { contains: phone },
+          },
+        }),
+      };
+    });
+
+    expect(state.messages).toBe(2);
+    expect(state.conversation.unread).toBe(2);
+    expect(state.genericNotifications).toBe(0);
+
+    await conversationService.get(tenantId, state.conversation.id);
+    const read = await withTenant(tenantId, (tx) =>
+      tx.conversation.findUniqueOrThrow({
+        where: { id: state.conversation.id },
+        select: { unread: true },
+      })
+    );
+    expect(read.unread).toBe(0);
+  });
+
+  it("deduplica pedido de suporte e oferece uma única limpeza global", async () => {
+    const phone = "5516999990089";
+    const before = await notificationService.unreadCount(tenantId);
+    await notificationService.create(tenantId, {
+      type: "NEW_WHATSAPP_MESSAGE",
+      title: "Nova mensagem no WhatsApp",
+      body: `${phone}: legado`,
+    });
+    expect(await notificationService.unreadCount(tenantId)).toBe(before);
+    expect((await notificationService.listUnread(tenantId)).some((n) => n.body?.includes(phone))).toBe(false);
+
+    await Promise.all([
+      notificationService.humanRequested(tenantId, phone, "Cliente Suporte", "primeiro pedido"),
+      notificationService.humanRequested(tenantId, phone, "Cliente Suporte", "retry"),
+    ]);
+    let support = await withTenant(tenantId, (tx) =>
+      tx.notification.findMany({
+        where: {
+          type: "NEW_WHATSAPP_MESSAGE",
+          title: "Cliente pediu atendimento humano",
+          body: { contains: phone },
+        },
+      })
+    );
+    expect(support).toHaveLength(1);
+    expect(support[0]?.read).toBe(false);
+    expect((await notificationService.listUnread(tenantId)).some((n) => n.id === support[0]?.id)).toBe(true);
+    expect(await notificationService.unreadCount(tenantId)).toBe(before + 1);
+
+    await notificationService.markAllRead(tenantId);
+    const legacy = await withTenant(tenantId, (tx) =>
+      tx.notification.findFirstOrThrow({
+        where: {
+          type: "NEW_WHATSAPP_MESSAGE",
+          title: "Nova mensagem no WhatsApp",
+          body: { contains: phone },
+        },
+      })
+    );
+    expect(legacy.read).toBe(true);
+    support = await withTenant(tenantId, (tx) =>
+      tx.notification.findMany({
+        where: {
+          type: "NEW_WHATSAPP_MESSAGE",
+          title: "Cliente pediu atendimento humano",
+          body: { contains: phone },
+        },
+      })
+    );
+    expect(support[0]?.read).toBe(true);
+
+    await notificationService.humanRequested(tenantId, phone, "Cliente Suporte", "novo pedido");
+    support = await withTenant(tenantId, (tx) =>
+      tx.notification.findMany({
+        where: {
+          type: "NEW_WHATSAPP_MESSAGE",
+          title: "Cliente pediu atendimento humano",
+          body: { contains: phone },
+        },
+      })
+    );
+    expect(support).toHaveLength(2);
+    expect(support.filter((notification) => !notification.read)).toHaveLength(1);
+  });
+
+  it("não mistura alertas de suporte de telefones parecidos ou inválidos", async () => {
+    const shorter = "551699990090";
+    const longer = "9551699990090";
+    await Promise.all([
+      notificationService.humanRequested(tenantId, shorter, "Contato A"),
+      notificationService.humanRequested(tenantId, longer, "Contato B"),
+    ]);
+    await notificationService.humanRequested(tenantId, "sem-numero", "Entrada inválida");
+    await notificationService.humanRequested(tenantId, "sem-numero", "Entrada inválida");
+
+    const pending = await withTenant(tenantId, (tx) =>
+      tx.notification.findMany({
+        where: {
+          type: "NEW_WHATSAPP_MESSAGE",
+          title: "Cliente pediu atendimento humano",
+          read: false,
+        },
+      })
+    );
+    expect(pending.filter((n) => n.body?.startsWith(`Telefone: ${shorter} ·`))).toHaveLength(1);
+    expect(pending.filter((n) => n.body?.startsWith(`Telefone: ${longer} ·`))).toHaveLength(1);
+    expect(pending.filter((n) => n.body?.startsWith("Telefone: sem-numero ·"))).toHaveLength(2);
+
+    await notificationService.markAllRead(tenantId);
   });
 
   it("trata repetição como sucesso e sincroniza a conversa uma única vez", async () => {
