@@ -71,6 +71,27 @@ function fmt(iso: string) {
   });
 }
 
+const SP = "America/Sao_Paulo";
+const fmtDay = (iso: string) =>
+  new Date(iso).toLocaleDateString("pt-BR", { timeZone: SP, day: "2-digit", month: "2-digit", year: "numeric" });
+const fmtHour = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString("pt-BR", { timeZone: SP, hour: "2-digit", minute: "2-digit" }) : "—";
+const brlShort = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/** Rótulo/cor do status da reserva no painel de contexto (mesma paleta da Agenda). */
+const BOOKING_UI: Record<string, { label: string; chip: string }> = {
+  LEAD: { label: "Lead", chip: "bg-slate-100 text-slate-700" },
+  QUOTE_SENT: { label: "Orçamento", chip: "bg-amber-100 text-amber-800" },
+  WAITING_DEPOSIT: { label: "Aguardando sinal", chip: "bg-orange-100 text-orange-800" },
+  CONFIRMED: { label: "Confirmada", chip: "bg-blue-100 text-blue-800" },
+  IN_DELIVERY: { label: "Em entrega", chip: "bg-purple-100 text-purple-800" },
+  MOUNTED: { label: "Montado", chip: "bg-fuchsia-100 text-fuchsia-800" },
+  PICKED_UP: { label: "Retirado", chip: "bg-teal-100 text-teal-800" },
+  FINISHED: { label: "Finalizada", chip: "bg-green-100 text-green-800" },
+  CANCELED: { label: "Cancelada", chip: "bg-red-100 text-red-700" },
+};
+const stageBooking = (status: string) => BOOKING_UI[status] ?? BOOKING_UI.LEAD!;
+
 /**
  * Inbox em 3 colunas: lista à esquerda, conversa no meio, detalhes do contato à
  * direita — tudo numa tela só, sem navegar. Abaixo do md vira uma coluna por vez
@@ -585,24 +606,59 @@ function DetalhesContato({
           Contexto da conversa
         </h3>
 
+        {/* Festas: vêm da tabela de reservas AGORA, não do texto da IA. */}
         <div className="mt-2">
+          <div className="text-[10px] font-bold uppercase text-[var(--color-muted)]">Festas marcadas</div>
+          {d.bookings.length > 0 ? (
+            <ul className="mt-1 space-y-1">
+              {d.bookings.map((b) => {
+                const s = stageBooking(b.status);
+                return (
+                  <li key={b.id} className="rounded-xl border border-black/5 bg-white p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold">{fmtDay(b.eventDate)}</span>
+                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${s.chip}`}>
+                        {s.label}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[var(--color-muted)]">
+                      {b.setupTime ? `${fmtHour(b.setupTime)}–${fmtHour(b.pickupTime)} · ` : ""}
+                      {brlShort(b.total)}
+                    </div>
+                    {b.toys.length > 0 && (
+                      <div className="truncate text-[11px] text-[var(--color-muted)]">{b.toys.join(", ")}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mt-1 rounded-xl border border-dashed border-black/10 p-2 text-xs text-[var(--color-muted)]">
+              Nenhuma festa marcada.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-3">
           {d.notes ? (
             <div className="rounded-xl bg-amber-50 p-3">
               <div className="text-[10px] font-bold uppercase text-amber-700">
-                📝 Resumo da IA
+                📝 Anotação da IA{d.notesAt ? ` · ${fmt(d.notesAt)}` : ""}
               </div>
               <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">
                 {d.notes}
               </p>
-              {d.notesAt && (
-                <div className="mt-1 text-[10px] text-amber-700">
-                  {fmt(d.notesAt)}
-                </div>
+              {/* O resumo é um retrato do momento; a lista acima é a verdade de hoje. */}
+              {d.bookings.length === 0 && /reserva/i.test(d.notes) && (
+                <p className="mt-2 border-t border-amber-200 pt-2 text-[10px] font-semibold text-amber-800">
+                  ⚠️ Esta anotação cita uma reserva, mas não há festa marcada agora — pode ter sido
+                  cancelada ou já realizada.
+                </p>
               )}
             </div>
           ) : (
             <p className="rounded-xl border border-dashed border-black/10 p-3 text-xs text-[var(--color-muted)]">
-              Ainda sem resumo — aparece aqui quando uma reserva, lead ou
+              Ainda sem anotação — aparece aqui quando uma reserva, lead ou
               escalonamento acontecer.
             </p>
           )}
