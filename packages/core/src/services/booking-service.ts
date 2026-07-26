@@ -5,7 +5,7 @@ import { pushNotification } from "./notification-service";
 import { APP_TZ, parseLocalDateTime } from "../time";
 import { quoteWithMinimum } from "../calculations";
 import { customerPhoneKey, toWhatsAppPhone } from "../phone";
-import { normalizeMatchTerm } from "../text";
+import { matchesToyName } from "../text";
 import { markConversationScheduled } from "./conversation-service";
 
 const SP_DATETIME = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short", timeStyle: "short" });
@@ -181,8 +181,7 @@ export const bookingService = {
       const available = await tx.toy.findMany({ where: { status: { notIn: ["RETIRED", "MAINTENANCE"] } } });
       const chosen: { id: string; name: string; price: number }[] = [];
       for (const wanted of input.toys) {
-        const term = normalizeMatchTerm(wanted);
-        const matches = available.filter((t) => normalizeMatchTerm(t.name).includes(term));
+        const matches = available.filter((t) => matchesToyName(t.name, wanted));
         if (matches.length === 0) throw new BookingAgentError(`Não encontrei o brinquedo "${wanted}" no catálogo.`);
         if (matches.length > 1) throw new BookingAgentError(`"${wanted}" é ambíguo (${matches.map((m) => m.name).join(", ")}). Qual exatamente?`);
         const toy = matches[0]!;

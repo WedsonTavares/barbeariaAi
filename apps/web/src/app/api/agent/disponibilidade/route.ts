@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { parseLocalDateTime, normalizeMatchTerm, services, schemas, ZodError } from "@diny/core";
+import { parseLocalDateTime, matchesToyName, services, schemas, ZodError } from "@diny/core";
 
 /**
  * Ferramenta pro agente de IA (que roda no n8n): "esse brinquedo/categoria está livre
@@ -36,12 +36,11 @@ export async function POST(req: Request) {
     : new Date(dayStart.getTime() + 86_400_000);
 
   const allToys = await services.toyService.list(tenant.id);
-  const term = input.toyName ? normalizeMatchTerm(input.toyName) : undefined;
   const candidates = allToys.filter((t) => {
     // Fora do catálogo da IA: aposentado (removido) e em manutenção — assim a IA
     // nunca oferece o que a equipe tirou de circulação no painel.
     if (t.status === "RETIRED" || t.status === "MAINTENANCE") return false;
-    if (term) return normalizeMatchTerm(t.name).includes(term);
+    if (input.toyName) return matchesToyName(t.name, input.toyName);
     if (input.category) return t.category === input.category;
     return true;
   });
