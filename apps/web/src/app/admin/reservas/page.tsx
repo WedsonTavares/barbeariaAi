@@ -1,9 +1,10 @@
-import Link from "next/link";
+import { CalendarDays } from "lucide-react";
+
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
-import { brl, fmtDate, fmtDateTime } from "@/lib/format";
-import { BOOKING_STATUS, PAYMENT_STATUS, label } from "@/lib/labels";
-import { createBooking, confirmBooking, cancelBooking, payBooking, advanceBooking } from "./actions";
+import { fmtDate } from "@/lib/format";
+import { NewBookingDialog } from "./NewBookingDialog";
+import { ReservasList, type BookingRow } from "./ReservasList";
 
 export const dynamic = "force-dynamic";
 
@@ -22,18 +23,15 @@ const OKS: Record<string, string> = {
   andamento: "Status atualizado!",
 };
 
-/** Status em que ainda faz sentido confirmar. */
-const CONFIRMABLE = new Set(["LEAD", "QUOTE_SENT", "WAITING_DEPOSIT"]);
-const OPEN = new Set(["LEAD", "QUOTE_SENT", "WAITING_DEPOSIT", "CONFIRMED", "IN_DELIVERY", "MOUNTED"]);
-/** Rótulo do botão de avanço da operação, por status atual. */
-const ADVANCE_LABEL: Record<string, string> = {
-  CONFIRMED: "🚚 Saiu pra entrega",
-  IN_DELIVERY: "🔧 Montado",
-  MOUNTED: "📦 Retirado",
-  PICKED_UP: "✅ Finalizar",
-};
+const OFFSET_MS = 3 * 3_600_000; // SP = UTC-3 fixo (sem DST desde 2019)
+/** Date (UTC) → "YYYY-MM-DD" no dia de São Paulo (mesma conta da Agenda). */
+const spDay = (d: Date) => new Date(d.getTime() - OFFSET_MS).toISOString().slice(0, 10);
 
-export default async function ReservasPage({ searchParams }: { searchParams: Promise<{ erro?: string; ok?: string }> }) {
+export default async function ReservasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string; ok?: string; nova?: string }>;
+}) {
   const { tenant } = await requireTenant();
   const sp = await searchParams;
   const [bookings, customers, toys] = await Promise.all([
@@ -42,79 +40,51 @@ export default async function ReservasPage({ searchParams }: { searchParams: Pro
     services.toyService.list(tenant.id),
   ]);
 
-  return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
-      <div>
-        <h1 className="text-2xl font-extrabold">Reservas</h1>
-        {sp?.erro && ERROS[sp.erro] && <p role="alert" className="mt-3 rounded-lg bg-red-100 p-3 text-sm text-red-700">{ERROS[sp.erro]}</p>}
-        {sp?.ok && OKS[sp.ok] && <p role="status" className="mt-3 rounded-lg bg-green-100 p-3 text-sm text-green-700">{OKS[sp.ok]}</p>}
-        <div className="mt-4 space-y-3">
-          {bookings.map((b) => (
-            <div key={b.id} className="rounded-2xl border border-black/5 bg-white p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-bold">{b.customer.name}</span>
-                <span className="text-sm text-[var(--color-muted)]">{fmtDate(b.eventDate)}</span>
-              </div>
-              <div className="mt-1 text-sm text-[var(--color-muted)]">
-                {b.items.map((i) => i.toy.name).join(", ")} · {brl(b.total)}
-              </div>
-              {(b.setupTime || b.pickupTime) && (
-                <div className="mt-1 text-xs text-[var(--color-muted)]">
-                  {b.setupTime && <>Montagem: {fmtDateTime(b.setupTime)}</>}
-                  {b.setupTime && b.pickupTime && " · "}
-                  {b.pickupTime && <>Retirada: {fmtDateTime(b.pickupTime)}</>}
-                </div>
-              )}
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 font-semibold">{label(BOOKING_STATUS, b.status)}</span>
-                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 font-semibold">{label(PAYMENT_STATUS, b.paymentStatus)}</span>
-                {CONFIRMABLE.has(b.status) && (
-                  <form action={confirmBooking}><input type="hidden" name="id" value={b.id} /><button className="rounded-full bg-[var(--color-primary)] px-3 py-1 font-semibold text-white">Confirmar</button></form>
-                )}
-                {ADVANCE_LABEL[b.status] && (
-                  <form action={advanceBooking}><input type="hidden" name="id" value={b.id} /><button className="rounded-full bg-[var(--color-ink)] px-3 py-1 font-semibold text-white hover:opacity-80">{ADVANCE_LABEL[b.status]}</button></form>
-                )}
-                {b.status !== "CANCELED" && b.status !== "FINISHED" && (
-                  <Link href={`/admin/reservas/${b.id}`} className="rounded-full border border-black/10 px-3 py-1 font-semibold hover:bg-[var(--color-surface)]">Editar</Link>
-                )}
-                {OPEN.has(b.status) && b.paymentStatus !== "PAID" && (
-                  <form action={payBooking} className="flex items-center gap-1">
-                    <input type="hidden" name="id" value={b.id} />
-                    <input name="amount" type="number" step="0.01" min="0.01" required placeholder="valor R$" aria-label="Valor do pagamento" className="w-24 rounded border border-black/10 px-2 py-1" />
-                    <button className="rounded-full bg-[#25D366] px-3 py-1 font-semibold text-white">Registrar</button>
-                  </form>
-                )}
-                {OPEN.has(b.status) && (
-                  <form action={cancelBooking}><input type="hidden" name="id" value={b.id} /><button className="rounded-full border border-red-200 px-3 py-1 font-semibold text-red-600 hover:bg-red-50">Cancelar</button></form>
-                )}
-              </div>
-            </div>
-          ))}
-          {bookings.length === 0 && <p className="text-[var(--color-muted)]">Nenhuma reserva ainda.</p>}
-        </div>
-      </div>
+  const rows: BookingRow[] = bookings.map((b) => ({
+    id: b.id,
+    customerName: b.customer.name,
+    status: b.status,
+    dateLabel: fmtDate(b.eventDate),
+    daySort: spDay(b.eventDate),
+  }));
 
-      <form action={createBooking} className="h-fit space-y-3 rounded-2xl border border-black/5 bg-white p-5">
-        <h2 className="font-bold">Nova reserva</h2>
-        <select name="customerId" required className="w-full rounded-lg border border-black/10 px-3 py-2">
-          <option value="">Cliente...</option>
-          {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <label className="block text-xs text-[var(--color-muted)]">Data do evento<input name="eventDate" type="date" required className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2" /></label>
-        <label className="block text-xs text-[var(--color-muted)]">Montagem<input name="setupTime" type="datetime-local" required className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2" /></label>
-        <label className="block text-xs text-[var(--color-muted)]">Retirada<input name="pickupTime" type="datetime-local" required className="mt-1 w-full rounded-lg border border-black/10 px-3 py-2" /></label>
-        <input name="neighborhood" placeholder="Bairro" className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <input name="address" placeholder="Endereço" className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <input name="total" type="number" step="0.01" min="0" placeholder="Valor total" required className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <input name="depositAmount" type="number" step="0.01" min="0" placeholder="Sinal previsto" className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <fieldset className="rounded-lg border border-black/10 p-3">
-          <legend className="px-1 text-xs text-[var(--color-muted)]">Brinquedos</legend>
-          {toys.filter((t) => t.status !== "RETIRED").map((t) => (
-            <label key={t.id} className="flex items-center gap-2 text-sm"><input type="checkbox" name="toyIds" value={t.id} /> {t.name}</label>
-          ))}
-        </fieldset>
-        <button className="w-full rounded-full bg-[var(--color-primary)] px-4 py-2 font-semibold text-white">Criar reserva</button>
-      </form>
+  // Abre o modal já na chegada: atalho da Agenda (?nova=1) ou volta de erro.
+  const openNew = sp.nova === "1" || sp.erro === "validacao" || sp.erro === "conflito";
+
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-4 sm:space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-[var(--color-primary)]">
+            <CalendarDays className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-extrabold">Reservas</h1>
+            <p className="text-sm text-[var(--color-muted)]">
+              Clique numa reserva para ver tudo e mudar status ou pagamento.
+            </p>
+          </div>
+        </div>
+        <NewBookingDialog
+          customers={customers.map((c) => ({ id: c.id, name: c.name }))}
+          toys={toys.filter((t) => t.status !== "RETIRED").map((t) => ({ id: t.id, name: t.name }))}
+          initialOpen={openNew}
+          hasError={sp.erro === "validacao" || sp.erro === "conflito"}
+        />
+      </header>
+
+      {sp.ok && OKS[sp.ok] && (
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
+          {OKS[sp.ok]}
+        </p>
+      )}
+      {sp.erro && ERROS[sp.erro] && (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">
+          {ERROS[sp.erro]}
+        </p>
+      )}
+
+      <ReservasList rows={rows} todayKey={spDay(new Date())} />
     </div>
   );
 }
