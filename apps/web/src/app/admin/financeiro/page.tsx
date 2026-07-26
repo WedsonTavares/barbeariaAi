@@ -1,118 +1,321 @@
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  CheckCircle2,
+  CircleDollarSign,
+  Clock3,
+  Minus,
+  PiggyBank,
+  ReceiptText,
+} from "lucide-react";
+
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
 import { brl } from "@/lib/format";
-import { EXPENSE_CATEGORY, TOY_STATUS, label } from "@/lib/labels";
-import { addExpense } from "./actions";
+import { TOY_STATUS, label } from "@/lib/labels";
+import { ExpenseDialog } from "./ExpenseDialog";
+import { MonthBalanceChart, RevenueHistoryChart } from "./FinanceCharts";
 
 export const dynamic = "force-dynamic";
-const CATS = ["FUEL", "HELPER", "MAINTENANCE", "CLEANING", "OTHER"];
 
-/** Financeiro + Relatórios numa aba só: resumo do mês, lançar custo e os relatórios. */
-export default async function FinanceiroPage({ searchParams }: { searchParams: Promise<{ erro?: string; ok?: string }> }) {
+type RankingItem = {
+  id: string;
+  name: string;
+  status: string;
+  rentals: number;
+  revenue: number;
+  purchasePrice: number;
+  remaining: number;
+  paidOff: boolean;
+};
+
+const STATUS_CHIP: Record<string, string> = {
+  AVAILABLE: "bg-emerald-50 text-emerald-700",
+  RENTED: "bg-blue-50 text-blue-700",
+  MAINTENANCE: "bg-amber-50 text-amber-700",
+  RETIRED: "bg-slate-100 text-slate-600",
+};
+
+function MetricCard({
+  title,
+  value,
+  hint,
+  icon: Icon,
+  tint,
+  valueTone = "text-[var(--color-ink)]",
+}: {
+  title: string;
+  value: string;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tint: string;
+  valueTone?: string;
+}) {
+  return (
+    <article className="min-w-0 rounded-2xl border border-black/5 bg-white p-3.5 shadow-sm sm:p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold text-[var(--color-muted)] sm:text-xs">{title}</div>
+          <div className={`mt-1 whitespace-nowrap text-sm font-extrabold tracking-tight tabular-nums min-[420px]:text-base sm:text-xl xl:text-2xl ${valueTone}`}>
+            {value}
+          </div>
+        </div>
+        <span className={`hidden size-9 shrink-0 place-items-center rounded-xl sm:grid ${tint}`}>
+          <Icon className="size-4" aria-hidden />
+        </span>
+      </div>
+      <p className="mt-2 text-[10px] text-[var(--color-muted)] sm:text-[11px]">{hint}</p>
+    </article>
+  );
+}
+
+function paybackPercentage(item: RankingItem) {
+  if (item.purchasePrice <= 0) return 0;
+  return Math.min(100, Math.max(0, (item.revenue / item.purchasePrice) * 100));
+}
+
+function Payback({ item }: { item: RankingItem }) {
+  if (item.paidOff) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+        <CheckCircle2 className="size-3.5" aria-hidden />
+        Já se pagou
+      </div>
+    );
+  }
+
+  if (item.purchasePrice <= 0) {
+    return <span className="text-xs text-[var(--color-muted)]">Investimento não informado</span>;
+  }
+
+  const percentage = paybackPercentage(item);
+  return (
+    <div className="min-w-[130px]">
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-slate-100"
+        role="img"
+        aria-label={`${percentage.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% do investimento recuperado`}
+      >
+        <div className="h-full rounded-full bg-violet-500" style={{ width: `${percentage}%` }} />
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-2 text-[10px]">
+        <span className="font-bold text-violet-700">
+          {percentage.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
+        </span>
+        <span className="whitespace-nowrap text-[var(--color-muted)]">faltam {brl(item.remaining)}</span>
+      </div>
+    </div>
+  );
+}
+
+function MobileRankingCard({ item, position }: { item: RankingItem; position: number }) {
+  return (
+    <article className="rounded-xl border border-black/5 p-3.5">
+      <div className="flex items-start gap-3">
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--color-surface)] text-[11px] font-extrabold text-[var(--color-muted)]">
+          {position}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className="min-w-0 truncate font-bold">{item.name}</h3>
+            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_CHIP[item.status] ?? "bg-slate-100 text-slate-600"}`}>
+              {label(TOY_STATUS, item.status)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <dl className="mt-3 grid grid-cols-2 rounded-lg bg-[var(--color-surface)]">
+        <div className="min-w-0 px-2 py-2">
+          <dt className="text-[10px] text-[var(--color-muted)]">Locações</dt>
+          <dd className="mt-0.5 font-extrabold tabular-nums">{item.rentals}</dd>
+        </div>
+        <div className="min-w-0 border-l border-black/5 px-2 py-2">
+          <dt className="text-[10px] text-[var(--color-muted)]">Receita</dt>
+          <dd className="mt-0.5 text-xs font-extrabold tabular-nums">{brl(item.revenue)}</dd>
+        </div>
+        <div className="col-span-2 flex items-center justify-between gap-3 border-t border-black/5 px-2 py-2">
+          <dt className="text-[10px] text-[var(--color-muted)]">Investimento</dt>
+          <dd className="text-xs font-semibold tabular-nums">{brl(item.purchasePrice)}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-3">
+        <Payback item={item} />
+      </div>
+    </article>
+  );
+}
+
+/** Financeiro + relatórios: UI compacta, responsiva e sem alterar as regras financeiras. */
+export default async function FinanceiroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string; ok?: string }>;
+}) {
   const { tenant } = await requireTenant();
   const sp = await searchParams;
-  const [m, { monthly, ranking }] = await Promise.all([
+  const [month, report] = await Promise.all([
     services.financeService.monthSummary(tenant.id),
     services.reportService.overview(tenant.id, 6),
   ]);
-  const maxRevenue = Math.max(1, ...monthly.map((r) => r.revenue));
+
+  const profitState = month.lucroEstimado > 0 ? "positive" : month.lucroEstimado < 0 ? "negative" : "neutral";
+  const metrics = [
+    {
+      title: "Faturamento",
+      value: brl(month.faturamentoBruto),
+      hint: "recebido neste mês",
+      icon: CircleDollarSign,
+      tint: "bg-blue-50 text-blue-600",
+    },
+    {
+      title: "Custos",
+      value: brl(month.custos),
+      hint: "saídas lançadas",
+      icon: ReceiptText,
+      tint: "bg-rose-50 text-rose-600",
+    },
+    {
+      title: "Lucro estimado",
+      value: brl(month.lucroEstimado),
+      hint:
+        profitState === "positive"
+          ? "resultado positivo"
+          : profitState === "negative"
+            ? "custos acima da receita"
+            : "resultado zerado",
+      icon: profitState === "positive" ? ArrowUpRight : profitState === "negative" ? ArrowDownRight : Minus,
+      tint:
+        profitState === "positive"
+          ? "bg-emerald-50 text-emerald-600"
+          : profitState === "negative"
+            ? "bg-rose-50 text-rose-600"
+            : "bg-slate-100 text-slate-600",
+      valueTone:
+        profitState === "positive"
+          ? "text-emerald-700"
+          : profitState === "negative"
+            ? "text-rose-700"
+            : "text-slate-700",
+    },
+    {
+      title: "A receber",
+      value: brl(month.aReceber),
+      hint: "saldo das reservas do mês",
+      icon: Clock3,
+      tint: "bg-amber-50 text-amber-600",
+    },
+  ];
 
   return (
-    <div className="max-w-5xl">
-      <h1 className="text-2xl font-extrabold">Financeiro</h1>
-      <p className="mt-1 text-sm text-[var(--color-muted)]">Resumo do mês, custos e relatórios.</p>
-
-      {sp?.erro && <p role="alert" className="mt-3 rounded-lg bg-red-100 p-3 text-sm text-red-700">Custo não lançado: informe um valor maior que zero.</p>}
-      {sp?.ok && <p role="status" className="mt-3 rounded-lg bg-green-100 p-3 text-sm text-green-700">Custo lançado!</p>}
-
-      <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          {[
-            { t: "Faturamento", v: m.faturamentoBruto },
-            { t: "Custos", v: m.custos },
-            { t: "Lucro estimado", v: m.lucroEstimado },
-            { t: "A receber", v: m.aReceber },
-          ].map((c) => (
-            <div key={c.t} className="rounded-2xl border border-black/5 bg-white p-4 sm:p-5">
-              <div className="text-xs text-[var(--color-muted)] sm:text-sm">{c.t}</div>
-              <div className="text-lg font-extrabold sm:text-2xl">{brl(c.v)}</div>
+    <div className="mx-auto w-full max-w-7xl space-y-4 sm:space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-600">
+              <PiggyBank className="size-5" aria-hidden />
+            </span>
+            <div>
+              <h1 className="text-2xl font-extrabold">Financeiro</h1>
+              <p className="text-sm text-[var(--color-muted)]">Caixa, custos e retorno dos brinquedos.</p>
             </div>
-          ))}
+          </div>
+        </div>
+        <ExpenseDialog initialOpen={Boolean(sp.erro)} />
+      </header>
+
+      {sp.ok && (
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
+          Custo lançado com sucesso.
+        </p>
+      )}
+
+      <section aria-label="Resumo financeiro do mês" className="grid grid-cols-1 gap-2.5 min-[380px]:grid-cols-2 lg:grid-cols-4 lg:gap-3">
+        {metrics.map((metric) => (
+          <MetricCard key={metric.title} {...metric} />
+        ))}
+      </section>
+
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
+        <RevenueHistoryChart monthly={report.monthly} />
+        <MonthBalanceChart
+          revenue={month.faturamentoBruto}
+          costs={month.custos}
+          profit={month.lucroEstimado}
+          bookings={month.reservasNoMes}
+        />
+      </div>
+
+      <section className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-black/5 px-4 py-3.5 sm:px-5">
+          <div>
+            <h2 className="font-bold">Ranking e retorno dos brinquedos</h2>
+            <p className="mt-0.5 text-xs text-[var(--color-muted)]">Locações, receita gerada e recuperação do investimento</p>
+          </div>
+          <span className="rounded-full bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-bold text-[var(--color-muted)]">
+            {report.ranking.length} item{report.ranking.length === 1 ? "" : "s"}
+          </span>
         </div>
 
-        <form action={addExpense} className="h-fit space-y-3 rounded-2xl border border-black/5 bg-white p-5">
-          <h2 className="font-bold">Lançar custo</h2>
-          <select name="category" className="w-full rounded-lg border border-black/10 px-3 py-2">
-            {CATS.map((c) => <option key={c} value={c}>{label(EXPENSE_CATEGORY, c)}</option>)}
-          </select>
-          <input name="amount" type="number" step="0.01" placeholder="Valor" required className="w-full rounded-lg border border-black/10 px-3 py-2" />
-          <input name="description" placeholder="Descrição" className="w-full rounded-lg border border-black/10 px-3 py-2" />
-          <button className="w-full rounded-full bg-[var(--color-primary)] px-4 py-2 font-semibold text-white">Lançar</button>
-        </form>
-      </div>
-
-      <h2 className="mt-10 text-lg font-bold">Receita por mês (últimos 6)</h2>
-      <div className="mt-3 rounded-2xl border border-black/5 bg-white p-4 sm:p-5">
-        <div className="space-y-2">
-          {monthly.map((r) => (
-            <div key={r.label} className="flex items-center gap-2 sm:gap-3">
-              <span className="w-12 shrink-0 text-[10px] font-bold text-[var(--color-muted)] sm:w-16 sm:text-xs">{r.label}</span>
-              <div className="h-6 flex-1 overflow-hidden rounded-full bg-[var(--color-surface)]">
-                <div
-                  className="flex h-full items-center rounded-full bg-[var(--color-primary)] px-2"
-                  style={{ width: `${Math.max(4, Math.round((r.revenue / maxRevenue) * 100))}%` }}
-                >
-                  <span className="whitespace-nowrap text-[10px] font-bold text-white">{brl(r.revenue)}</span>
-                </div>
-              </div>
-              <span className="w-14 shrink-0 text-right text-[10px] text-[var(--color-muted)] sm:w-16 sm:text-xs">
-                {r.bookings} festa{r.bookings === 1 ? "" : "s"}
-              </span>
+        {report.ranking.length > 0 ? (
+          <>
+            <div className="space-y-2 p-3 lg:hidden">
+              {report.ranking.map((item, index) => (
+                <MobileRankingCard key={item.id} item={item} position={index + 1} />
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
 
-      <h2 className="mt-8 text-lg font-bold">Brinquedos: ranking e retorno</h2>
-      <div className="mt-3 overflow-x-auto rounded-2xl border border-black/5 bg-white">
-        <table className="w-full min-w-[560px] text-sm">
-          <thead className="bg-[var(--color-surface)] text-left text-[var(--color-muted)]">
-            <tr>
-              <th className="p-3">Brinquedo</th>
-              <th className="p-3">Locações</th>
-              <th className="p-3">Receita</th>
-              <th className="p-3">Investimento</th>
-              <th className="p-3">Retorno</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranking.map((t) => (
-              <tr key={t.id} className="border-t border-black/5">
-                <td className="p-3">
-                  <div className="font-semibold">{t.name}</div>
-                  <div className="text-xs text-[var(--color-muted)]">{label(TOY_STATUS, t.status)}</div>
-                </td>
-                <td className="p-3">{t.rentals}</td>
-                <td className="p-3 font-semibold">{brl(t.revenue)}</td>
-                <td className="p-3">{brl(t.purchasePrice)}</td>
-                <td className="p-3">
-                  {t.paidOff ? (
-                    <span className="whitespace-nowrap rounded-full bg-green-100 px-2 py-1 text-xs font-bold text-green-700">✓ Já se pagou</span>
-                  ) : t.purchasePrice > 0 ? (
-                    <span className="whitespace-nowrap text-xs text-[var(--color-muted)]">faltam {brl(t.remaining)}</span>
-                  ) : (
-                    <span className="text-xs text-[var(--color-muted)]">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {ranking.length === 0 && <tr><td className="p-3 text-[var(--color-muted)]" colSpan={5}>Sem dados ainda.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-3 text-xs text-[var(--color-muted)]">
-        Receita do brinquedo = soma dos preços de item em reservas não canceladas. Retorno compara com o valor de compra cadastrado.
-      </p>
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--color-surface)] text-left text-[11px] uppercase tracking-wide text-[var(--color-muted)]">
+                  <tr>
+                    <th className="w-12 px-4 py-2.5 text-center">
+                      <span className="sr-only">Posição</span>
+                      <span aria-hidden>#</span>
+                    </th>
+                    <th className="px-3 py-2.5">Brinquedo</th>
+                    <th className="px-3 py-2.5 text-center">Locações</th>
+                    <th className="px-3 py-2.5">Receita</th>
+                    <th className="px-3 py-2.5">Investimento</th>
+                    <th className="min-w-[190px] px-4 py-2.5">Retorno</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.ranking.map((item, index) => (
+                    <tr key={item.id} className="border-t border-black/5 transition hover:bg-slate-50/70">
+                      <td className="px-4 py-3 text-center text-xs font-bold text-[var(--color-muted)]">{index + 1}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-bold">{item.name}</div>
+                        <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_CHIP[item.status] ?? "bg-slate-100 text-slate-600"}`}>
+                          {label(TOY_STATUS, item.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center font-extrabold tabular-nums">{item.rentals}</td>
+                      <td className="px-3 py-3 font-extrabold tabular-nums">{brl(item.revenue)}</td>
+                      <td className="px-3 py-3 tabular-nums text-[var(--color-muted)]">{brl(item.purchasePrice)}</td>
+                      <td className="px-4 py-3">
+                        <Payback item={item} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="grid min-h-32 place-items-center p-6 text-center">
+            <div>
+              <PiggyBank className="mx-auto size-6 text-slate-300" aria-hidden />
+              <p className="mt-2 text-sm font-semibold text-[var(--color-muted)]">Sem dados financeiros ainda.</p>
+            </div>
+          </div>
+        )}
+
+        <p className="border-t border-black/5 px-4 py-3 text-[10px] leading-relaxed text-[var(--color-muted)] sm:px-5">
+          A receita do brinquedo soma os valores dos itens em reservas não canceladas. O retorno compara esse valor com o investimento cadastrado.
+        </p>
+      </section>
     </div>
   );
 }
