@@ -4,19 +4,17 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  CalendarCheck2,
   LockKeyhole,
   MessageCircle,
   Pencil,
   Search,
   Trash2,
-  UserRound,
   X,
 } from "lucide-react";
 
 import { SubmitButton } from "@/components/SubmitButton";
 import { waUrl } from "@/lib/format";
-import { initials, stageUi } from "@/lib/stage";
+import { initials } from "@/lib/stage";
 import { removeCustomer, updateCustomer } from "./actions";
 
 export type CustomerDirectoryItem = {
@@ -63,12 +61,6 @@ function normalize(value: string) {
 
 function isCustomer(item: CustomerDirectoryItem): item is CustomerItem {
   return item.kind === "CUSTOMER" && Boolean(item.customerId);
-}
-
-function kindLabel(item: CustomerDirectoryItem) {
-  if (item.kind === "CUSTOMER") return "Cliente";
-  if (item.kind === "LEAD") return "Lead";
-  return "Contato novo";
 }
 
 function EditCustomerDialog({
@@ -474,12 +466,11 @@ export function CustomersDirectory({
           {filtered.map((item) => {
             const customer = isCustomer(item) ? item : null;
             const destination = customer ? `/admin/clientes/${customer.customerId}` : null;
-            const source = item.source ? SOURCE_LABEL[item.source] ?? item.source : null;
 
             return (
               <article
                 key={item.key}
-                className="flex items-start gap-3 px-3 py-3 transition-colors hover:bg-slate-50/70 sm:items-center sm:px-4"
+                className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-slate-50/70 sm:px-4"
               >
                 <span
                   className={`grid size-10 shrink-0 place-items-center rounded-2xl text-xs font-extrabold ${
@@ -493,125 +484,89 @@ export function CustomersDirectory({
                   {initials(item.name, item.phone)}
                 </span>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                    {destination ? (
-                      <Link
-                        href={destination}
-                        className="min-w-0 truncate font-bold hover:text-[var(--color-primary)] hover:underline"
-                      >
-                        {item.name}
-                      </Link>
-                    ) : (
-                      <span className="min-w-0 truncate font-bold">{item.name}</span>
-                    )}
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${
-                        item.kind === "CUSTOMER"
-                          ? "bg-blue-50 text-blue-700"
-                          : "bg-amber-50 text-amber-700"
-                      }`}
+                {/* Só nome e telefone: o resto (etapa, festas, origem, bairro, e-mail,
+                    duplicidade) continua no cadastro e abre ao clicar no nome. */}
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                  {destination ? (
+                    <Link
+                      href={destination}
+                      className="min-w-0 truncate font-bold hover:text-[var(--color-primary)] hover:underline"
                     >
-                      {kindLabel(item)}
-                    </span>
-                    {item.duplicateCount > 1 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-extrabold text-red-700">
-                        <AlertTriangle className="size-3" aria-hidden />
-                        WhatsApp duplicado
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-[var(--color-muted)]">
-                    <a
-                      href={waUrl(item.phone)}
-                      target="_blank"
-                      rel="noopener"
-                      className="font-semibold hover:text-[#128C7E] hover:underline"
-                    >
-                      {item.phone}
-                    </a>
-                    {item.neighborhood && (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span className="truncate">{item.neighborhood}</span>
-                      </>
-                    )}
-                    {item.email && (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span className="truncate">{item.email}</span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {item.stage && (
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${stageUi(item.stage).chip}`}>
-                        {stageUi(item.stage).label}
-                      </span>
-                    )}
-                    {item.bookingCount > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                        <CalendarCheck2 className="size-3" aria-hidden />
-                        {item.bookingCount} festa{item.bookingCount === 1 ? "" : "s"}
-                      </span>
-                    )}
-                    {source && item.kind !== "CUSTOMER" && (
-                      <span className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-muted)]">
-                        via {source}
-                      </span>
-                    )}
-                  </div>
-                  <span className="mt-1.5 block text-[11px] text-[var(--color-muted)] sm:hidden">
-                    {item.lastActivityLabel}
-                  </span>
+                      {item.name}
+                    </Link>
+                  ) : (
+                    <span className="min-w-0 truncate font-bold">{item.name}</span>
+                  )}
+                  <a
+                    href={waUrl(item.phone)}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-xs font-semibold text-[var(--color-muted)] hover:text-[#128C7E] hover:underline"
+                  >
+                    {item.phone}
+                  </a>
                 </div>
 
-                <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                  <span className="hidden whitespace-nowrap text-[11px] text-[var(--color-muted)] sm:mr-1 sm:inline">
-                    {item.lastActivityLabel}
-                  </span>
-                  <div className="flex items-center gap-0.5">
-                    {customer ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setEditing(customer)}
-                          aria-label={`Editar ${customer.name}`}
-                          title="Editar cliente"
-                          className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-blue-50 hover:text-blue-700"
-                        >
-                          <Pencil className="size-4" aria-hidden />
-                        </button>
-                        {canRemove && (
-                          <button
-                            type="button"
-                            onClick={() => setRemoving(customer)}
-                            aria-label={`Remover cadastro de ${customer.name}`}
-                            title="Remover cadastro"
-                            className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-red-50 hover:text-red-700"
-                          >
-                            <Trash2 className="size-4" aria-hidden />
-                          </button>
-                        )}
-                      </>
-                    ) : item.conversationId ? (
-                      <Link
-                        href={`/admin/conversas?c=${item.conversationId}`}
-                        aria-label={`Abrir conversa com ${item.name}`}
-                        title="Abrir conversa"
-                        className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-blue-50 hover:text-blue-700"
+                <div className="flex shrink-0 items-center gap-0.5">
+                  {customer ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(customer)}
+                      aria-label={`Editar ${customer.name}`}
+                      title="Editar cliente"
+                      className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      <Pencil className="size-4" aria-hidden />
+                    </button>
+                  ) : (
+                    <span
+                      title="Contato ainda sem cadastro de cliente para editar"
+                      className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] opacity-30"
+                    >
+                      <Pencil className="size-4" aria-hidden />
+                      <span className="sr-only">Sem cadastro de cliente para editar</span>
+                    </span>
+                  )}
+
+                  {item.conversationId ? (
+                    <Link
+                      href={`/admin/conversas?c=${item.conversationId}`}
+                      aria-label={`Abrir conversa com ${item.name}`}
+                      title="Abrir conversa"
+                      className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      <MessageCircle className="size-4" aria-hidden />
+                    </Link>
+                  ) : (
+                    <span
+                      title="Ainda não há conversa de WhatsApp com este contato"
+                      className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] opacity-30"
+                    >
+                      <MessageCircle className="size-4" aria-hidden />
+                      <span className="sr-only">Sem conversa vinculada</span>
+                    </span>
+                  )}
+
+                  {canRemove &&
+                    (customer ? (
+                      <button
+                        type="button"
+                        onClick={() => setRemoving(customer)}
+                        aria-label={`Remover cadastro de ${customer.name}`}
+                        title="Remover cadastro"
+                        className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-red-50 hover:text-red-700"
                       >
-                        <MessageCircle className="size-4" aria-hidden />
-                      </Link>
+                        <Trash2 className="size-4" aria-hidden />
+                      </button>
                     ) : (
-                      <span className="grid size-10 place-items-center rounded-full text-[var(--color-muted)]">
-                        <UserRound className="size-4" aria-hidden />
-                        <span className="sr-only">Lead ainda sem conversa vinculada</span>
+                      <span
+                        title="Contato ainda sem cadastro de cliente para remover"
+                        className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] opacity-30"
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                        <span className="sr-only">Sem cadastro de cliente para remover</span>
                       </span>
-                    )}
-                  </div>
+                    ))}
                 </div>
               </article>
             );
