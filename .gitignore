@@ -18,6 +18,7 @@ docs/*
 # Nenhum .md no git (contexto/planejamento ficam só local)
 *.md
 
+base_de_dados.md
 .vercel
 
 # Exceção: base de conhecimento da IA não tem segredo nenhum, vale versionar
