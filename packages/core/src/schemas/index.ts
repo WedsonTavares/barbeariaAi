@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseLocalDate, parseLocalDateTime } from "../time";
+import { phoneDigits } from "../phone";
 
 /** Aceita Date pronto ou string sem offset (inputs do navegador), ancorando em SP. */
 const spDateTime = z.preprocess(
@@ -29,14 +30,27 @@ export const toyInput = z.object({
 export type ToyInput = z.infer<typeof toyInput>;
 
 export const customerInput = z.object({
-  name: z.string().min(2),
-  phone: z.string().min(8),
+  name: z.string().trim().min(2),
+  phone: z
+    .string()
+    .min(8)
+    .refine(
+      (value) => {
+        const length = phoneDigits(value).length;
+        return length >= 10 && length <= 15;
+      },
+      "Informe um WhatsApp válido",
+    ),
   email: z.string().email().optional().or(z.literal("")),
   neighborhood: z.string().optional(),
   address: z.string().optional(),
   imageConsent: z.coerce.boolean().optional(),
 });
 export type CustomerInput = z.infer<typeof customerInput>;
+
+/** O WhatsApp não é editado junto dos demais dados: ele liga cliente, conversa e agenda. */
+export const customerUpdateInput = customerInput.omit({ phone: true });
+export type CustomerUpdateInput = z.infer<typeof customerUpdateInput>;
 
 export const bookingInput = z
   .object({

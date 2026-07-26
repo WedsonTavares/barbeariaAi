@@ -1,5 +1,10 @@
 export { toyService } from "./toy-service";
-export { customerService } from "./customer-service";
+export {
+  customerService,
+  CustomerDuplicateError,
+  type CustomerDirectoryEntry,
+  type CustomerRemovalResult,
+} from "./customer-service";
 export { leadService } from "./lead-service";
 export { bookingService, BookingConflictError, BookingStateError, BookingAgentError } from "./booking-service";
 export { paymentService } from "./payment-service";

@@ -4,6 +4,7 @@ import { withTenant } from "../db/withTenant";
 import { bookingService, BookingConflictError } from "../services/booking-service";
 import { conversationService } from "../services/conversation-service";
 import { notificationService } from "../services/notification-service";
+import { customerPhoneKey } from "../phone";
 
 const PRODUCTION_MARKERS = ["rzezilteejznqnmonhyi"];
 const owner = new PrismaClient({
@@ -512,5 +513,51 @@ describe("reserva criada pelo agente", () => {
     await expect(
       bookingService.createFromAgent(tenantId, input)
     ).rejects.toBeInstanceOf(BookingConflictError);
+  });
+
+  it("reaproveita cadastro local quando o WhatsApp chega com 55", async () => {
+    const localPhone = "(16) 99999-0077";
+    const whatsappPhone = "5516999990077";
+    const customer = await withTenant(tenantId, (tx) =>
+      tx.customer.create({
+        data: { tenantId, name: "Cliente com número local", phone: localPhone },
+      }),
+    );
+    const conversation = await withTenant(tenantId, (tx) =>
+      tx.conversation.create({
+        data: {
+          tenantId,
+          phone: whatsappPhone,
+          contactName: "Cliente com número local",
+          stage: "IA_ATENDENDO",
+        },
+      }),
+    );
+
+    const booking = await bookingService.createFromAgent(tenantId, {
+      phone: whatsappPhone,
+      name: "Cliente com número local",
+      date: "2031-09-29",
+      setupTime: "10:00",
+      pickupTime: "14:00",
+      toys: ["Pula-pula Teste"],
+    });
+
+    const state = await withTenant(tenantId, async (tx) => {
+      const customers = await tx.customer.findMany({ select: { id: true, phone: true } });
+      return {
+        booking: await tx.booking.findUniqueOrThrow({ where: { id: booking.bookingId } }),
+        matchingCustomers: customers.filter(
+          (item) => customerPhoneKey(item.phone) === customerPhoneKey(whatsappPhone),
+        ),
+      };
+    });
+    expect(state.booking.customerId).toBe(customer.id);
+    expect(state.matchingCustomers).toHaveLength(1);
+
+    const upcoming = await bookingService.upcomingForPhone(tenantId, localPhone, new Date("2031-01-01T00:00:00Z"));
+    expect(upcoming.map((item) => item.id)).toContain(booking.bookingId);
+    const board = await conversationService.board(tenantId, new Date("2031-01-01T00:00:00Z"));
+    expect(board.AGENDADO.some((card) => card.id === conversation.id)).toBe(true);
   });
 });

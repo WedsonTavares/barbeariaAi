@@ -1,5 +1,6 @@
 import { withTenant, type Tx } from "../db/withTenant";
 import type { MessageSender, ConversationStage } from "@prisma/client";
+import { customerPhoneKey } from "../phone";
 
 /** Tags que pausam o bot (a IA não responde quando o contato tem uma dessas). */
 export const BOT_SILENCING_TAGS = ["desligar-ia", "atendimento-humano"];
@@ -306,17 +307,11 @@ export const conversationService = {
           botPaused: true, unread: true, lastMessageAt: true, stage: true, notes: true,
         },
       });
-      const phones = [...new Set(rows.map((row) => row.phone))];
-      const customerIds = [...new Set(rows.map((row) => row.customerId).filter((id): id is string => Boolean(id)))];
       const activeBookings = rows.length
         ? await tx.booking.findMany({
             where: {
               status: { in: ["CONFIRMED", "IN_DELIVERY", "MOUNTED"] },
               pickupTime: { gte: now },
-              OR: [
-                ...(customerIds.length ? [{ customerId: { in: customerIds } }] : []),
-                { customer: { phone: { in: phones } } },
-              ],
             },
             orderBy: [{ setupTime: "asc" }, { eventDate: "asc" }, { id: "asc" }],
             select: {
@@ -334,13 +329,13 @@ export const conversationService = {
         if (!activeBookingByCustomer.has(booking.customerId)) {
           activeBookingByCustomer.set(booking.customerId, at);
         }
-        const phone = booking.customer.phone.replace(/\D/g, "");
+        const phone = customerPhoneKey(booking.customer.phone);
         if (!activeBookingByPhone.has(phone)) {
           activeBookingByPhone.set(phone, at);
         }
       }
       const cards = rows.map(({ customerId, ...row }) => {
-        const phone = row.phone.replace(/\D/g, "");
+        const phone = customerPhoneKey(row.phone);
         const activeBookingAt =
           (customerId ? activeBookingByCustomer.get(customerId) : undefined) ??
           activeBookingByPhone.get(phone) ??

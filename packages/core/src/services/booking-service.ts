@@ -4,6 +4,7 @@ import { createBookingReminders, cancelBookingReminders } from "./reminder-servi
 import { pushNotification } from "./notification-service";
 import { APP_TZ, parseLocalDateTime } from "../time";
 import { quoteWithMinimum } from "../calculations";
+import { customerPhoneKey, toWhatsAppPhone } from "../phone";
 import { markConversationScheduled } from "./conversation-service";
 
 const SP_DATETIME = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short", timeStyle: "short" });
@@ -58,6 +59,23 @@ async function lockToys(tx: Tx, toyIds: string[]) {
   for (const toyId of [...toyIds].sort()) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${toyId}, 0))`;
   }
+}
+
+async function lockCustomerPhone(tx: Tx, tenantId: string, phone: string) {
+  const key = customerPhoneKey(phone);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`customer:${tenantId}:${key}`}))`;
+}
+
+async function matchingOpenLeadIds(tx: Tx, phone: string, createdBefore?: Date) {
+  const key = customerPhoneKey(phone);
+  const rows = await tx.lead.findMany({
+    where: {
+      status: { in: ["NEW", "CONTACTED", "QUOTED"] },
+      ...(createdBefore ? { createdAt: { lte: createdBefore } } : {}),
+    },
+    select: { id: true, phone: true },
+  });
+  return rows.filter((lead) => customerPhoneKey(lead.phone) === key).map((lead) => lead.id);
 }
 
 /** toyIds que colidem com o intervalo [setup, pickup] no mesmo tenant. */
@@ -117,10 +135,14 @@ export const bookingService = {
    */
   upcomingForPhone: (tenantId: string, phone: string, now = new Date()) =>
     withTenant(tenantId, async (tx) => {
-      const customer = await tx.customer.findFirst({ where: { phone } });
-      if (!customer) return [];
+      const phoneKey = customerPhoneKey(phone);
+      const customers = await tx.customer.findMany({ select: { id: true, phone: true } });
+      const customerIds = customers
+        .filter((customer) => customerPhoneKey(customer.phone) === phoneKey)
+        .map((customer) => customer.id);
+      if (!customerIds.length) return [];
       return tx.booking.findMany({
-        where: { customerId: customer.id, status: { not: "CANCELED" }, pickupTime: { gte: now } },
+        where: { customerId: { in: customerIds }, status: { not: "CANCELED" }, pickupTime: { gte: now } },
         orderBy: { eventDate: "asc" },
         include: { items: { include: { toy: true } } },
       });
@@ -172,13 +194,30 @@ export const bookingService = {
       // Rede de segurança: serializa chamadas dos mesmos brinquedos. Depois do
       // lock, um retry consegue enxergar a reserva que a primeira chamada criou.
       await lockToys(tx, toyIds);
+      await lockCustomerPhone(tx, tenantId, input.phone);
+      const phoneKey = customerPhoneKey(input.phone);
+      const conversation = await tx.conversation.findUnique({
+        where: { tenantId_phone: { tenantId, phone: input.phone } },
+        select: { customerId: true },
+      });
+      const matchingCustomers = (await tx.customer.findMany({
+        include: { _count: { select: { bookings: true } } },
+      }))
+        .filter((customer) => customerPhoneKey(customer.phone) === phoneKey)
+        .sort(
+          (a, b) =>
+            Number(b.id === conversation?.customerId) - Number(a.id === conversation?.customerId) ||
+            b._count.bookings - a._count.bookings ||
+            b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+      const matchingCustomerIds = matchingCustomers.map((customer) => customer.id);
       const replayCandidates = await tx.booking.findMany({
         where: {
           leadSource: "WHATSAPP",
           status: { in: ["CONFIRMED", "IN_DELIVERY", "MOUNTED"] },
           setupTime: setup,
           pickupTime: pickup,
-          customer: { phone: input.phone },
+          customerId: { in: matchingCustomerIds },
         },
         include: { customer: true, items: { include: { toy: true } } },
       });
@@ -204,14 +243,13 @@ export const bookingService = {
         });
         // Repara apenas leads que já existiam quando essa reserva foi criada;
         // um novo interesse posterior do mesmo telefone não pode ser fechado.
-        await tx.lead.updateMany({
-          where: {
-            phone: input.phone,
-            status: { in: ["NEW", "CONTACTED", "QUOTED"] },
-            createdAt: { lte: replay.createdAt },
-          },
-          data: { status: "WON", bookingId: replay.id },
-        });
+        const leadIds = await matchingOpenLeadIds(tx, input.phone, replay.createdAt);
+        if (leadIds.length) {
+          await tx.lead.updateMany({
+            where: { id: { in: leadIds } },
+            data: { status: "WON", bookingId: replay.id },
+          });
+        }
         return result;
       }
 
@@ -220,10 +258,17 @@ export const bookingService = {
       if (conflicts.length) throw new BookingConflictError(conflicts);
 
       // Cliente: reaproveita pelo telefone; senão cria.
-      let customer = await tx.customer.findFirst({ where: { phone: input.phone } });
+      let customer = matchingCustomers[0] ?? null;
       if (!customer) {
         customer = await tx.customer.create({
-          data: { tenantId, name: input.name, phone: input.phone, neighborhood: input.neighborhood, address: input.address },
+          data: {
+            tenantId,
+            name: input.name,
+            phone: toWhatsAppPhone(input.phone),
+            neighborhood: input.neighborhood,
+            address: input.address,
+          },
+          include: { _count: { select: { bookings: true } } },
         });
       }
 
@@ -269,13 +314,13 @@ export const bookingService = {
         customerId: customer.id,
         note: agentBookingNote(input, result),
       });
-      await tx.lead.updateMany({
-        where: {
-          phone: input.phone,
-          status: { in: ["NEW", "CONTACTED", "QUOTED"] },
-        },
-        data: { status: "WON", bookingId: booking.id },
-      });
+      const leadIds = await matchingOpenLeadIds(tx, input.phone);
+      if (leadIds.length) {
+        await tx.lead.updateMany({
+          where: { id: { in: leadIds } },
+          data: { status: "WON", bookingId: booking.id },
+        });
+      }
       return result;
     }),
 

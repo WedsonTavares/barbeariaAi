@@ -1,42 +1,120 @@
-import Link from "next/link";
+import { UsersRound } from "lucide-react";
+
+import { currentRole, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
-import { createCustomer } from "./actions";
+import { CustomersDirectory, type CustomerDirectoryItem } from "./CustomersDirectory";
+import { NewCustomerDialog } from "./NewCustomerDialog";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClientesPage({ searchParams }: { searchParams: Promise<{ erro?: string; ok?: string }> }) {
-  const { tenant } = await requireTenant();
+const OKS: Record<string, string> = {
+  1: "Cliente adicionado.",
+  editado: "Cadastro atualizado.",
+  removido: "Cadastro removido sem apagar conversas, leads ou reservas.",
+};
+
+const ERRORS: Record<string, string> = {
+  edicao: "Alteração não salva. Confira os campos do cliente.",
+  nao_encontrado: "Este cadastro não existe mais ou não pertence a esta empresa.",
+  cliente_com_reservas: "Cadastro não removido: há reservas ligadas a ele e o histórico foi preservado.",
+  cliente_com_historico:
+    "Cadastro não removido: existe conversa, lead ou orçamento ligado a ele. O histórico foi preservado.",
+  cliente_com_dados:
+    "Cadastro não removido: o outro registro desse WhatsApp possui dados diferentes. Revise os cadastros antes de unificar.",
+};
+
+function activityLabel(date: Date) {
+  const now = Date.now();
+  const elapsed = Math.max(0, now - date.getTime());
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "agora";
+  if (minutes < 60) return `há ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `há ${days}d`;
+  return date.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+export default async function ClientesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string; ok?: string; editar?: string }>;
+}) {
+  const { tenant, ctx } = await requireTenant();
   const sp = await searchParams;
-  const customers = await services.customerService.list(tenant.id);
+  const directory = await services.customerService.directory(tenant.id);
+  const role = currentRole(ctx);
+  const canRemove = role === "OWNER" || role === "ADMIN";
+
+  const items: CustomerDirectoryItem[] = directory.map((item) => ({
+    key: item.key,
+    kind: item.kind,
+    customerId: item.customerId,
+    conversationId: item.conversationId,
+    leadId: item.leadId,
+    name: item.name,
+    phone: item.phone,
+    email: item.email,
+    neighborhood: item.neighborhood,
+    address: item.address,
+    imageConsent: item.imageConsent,
+    bookingCount: item.bookingCount,
+    duplicateCount: item.duplicateCount,
+    source: item.source,
+    stage: item.stage,
+    leadStatus: item.leadStatus,
+    lastActivityLabel: activityLabel(item.lastActivityAt),
+  }));
+
+  const validEditId = directory.some(
+    (item) => item.kind === "CUSTOMER" && item.customerId === sp.editar,
+  );
+  const createError = sp.erro === "validacao" || sp.erro === "duplicado" ? sp.erro : undefined;
+  const pageError =
+    sp.erro && !(sp.erro === "edicao" && validEditId) ? ERRORS[sp.erro] : undefined;
+
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-      <div>
-        <h1 className="text-2xl font-extrabold">Clientes</h1>
-        {sp?.erro && <p role="alert" className="mt-3 rounded-lg bg-red-100 p-3 text-sm text-red-700">Confira os campos: nome e WhatsApp são obrigatórios.</p>}
-        {sp?.ok && <p role="status" className="mt-3 rounded-lg bg-green-100 p-3 text-sm text-green-700">Cliente adicionado!</p>}
-        <div className="mt-4 space-y-2">
-          {customers.map((c) => (
-            <Link key={c.id} href={`/admin/clientes/${c.id}`} className="block rounded-xl border border-black/5 bg-white p-3 transition-colors hover:bg-[var(--color-surface)]">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{c.name}</span>
-                <span className="text-xs font-semibold text-[var(--color-primary)]">Ver ficha →</span>
-              </div>
-              <div className="text-sm text-[var(--color-muted)]">{c.phone} · {c.neighborhood ?? "-"}</div>
-            </Link>
-          ))}
-          {customers.length === 0 && <p className="text-[var(--color-muted)]">Nenhum cliente ainda.</p>}
+    <div className="mx-auto w-full max-w-7xl space-y-4 sm:space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-[var(--color-primary)]">
+            <UsersRound className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-extrabold">Clientes</h1>
+            <p className="text-sm text-[var(--color-muted)]">
+              Cadastros, leads e novos contatos do WhatsApp em um só lugar.
+            </p>
+          </div>
         </div>
-      </div>
-      <form action={createCustomer} className="h-fit space-y-3 rounded-2xl border border-black/5 bg-white p-5">
-        <h2 className="font-bold">Novo cliente</h2>
-        <input name="name" placeholder="Nome" required className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <input name="phone" placeholder="WhatsApp" required className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <input name="email" type="email" placeholder="E-mail (opcional)" className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <input name="neighborhood" placeholder="Bairro" className="w-full rounded-lg border border-black/10 px-3 py-2" />
-        <label className="flex items-center gap-2 text-sm text-[var(--color-muted)]"><input type="checkbox" name="imageConsent" /> Autoriza uso de imagem (LGPD)</label>
-        <button className="w-full rounded-full bg-[var(--color-primary)] px-4 py-2 font-semibold text-white">Adicionar</button>
-      </form>
+        <NewCustomerDialog errorCode={createError} />
+      </header>
+
+      {sp.ok && OKS[sp.ok] && (
+        <p
+          role="status"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700"
+        >
+          {OKS[sp.ok]}
+        </p>
+      )}
+      {pageError && (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">
+          {pageError}
+        </p>
+      )}
+
+      <CustomersDirectory
+        items={items}
+        canRemove={canRemove}
+        initialEditId={validEditId ? sp.editar : undefined}
+        editHasError={sp.erro === "edicao"}
+      />
     </div>
   );
 }
