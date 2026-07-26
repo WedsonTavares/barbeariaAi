@@ -218,10 +218,13 @@ model Customer {
   neighborhood String?
   imageConsent Boolean  @default(false)
   createdAt    DateTime @default(now())
+  /// Arquivado = sai do painel sem apagar nada. Reservas/conversas continuam intactas.
+  archivedAt   DateTime?
   bookings     Booking[]
 
   @@index([tenantId])
   @@index([tenantId, phone])
+  @@index([tenantId, archivedAt])
 }
 
 model Lead {
@@ -240,9 +243,12 @@ model Lead {
   status        LeadStatus @default(NEW)
   bookingId     String?
   createdAt     DateTime   @default(now())
+  /// Arquivado = sai do painel sem apagar nada (ver Customer.archivedAt).
+  archivedAt    DateTime?
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, archivedAt])
 }
 
 model Quote {
@@ -420,11 +426,14 @@ model Conversation {
   lastMessageAt DateTime @default(now())
   unread        Int      @default(0)
   createdAt     DateTime @default(now())
+  /// Arquivado = sai do inbox e do funil. Mensagem nova do contato desarquiva sozinho.
+  archivedAt    DateTime?
 
   messages      Message[]
 
   @@unique([tenantId, phone])
   @@index([tenantId, lastMessageAt])
+  @@index([tenantId, archivedAt])
 }
 
 model Message {
