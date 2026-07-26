@@ -179,6 +179,92 @@ describe("reserva criada pelo agente", () => {
     expect(count).toBe(1);
   });
 
+  it("mantém reserva ativa em Agendado sem misturar a coluna com o estado da IA", async () => {
+    const input = {
+      phone: "5516999990007",
+      name: "Cliente com coluna derivada",
+      date: "2031-10-01",
+      setupTime: "14:00",
+      pickupTime: "18:00",
+      toys: ["Pula-pula Teste"],
+    };
+
+    const conversation = await withTenant(tenantId, (tx) =>
+      tx.conversation.create({
+        data: {
+          tenantId,
+          phone: input.phone,
+          contactName: input.name,
+          stage: "IA_ATENDENDO",
+        },
+      })
+    );
+    const booking = await bookingService.createFromAgent(tenantId, input);
+
+    // Simula conversa legada ou alterada que não recebeu a etapa persistida.
+    await withTenant(tenantId, (tx) =>
+      tx.conversation.update({
+        where: { id: conversation.id },
+        data: { stage: "IA_ATENDENDO", tags: [], botPaused: false },
+      })
+    );
+
+    let board = await conversationService.board(
+      tenantId,
+      new Date("2031-09-30T12:00:00.000Z")
+    );
+    expect(board.AGENDADO.find((card) => card.id === conversation.id)?.botPaused).toBe(false);
+    expect(board.IA_ATENDENDO.some((card) => card.id === conversation.id)).toBe(false);
+
+    // Assumir pausa a IA, mas a reserva continua determinando a coluna.
+    await conversationService.takeOver(tenantId, conversation.id);
+    board = await conversationService.board(
+      tenantId,
+      new Date("2031-09-30T12:00:00.000Z")
+    );
+    expect(board.AGENDADO.find((card) => card.id === conversation.id)?.botPaused).toBe(true);
+    expect(board.SUPORTE_HUMANO.some((card) => card.id === conversation.id)).toBe(false);
+
+    // A passagem do horário também tira da coluna, mesmo sem job alterando status.
+    board = await conversationService.board(
+      tenantId,
+      new Date("2031-10-01T21:00:01.000Z")
+    );
+    expect(board.AGENDADO.some((card) => card.id === conversation.id)).toBe(false);
+    expect(board.SUPORTE_HUMANO.find((card) => card.id === conversation.id)?.activeBookingAt).toBeNull();
+
+    // Sem reserva ativa, o card sai de Agendado e volta ao fluxo compatível
+    // com quem está respondendo.
+    await bookingService.setStatus(tenantId, booking.bookingId, "CANCELED");
+    board = await conversationService.board(
+      tenantId,
+      new Date("2031-09-30T12:00:00.000Z")
+    );
+    expect(board.AGENDADO.some((card) => card.id === conversation.id)).toBe(false);
+    expect(board.SUPORTE_HUMANO.find((card) => card.id === conversation.id)?.activeBookingAt).toBeNull();
+
+    // Também limpa visualmente o stage AGENDADO que tenha ficado persistido
+    // depois de uma reserva encerrada, sem escrever durante a leitura do quadro.
+    await withTenant(tenantId, (tx) =>
+      tx.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          stage: "AGENDADO",
+          tags: ["agendado", "desligar-ia"],
+          botPaused: true,
+        },
+      })
+    );
+    board = await conversationService.board(
+      tenantId,
+      new Date("2031-09-30T12:00:00.000Z")
+    );
+    expect(board.AGENDADO.some((card) => card.id === conversation.id)).toBe(false);
+    const backWithBotPaused = board.IA_ATENDENDO.find((card) => card.id === conversation.id);
+    expect(backWithBotPaused?.activeBookingAt).toBeNull();
+    expect(backWithBotPaused?.botPaused).toBe(true);
+  });
+
   it("mantém conflito real para outro cliente", async () => {
     await expect(
       bookingService.createFromAgent(tenantId, {

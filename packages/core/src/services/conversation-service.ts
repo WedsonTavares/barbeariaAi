@@ -284,10 +284,14 @@ export const conversationService = {
       });
     }),
 
-  /** Quadro do funil: as conversas agrupadas por etapa (colunas do Kanban). */
-  board: (tenantId: string) =>
+  /**
+   * Quadro do funil. A coluna AGENDADO é derivada da reserva ativa, não apenas
+   * do stage persistido: isso cobre reservas antigas/manuais, cancelamento e a
+   * passagem natural do horário sem precisar escrever no banco durante a leitura.
+   * O estado da IA continua independente em botPaused.
+   */
+  board: (tenantId: string, now = new Date()) =>
     withTenant(tenantId, async (tx) => {
-      const now = new Date();
       const rows = await tx.conversation.findMany({
         orderBy: { lastMessageAt: "desc" },
         take: 300,
@@ -331,12 +335,19 @@ export const conversationService = {
       }
       const cards = rows.map(({ customerId, ...row }) => {
         const phone = row.phone.replace(/\D/g, "");
+        const activeBookingAt =
+          (customerId ? activeBookingByCustomer.get(customerId) : undefined) ??
+          activeBookingByPhone.get(phone) ??
+          null;
+        const stage: ConversationStage = activeBookingAt
+          ? "AGENDADO"
+          : row.stage === "AGENDADO"
+            ? (row.tags.includes("atendimento-humano") ? "SUPORTE_HUMANO" : "IA_ATENDENDO")
+            : row.stage;
         return {
           ...row,
-          activeBookingAt:
-            (customerId ? activeBookingByCustomer.get(customerId) : undefined) ??
-            activeBookingByPhone.get(phone) ??
-            null,
+          stage,
+          activeBookingAt,
         };
       });
       const byStage = Object.fromEntries(

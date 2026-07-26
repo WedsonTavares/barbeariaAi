@@ -111,6 +111,8 @@ export function FunilBoard({ initial }: { initial: Board }) {
     if (!id) return;
     const found = findCard(id);
     if (!found || found.from === toStage) return;
+    // AGENDADO espelha uma reserva ativa: não entra nem sai por arraste.
+    if (found.card.activeBookingAt || toStage === "AGENDADO") return;
 
     prev.current = board;
     setBoard((b) => ({
@@ -132,8 +134,15 @@ export function FunilBoard({ initial }: { initial: Board }) {
       const [fromStage, cards] = found;
       const card = cards.find((item) => item.id === id)!;
       const updated = { ...card, tags: changed.tags, botPaused: changed.botPaused };
+      // Assumir/devolver muda apenas quem responde; uma reserva ativa continua
+      // visualmente na coluna AGENDADO.
+      const targetStage = card.activeBookingAt
+        ? "AGENDADO"
+        : changed.stage === "AGENDADO"
+          ? (changed.tags.includes("atendimento-humano") ? "SUPORTE_HUMANO" : "IA_ATENDENDO")
+          : changed.stage;
 
-      if (fromStage === changed.stage) {
+      if (fromStage === targetStage) {
         return {
           ...current,
           [fromStage]: cards.map((item) => (item.id === id ? updated : item)),
@@ -143,7 +152,7 @@ export function FunilBoard({ initial }: { initial: Board }) {
       return {
         ...current,
         [fromStage]: cards.filter((item) => item.id !== id),
-        [changed.stage]: [updated, ...(current[changed.stage] ?? [])],
+        [targetStage]: [updated, ...(current[targetStage] ?? [])],
       };
     });
   }
@@ -237,10 +246,12 @@ export function FunilBoard({ initial }: { initial: Board }) {
                   return (
                     <article
                       key={c.id}
-                      draggable
+                      draggable={!c.activeBookingAt}
                       onDragStart={() => setDragging(c.id)}
                       onDragEnd={() => { setDragging(null); setOver(null); }}
-                      className={`cursor-grab rounded-lg border border-black/10 bg-white p-3 shadow-sm transition active:cursor-grabbing ${
+                      className={`rounded-lg border border-black/10 bg-white p-3 shadow-sm transition ${
+                        c.activeBookingAt ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+                      } ${
                         dragging === c.id ? "opacity-40" : "hover:shadow-md"
                       }`}
                     >
