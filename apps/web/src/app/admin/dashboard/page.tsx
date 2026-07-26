@@ -210,8 +210,18 @@ export default async function VisaoGeralPage() {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile label="Leads" value={o.leads.current} icon={UserPlus} tint="bg-amber-50 text-amber-600">
-          <Delta trend={o.leads} periodDays={o.periodDays} />
+        <Tile
+          label="Novos contatos"
+          value={o.contacts.current}
+          hint={
+            o.leads.current > 0
+              ? `${o.leads.current} pelo formulário do site`
+              : "conversas novas no WhatsApp"
+          }
+          icon={UserPlus}
+          tint="bg-amber-50 text-amber-600"
+        >
+          <Delta trend={o.contacts} periodDays={o.periodDays} />
         </Tile>
         <Tile label="Agendamentos" value={o.bookings.current} icon={CalendarCheck} tint="bg-blue-50 text-blue-600">
           <Delta trend={o.bookings} periodDays={o.periodDays} />
@@ -237,7 +247,7 @@ export default async function VisaoGeralPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card title="Movimento" subtitle="Leads e agendamentos por dia (últimos 14 dias)">
+        <Card title="Movimento" subtitle="Novos contatos e agendamentos por dia (últimos 14 dias)">
           <MovimentoChart days={o.daily} />
         </Card>
 

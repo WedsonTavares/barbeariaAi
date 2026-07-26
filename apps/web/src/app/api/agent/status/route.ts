@@ -22,7 +22,10 @@ async function handle(phoneRaw: string, token: string | null) {
   if (!phone) return NextResponse.json({ error: "phone obrigatório" }, { status: 400 });
 
   const status = await services.conversationService.status(tenant.id, phone);
-  return NextResponse.json(status);
+  // tenantId/tenantSlug/conversationId são a identidade que o n8n usa para
+  // montar as chaves do Redis. Sem eles, memória e buffer ficavam só no
+  // telefone — e dois tenants com o mesmo número dividiriam o mesmo contexto.
+  return NextResponse.json({ ...status, tenantId: tenant.id, tenantSlug: tenant.slug });
 }
 
 export async function GET(req: Request) {

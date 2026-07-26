@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
-import { brl, fmtDate, waUrl } from "@/lib/format";
+import { brl, fmtDate, fmtDateTime, waUrl } from "@/lib/format";
 import { BOOKING_STATUS, PAYMENT_STATUS, label } from "@/lib/labels";
+import { stageUi } from "@/lib/stage";
+import { STAGE_ONLY_TAGS } from "@/lib/tags";
 
 export const dynamic = "force-dynamic";
+
+const SENDER: Record<string, string> = { CONTACT: "Cliente:", BOT: "🤖 IA:", AGENT: "🧑 Equipe:" };
+
+/** Etapas em que a reserva ainda está por acontecer (mesma régua do funil). */
+const RESERVA_ATIVA = ["CONFIRMED", "IN_DELIVERY", "MOUNTED"];
 
 export default async function FichaClientePage({ params }: { params: Promise<{ id: string }> }) {
   const { tenant } = await requireTenant();
@@ -25,6 +32,22 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
   const totalContratado = ativos.reduce((s, b) => s + Number(b.total), 0);
   const totalPago = ativos.reduce((s, b) => s + b.payments.reduce((p, x) => p + Number(x.amount), 0), 0);
   const emAberto = Math.max(0, totalContratado - totalPago);
+
+  // Desfecho é DERIVADO do que já está no banco (reserva + etapa), não um campo
+  // que alguém precisa lembrar de preencher — assim nunca fica desatualizado.
+  const conversa = customer.conversation;
+  const agora = new Date();
+  const proxima = ativos
+    .filter((b) => RESERVA_ATIVA.includes(b.status) && (b.pickupTime ?? b.eventDate) >= agora)
+    .sort((a, b) => (a.setupTime ?? a.eventDate).getTime() - (b.setupTime ?? b.eventDate).getTime())[0];
+  const ultima = ativos.find((b) => b.status === "FINISHED" || b.status === "PICKED_UP");
+  const desfecho = proxima
+    ? `Festa marcada para ${fmtDateTime(proxima.setupTime ?? proxima.eventDate)} — ${brl(proxima.total)} (${label(PAYMENT_STATUS, proxima.paymentStatus)}).`
+    : ultima
+      ? `Última festa em ${fmtDate(ultima.eventDate)}. Sem nova data marcada.`
+      : conversa?.stage === "SUPORTE_HUMANO"
+        ? "Em atendimento humano — ainda sem festa marcada."
+        : "Conversou, mas ainda não fechou festa.";
 
   return (
     <div className="max-w-3xl">
@@ -56,6 +79,75 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
           <div className={`text-xl font-extrabold ${emAberto > 0 ? "text-red-600" : ""}`}>{brl(emAberto)}</div>
         </div>
       </div>
+
+      <h2 className="mt-8 text-lg font-bold">Contexto do atendimento</h2>
+      {!conversa ? (
+        <p className="mt-3 rounded-2xl border border-black/5 bg-white p-4 text-sm text-[var(--color-muted)]">
+          Nenhuma conversa de WhatsApp vinculada a este cliente.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3 rounded-2xl border border-black/5 bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${stageUi(conversa.stage).chip}`}>
+              {stageUi(conversa.stage).label}
+            </span>
+            {conversa.botPaused && (
+              <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">IA pausada</span>
+            )}
+            {conversa.tags
+              .filter((t) => !STAGE_ONLY_TAGS.has(t))
+              .map((t) => (
+                <span key={t} className="rounded-full bg-[var(--color-surface)] px-2 py-1 text-xs font-semibold">{t}</span>
+              ))}
+            <Link
+              href={`/admin/conversas?c=${conversa.id}`}
+              className="ml-auto rounded-full border border-black/10 px-3 py-1 text-xs font-semibold hover:bg-[var(--color-surface)]"
+            >
+              Abrir conversa
+            </Link>
+          </div>
+
+          <div className="rounded-xl bg-[var(--color-surface)] p-3">
+            <div className="text-xs font-bold text-[var(--color-muted)]">📝 Resumo da IA</div>
+            {conversa.notes ? (
+              <>
+                <p className="mt-1 whitespace-pre-wrap text-sm">{conversa.notes}</p>
+                {conversa.notesAt && (
+                  <p className="mt-1 text-[11px] text-[var(--color-muted)]">Gravado em {fmtDateTime(conversa.notesAt)}</p>
+                )}
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-[var(--color-muted)]">
+                A IA ainda não gravou um resumo desta conversa.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <div className="text-xs font-bold text-[var(--color-muted)]">Desfecho</div>
+            <p className="mt-1 text-sm">{desfecho}</p>
+          </div>
+
+          {conversa.messages.length > 0 && (
+            <div>
+              <div className="text-xs font-bold text-[var(--color-muted)]">Últimas mensagens</div>
+              <ul className="mt-1 space-y-1.5">
+                {conversa.messages.map((m, i) => (
+                  <li key={`${m.createdAt.toISOString()}-${i}`} className="text-sm">
+                    <span className="text-xs font-semibold text-[var(--color-muted)]">{SENDER[m.sender] ?? m.sender}</span>{" "}
+                    <span className="whitespace-pre-wrap">{m.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <p className="text-[11px] text-[var(--color-muted)]">
+            Primeiro contato em {fmtDateTime(conversa.createdAt)} · última interação em {fmtDateTime(conversa.lastMessageAt)} ·{" "}
+            {conversa._count.messages} mensagen{conversa._count.messages === 1 ? "" : "s"}
+          </p>
+        </div>
+      )}
 
       <h2 className="mt-8 text-lg font-bold">Histórico de festas</h2>
       <div className="mt-3 space-y-3">

@@ -255,14 +255,25 @@ export const conversationService = {
       return !c.tags.some((t) => BOT_SILENCING_TAGS.includes(t));
     }),
 
-  /** Status do contato pro filtro inicial do n8n: se o bot pode falar + as tags. */
+  /**
+   * Status do contato pro filtro inicial do n8n: se o bot pode falar + as tags.
+   * Devolve também o `conversationId` — id único por (tenant, telefone). O n8n usa
+   * ele como chave da memória/buffer no Redis: dois tenants com o MESMO telefone
+   * têm ids diferentes, então não existe caminho para uma conversa vazar na outra.
+   */
   status: (tenantId: string, phone: string) =>
     withTenant(tenantId, async (tx) => {
       const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
       const tags = c?.tags ?? [];
       const botPaused = c?.botPaused ?? false;
       const silenced = botPaused || tags.some((t) => BOT_SILENCING_TAGS.includes(t));
-      return { canReply: !silenced, botPaused, tags, silencedBy: BOT_SILENCING_TAGS };
+      return {
+        canReply: !silenced,
+        botPaused,
+        tags,
+        silencedBy: BOT_SILENCING_TAGS,
+        conversationId: c?.id ?? null,
+      };
     }),
 
   /**

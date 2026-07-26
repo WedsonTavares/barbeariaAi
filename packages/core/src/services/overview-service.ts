@@ -29,6 +29,9 @@ export interface OverviewDay {
   key: string;
   /** "25/07" */
   label: string;
+  /** Conversas de WhatsApp abertas no dia — o funil de verdade entra por aqui. */
+  contacts: number;
+  /** Registros na tabela Lead (formulário do site / tool de lead da IA). */
   leads: number;
   bookings: number;
   aiBookings: number;
@@ -99,7 +102,7 @@ export const overviewService = {
       const chartStart = spDayRange(new Date(now.getTime() - (chartDays - 1) * DAY_MS)).start;
       const since = new Date(Math.min(previousStart.getTime(), chartStart.getTime()));
 
-      const [settings, leadRows, bookingRows, botConversations, conversations] = await Promise.all([
+      const [settings, leadRows, bookingRows, botConversations, conversations, newConversations] = await Promise.all([
         tx.tenantSettings.findUnique({ where: { tenantId }, select: { businessHours: true } }),
         tx.lead.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } }),
         tx.booking.findMany({
@@ -115,13 +118,20 @@ export const overviewService = {
           where: { lastMessageAt: { gte: periodStart } },
           select: { tags: true, botPaused: true, unread: true },
         }),
+        // Contato novo = conversa aberta. É o topo do funil real: a tabela Lead só
+        // recebe formulário do site e a tool de lead da IA, então sozinha ela dá 0.
+        tx.conversation.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } }),
       ]);
 
       const hours = parseBusinessHours(settings?.businessHours);
       const inPeriod = (at: Date) => at >= periodStart;
       const inPrevious = (at: Date) => at >= previousStart && at < periodStart;
 
-      // ── Leads ────────────────────────────────────────────────────────────────
+      // ── Topo do funil ────────────────────────────────────────────────────────
+      const contacts = trend(
+        newConversations.filter((c) => inPeriod(c.createdAt)).length,
+        newConversations.filter((c) => inPrevious(c.createdAt)).length
+      );
       const leads = trend(
         leadRows.filter((l) => inPeriod(l.createdAt)).length,
         leadRows.filter((l) => inPrevious(l.createdAt)).length
@@ -152,7 +162,11 @@ export const overviewService = {
       for (let i = chartDays - 1; i >= 0; i--) {
         const { dayKey } = spClock(new Date(now.getTime() - i * DAY_MS));
         const [, month, day] = dayKey.split("-");
-        buckets.set(dayKey, { key: dayKey, label: `${day}/${month}`, leads: 0, bookings: 0, aiBookings: 0 });
+        buckets.set(dayKey, { key: dayKey, label: `${day}/${month}`, contacts: 0, leads: 0, bookings: 0, aiBookings: 0 });
+      }
+      for (const c of newConversations) {
+        const b = buckets.get(spClock(c.createdAt).dayKey);
+        if (b) b.contacts++;
       }
       for (const l of leadRows) {
         const b = buckets.get(spClock(l.createdAt).dayKey);
@@ -168,6 +182,7 @@ export const overviewService = {
       return {
         periodDays: days,
         businessHours: hours,
+        contacts,
         leads,
         bookings,
         ai: {

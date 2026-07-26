@@ -8,13 +8,13 @@ import type { OverviewDay } from "@diny/core";
  */
 
 const SERIES = [
-  { key: "leads", label: "Leads", color: "#d97706" },
+  { key: "contacts", label: "Novos contatos", color: "#d97706" },
   { key: "bookings", label: "Agendamentos", color: "#2563eb" },
 ] as const;
 
 export function MovimentoChart({ days }: { days: OverviewDay[] }) {
-  const max = Math.max(1, ...days.map((d) => Math.max(d.leads, d.bookings)));
-  const vazio = days.every((d) => d.leads === 0 && d.bookings === 0);
+  const max = Math.max(1, ...days.map((d) => Math.max(d.contacts, d.bookings)));
+  const vazio = days.every((d) => d.contacts === 0 && d.bookings === 0);
 
   return (
     <div>
@@ -48,7 +48,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                   key={d.key}
                   tabIndex={0}
                   className="group relative flex h-full flex-1 items-end justify-center gap-[2px] rounded-t outline-none focus-visible:bg-black/[0.03]"
-                  aria-label={`${d.label}: ${d.leads} leads, ${d.bookings} agendamentos`}
+                  aria-label={`${d.label}: ${d.contacts} novos contatos, ${d.bookings} agendamentos`}
                 >
                   {SERIES.map((s) => {
                     const v = d[s.key];
@@ -65,7 +65,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                     );
                   })}
                   <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--color-ink)] px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block group-focus-visible:block">
-                    {d.label} · {d.leads} lead{d.leads === 1 ? "" : "s"} · {d.bookings} agend.
+                    {d.label} · {d.contacts} contato{d.contacts === 1 ? "" : "s"} · {d.bookings} agend.
                     {d.aiBookings > 0 && ` (${d.aiBookings} 🤖)`}
                   </div>
                 </div>
@@ -92,7 +92,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
             <thead className="text-left text-[var(--color-muted)]">
               <tr>
                 <th className="py-1 font-medium">Dia</th>
-                <th className="py-1 text-right font-medium">Leads</th>
+                <th className="py-1 text-right font-medium">Contatos</th>
                 <th className="py-1 text-right font-medium">Agendamentos</th>
                 <th className="py-1 text-right font-medium">Pela IA</th>
               </tr>
@@ -101,7 +101,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
               {days.map((d) => (
                 <tr key={d.key} className="border-t border-black/5">
                   <td className="py-1">{d.label}</td>
-                  <td className="py-1 text-right tabular-nums">{d.leads}</td>
+                  <td className="py-1 text-right tabular-nums">{d.contacts}</td>
                   <td className="py-1 text-right tabular-nums">{d.bookings}</td>
                   <td className="py-1 text-right tabular-nums">{d.aiBookings}</td>
                 </tr>
