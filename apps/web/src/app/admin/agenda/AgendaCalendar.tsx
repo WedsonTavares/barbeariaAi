@@ -25,10 +25,18 @@ const key = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pa
 const addDays = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n));
 
 /** Calendário da agenda: dia/semana/mês, cores por status e reserva em tela cheia. */
-export function AgendaCalendar({ events, todayKey }: { events: Evt[]; todayKey: string }) {
+export function AgendaCalendar({
+  events,
+  todayKey,
+  initialDay,
+}: {
+  events: Evt[];
+  todayKey: string;
+  initialDay: string;
+}) {
   const [view, setView] = useState<View>("mes");
   const [cursor, setCursor] = useState(() => {
-    const [y, m, d] = todayKey.split("-").map(Number);
+    const [y, m, d] = initialDay.split("-").map(Number);
     return new Date(Date.UTC(y!, m! - 1, d!));
   });
   const [openId, setOpenId] = useState<string | null>(null);

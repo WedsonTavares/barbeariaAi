@@ -10,7 +10,12 @@ const spDay = (d: Date) => new Date(d.getTime() - OFFSET_MS).toISOString().slice
 /** Date (UTC) → "HH:mm" no horário de São Paulo. */
 const spTime = (d: Date | null) => (d ? new Date(d.getTime() - OFFSET_MS).toISOString().slice(11, 16) : null);
 
-export default async function AgendaPage() {
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ data?: string }>;
+}) {
+  const { data } = await searchParams;
   const { tenant } = await requireTenant();
   const bookings = await services.bookingService.list(tenant.id);
 
@@ -25,5 +30,8 @@ export default async function AgendaPage() {
     toys: b.items?.map((i) => i.toy.name) ?? [],
   }));
 
-  return <AgendaCalendar events={events} todayKey={spDay(new Date())} />;
+  const todayKey = spDay(new Date());
+  const initialDay = data && events.some((event) => event.day === data) ? data : todayKey;
+
+  return <AgendaCalendar events={events} todayKey={todayKey} initialDay={initialDay} />;
 }

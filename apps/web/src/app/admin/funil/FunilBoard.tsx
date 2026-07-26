@@ -2,7 +2,7 @@
 import { useState, useTransition, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, CalendarDays, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { TAG_CATALOG, STAGE_ONLY_TAGS, normalizeTag } from "@/lib/tags";
 import { moveCardAction, toggleTagFromFunilAction } from "./actions";
 
@@ -58,6 +58,20 @@ const fullDateTime = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "short",
   timeStyle: "short",
 });
+
+const agendaDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const agendaDayKey = (iso: string) => {
+  const parts = agendaDay.formatToParts(new Date(iso));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+};
 
 const fmtBooking = (iso: string) => {
   const value = new Date(iso);
@@ -340,12 +354,16 @@ export function FunilBoard({ initial }: { initial: Board }) {
                           </Link>
                         )}
                         {c.activeBookingAt && (
-                          <span
-                            className="whitespace-nowrap text-[10px] font-semibold text-emerald-700"
-                            title={`Reserva ativa: ${fullDateTime.format(new Date(c.activeBookingAt))}`}
+                          <Link
+                            href={`/admin/agenda?data=${agendaDayKey(c.activeBookingAt)}`}
+                            draggable={false}
+                            className="flex items-center gap-0.5 whitespace-nowrap text-[10px] font-semibold text-emerald-700 hover:underline"
+                            title={`Abrir na agenda: ${fullDateTime.format(new Date(c.activeBookingAt))}`}
+                            aria-label={`Abrir reserva de ${fullDateTime.format(new Date(c.activeBookingAt))} na agenda`}
                           >
-                            {fmtBooking(c.activeBookingAt)}
-                          </span>
+                            <span>{fmtBooking(c.activeBookingAt)}</span>
+                            <CalendarDays className="size-3" />
+                          </Link>
                         )}
                         <span className="ml-auto" title={c.botPaused ? "IA pausada" : "IA ativa"}>
                           {c.botPaused ? <Pause className="size-4 text-rose-500" /> : <Bot className="size-4 text-sky-500" />}
