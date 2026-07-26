@@ -257,6 +257,8 @@ export function FunilBoard({ initial }: { initial: Board }) {
               }`}>
                 {cards.map((c) => {
                   const livres = c.tags.filter((t) => !STAGE_TAGS.includes(t));
+                  const iaDesligada = c.tags.includes("desligar-ia");
+                  const outrasTags = livres.filter((tag) => tag !== "desligar-ia");
                   return (
                     <article
                       key={c.id}
@@ -271,13 +273,20 @@ export function FunilBoard({ initial }: { initial: Board }) {
                     >
                       {/* título + última atividade */}
                       <div className="flex items-start gap-2">
-                        <Link
-                          href={`/admin/conversas?c=${c.id}`}
-                          draggable={false}
-                          className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:underline"
-                        >
-                          {c.contactName || c.phone}
-                        </Link>
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                          <Link
+                            href={`/admin/conversas?c=${c.id}`}
+                            draggable={false}
+                            className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:underline"
+                          >
+                            {c.contactName || c.phone}
+                          </Link>
+                          {iaDesligada && (
+                            <span className="shrink-0 rounded bg-red-50 px-1 py-0.5 text-[9px] font-bold leading-none text-red-600">
+                              IA desligada
+                            </span>
+                          )}
+                        </div>
                         <span
                           suppressHydrationWarning
                           className="shrink-0 text-[10px] font-medium text-[var(--color-muted)]"
@@ -286,17 +295,6 @@ export function FunilBoard({ initial }: { initial: Board }) {
                           {fmtActivity(c.lastMessageAt)}
                         </span>
                       </div>
-
-                      {/* tags como chips — sempre visíveis */}
-                      {livres.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {livres.map((t) => (
-                            <span key={t} className="rounded border border-black/10 px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-muted)]">
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      )}
 
                       {/* linha de dado */}
                       <div className="mt-2 flex items-center justify-between text-xs">
@@ -337,9 +335,9 @@ export function FunilBoard({ initial }: { initial: Board }) {
                           className={`relative hover:text-[var(--color-primary)] ${livres.length ? "text-[var(--color-primary)]" : ""}`}
                         >
                           <Tag className="size-4" />
-                          {livres.length > 0 && (
+                          {outrasTags.length > 0 && (
                             <span className="absolute -right-1.5 -top-1.5 rounded-full bg-[var(--color-primary)] px-1 text-[9px] font-bold leading-3 text-white">
-                              {livres.length}
+                              {outrasTags.length}
                             </span>
                           )}
                         </button>
