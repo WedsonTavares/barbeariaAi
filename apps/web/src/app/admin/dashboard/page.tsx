@@ -1,52 +1,333 @@
+import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
+import type { OverviewTrend } from "@diny/core";
 import { brl, fmtDateTime } from "@/lib/format";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { MovimentoChart } from "./MovimentoChart";
+import {
+  ArrowRight,
+  Bot,
+  CalendarCheck,
+  ChevronRight,
+  Moon,
+  MessagesSquare,
+  TrendingDown,
+  TrendingUp,
+  UserPlus,
+  Wrench,
+} from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-function Card({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
+const pct = (n: number | null, digits = 0) =>
+  n === null ? "—" : `${n.toLocaleString("pt-BR", { maximumFractionDigits: digits })}%`;
+
+function Delta({ trend, periodDays }: { trend: OverviewTrend; periodDays: number }) {
+  if (trend.changePct === null) {
+    return (
+      <span className="text-xs text-[var(--color-muted)]">
+        {trend.previous === 0 && trend.current > 0 ? "primeiros do período" : `nada nos ${periodDays} dias anteriores`}
+      </span>
+    );
+  }
+  const up = trend.changePct >= 0;
+  const Icon = up ? TrendingUp : TrendingDown;
   return (
-    <div className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
-      <div className="text-sm text-[var(--color-muted)]">{label}</div>
-      <div className="mt-1 text-2xl font-extrabold">{value}</div>
-      {hint && <div className="mt-1 text-xs text-[var(--color-muted)]">{hint}</div>}
+    <span className={`flex items-center gap-1 text-xs font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>
+      <Icon className="size-3.5" aria-hidden />
+      {up ? "+" : ""}
+      {pct(trend.changePct, 1)}
+      <span className="font-normal text-[var(--color-muted)]">vs. {periodDays}d anteriores</span>
+    </span>
+  );
+}
+
+function Tile({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tint,
+  children,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tint: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-full flex-col rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm text-[var(--color-muted)]">{label}</div>
+          <div className="mt-1 text-3xl font-extrabold tabular-nums">{value}</div>
+        </div>
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${tint}`} aria-hidden>
+          <Icon className="size-5" />
+        </span>
+      </div>
+      {/* Delta e detalhe ficam colados no rodapé pra os 4 cards baterem a linha. */}
+      <div className="mt-auto pt-3">
+        {children}
+        {hint && <div className="mt-1 text-xs text-[var(--color-muted)]">{hint}</div>}
+      </div>
     </div>
   );
 }
 
-export default async function DashboardPage() {
+function Card({
+  title,
+  subtitle,
+  href,
+  linkLabel,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  href?: string;
+  linkLabel?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs text-[var(--color-muted)]">{subtitle}</p>}
+        </div>
+        {href && (
+          <Link
+            href={href}
+            className="flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--color-primary)] hover:underline"
+          >
+            {linkLabel ?? "Ver"} <ArrowRight className="size-3.5" />
+          </Link>
+        )}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+/** Linha "métrica: valor" do painel da IA. */
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-t border-black/5 py-2 first:border-t-0 first:pt-0">
+      <span className="text-sm text-[var(--color-muted)]">
+        {label}
+        {hint && <span className="block text-[11px]">{hint}</span>}
+      </span>
+      <span className="shrink-0 font-bold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+/** Item acionável: só aparece com contagem > 0 — lista vazia é boa notícia. */
+function Acao({
+  icon: Icon,
+  label,
+  count,
+  href,
+  tint,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  count: number;
+  href: string;
+  tint: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-xl border border-black/5 p-3 hover:bg-[var(--color-surface)]"
+    >
+      <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${tint}`} aria-hidden>
+        <Icon className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1 text-sm font-semibold">{label}</span>
+      <span className="text-lg font-extrabold tabular-nums">{count}</span>
+      <ChevronRight className="size-4 shrink-0 text-[var(--color-muted)]" aria-hidden />
+    </Link>
+  );
+}
+
+export default async function VisaoGeralPage() {
   const { tenant } = await requireTenant();
-  const [s, m] = await Promise.all([
+  const [o, s, m] = await Promise.all([
+    services.overviewService.summary(tenant.id),
     services.financeService.dashboard(tenant.id),
     services.financeService.monthSummary(tenant.id),
   ]);
+
+  const expediente = `${o.businessHours.start}–${o.businessHours.end}`;
+  const acoes = [
+    {
+      key: "conversas",
+      icon: MessagesSquare,
+      label: "Conversas esperando resposta",
+      count: o.ai.waiting,
+      href: "/admin/conversas",
+      tint: "bg-rose-50 text-rose-600",
+    },
+    {
+      key: "sinais",
+      icon: CalendarCheck,
+      label: "Reservas com sinal pendente",
+      count: s.sinaisPendentes,
+      href: "/admin/reservas",
+      tint: "bg-amber-50 text-amber-600",
+    },
+    {
+      key: "leads",
+      icon: UserPlus,
+      label: "Leads em aberto no funil",
+      count: s.orcamentosAbertos,
+      href: "/admin/funil",
+      tint: "bg-sky-50 text-sky-600",
+    },
+    {
+      key: "manutencao",
+      icon: Wrench,
+      label: "Brinquedos em manutenção",
+      count: s.emManutencao,
+      href: "/admin/brinquedos",
+      tint: "bg-violet-50 text-violet-600",
+    },
+  ].filter((a) => a.count > 0);
+
   return (
-    <div>
+    <div className="mx-auto max-w-6xl space-y-6">
       <AutoRefresh seconds={60} />
-      <h1 className="text-2xl font-extrabold">Dashboard</h1>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card label="Faturamento do mês" value={brl(m.faturamentoBruto)} />
-        <Card label="Lucro estimado" value={brl(m.lucroEstimado)} hint={`Custos: ${brl(m.custos)}`} />
-        <Card label="A receber" value={brl(m.aReceber)} />
-        <Card label="Reservas hoje" value={s.reservasHoje} />
-        <Card label="Sinais pendentes" value={s.sinaisPendentes} />
-        <Card label="Orçamentos abertos" value={s.orcamentosAbertos} />
-        <Card label="Brinquedos disponíveis" value={s.brinquedosDisponiveis} />
-        <Card label="Em manutenção" value={s.emManutencao} />
-        <Card label="Ticket médio" value={brl(m.ticketMedio)} />
+
+      <header>
+        <h1 className="text-2xl font-extrabold">Visão Geral</h1>
+        <p className="mt-1 text-sm text-[var(--color-muted)]">
+          {tenant.name} · últimos {o.periodDays} dias · atualiza sozinho a cada minuto
+        </p>
+      </header>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Tile label="Leads" value={o.leads.current} icon={UserPlus} tint="bg-amber-50 text-amber-600">
+          <Delta trend={o.leads} periodDays={o.periodDays} />
+        </Tile>
+        <Tile label="Agendamentos" value={o.bookings.current} icon={CalendarCheck} tint="bg-blue-50 text-blue-600">
+          <Delta trend={o.bookings} periodDays={o.periodDays} />
+        </Tile>
+        <Tile
+          label="Fechados pela IA"
+          value={o.ai.bookings.current}
+          hint={`${pct(o.ai.sharePct)} dos agendamentos · ${brl(o.ai.revenue)}`}
+          icon={Bot}
+          tint="bg-emerald-50 text-emerald-600"
+        >
+          <Delta trend={o.ai.bookings} periodDays={o.periodDays} />
+        </Tile>
+        <Tile
+          label="Fora do expediente"
+          value={o.ai.afterHours.current}
+          hint={`${brl(o.ai.afterHoursRevenue)} fechados pela IA fora de ${expediente}`}
+          icon={Moon}
+          tint="bg-violet-50 text-violet-600"
+        >
+          <Delta trend={o.ai.afterHours} periodDays={o.periodDays} />
+        </Tile>
       </div>
 
-      <h2 className="mt-10 text-lg font-bold">Próximas retiradas (48h)</h2>
-      <div className="mt-3 space-y-2">
-        {s.proximasRetiradas.length === 0 && <p className="text-[var(--color-muted)]">Nada nas próximas 48h.</p>}
-        {s.proximasRetiradas.map((b) => (
-          <div key={b.id} className="flex items-center justify-between rounded-xl border border-black/5 bg-white p-3">
-            <span className="font-semibold">{b.customer.name}</span>
-            <span className="text-sm text-[var(--color-muted)]">{b.pickupTime && fmtDateTime(b.pickupTime)}</span>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <Card title="Movimento" subtitle="Leads e agendamentos por dia (últimos 14 dias)">
+          <MovimentoChart days={o.daily} />
+        </Card>
+
+        <Card title="Efetividade da IA" subtitle={`Nos últimos ${o.periodDays} dias`} href="/admin/conversas" linkLabel="Conversas">
+          <div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-sm text-[var(--color-muted)]">Conversas que viraram festa</span>
+              <span className="text-xl font-extrabold tabular-nums">{pct(o.ai.conversionPct, 1)}</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-surface)]">
+              <div
+                className="h-full rounded-full bg-[var(--color-primary)]"
+                style={{ width: `${Math.min(100, o.ai.conversionPct ?? 0)}%` }}
+                aria-hidden
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-[var(--color-muted)]">
+              {o.ai.bookings.current} reserva{o.ai.bookings.current === 1 ? "" : "s"} em {o.ai.attended} conversa
+              {o.ai.attended === 1 ? "" : "s"} atendidas
+            </p>
           </div>
-        ))}
+
+          <div className="mt-4">
+            <Stat label="Conversas atendidas pela IA" value={String(o.ai.attended)} />
+            <Stat label="Resolvidas sem humano" value={pct(o.ai.autonomyPct)} hint={`${o.ai.escalated} passaram para a equipe`} />
+            <Stat label="Receita fechada pela IA" value={brl(o.ai.revenue)} />
+            <Stat label="Fora do expediente" value={`${o.ai.afterHours.current} · ${brl(o.ai.afterHoursRevenue)}`} hint={`Expediente ${expediente}`} />
+          </div>
+        </Card>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Próximas 48 horas" subtitle="Retiradas confirmadas" href="/admin/agenda" linkLabel="Agenda">
+          {s.proximasRetiradas.length === 0 ? (
+            <p className="text-sm text-[var(--color-muted)]">Nada nas próximas 48h.</p>
+          ) : (
+            <ul className="space-y-2">
+              {s.proximasRetiradas.map((b) => (
+                <li key={b.id}>
+                  <Link
+                    href={`/admin/reservas/${b.id}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-black/5 p-3 hover:bg-[var(--color-surface)]"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{b.customer.name}</span>
+                      {b.neighborhood && (
+                        <span className="block truncate text-xs text-[var(--color-muted)]">{b.neighborhood}</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-sm font-semibold tabular-nums">
+                        {b.pickupTime && fmtDateTime(b.pickupTime)}
+                      </span>
+                      <span className="block text-xs text-[var(--color-muted)]">{brl(b.total)}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card title="Precisa de você" subtitle="O que está parado esperando uma ação">
+          {acoes.length === 0 ? (
+            <p className="text-sm text-[var(--color-muted)]">Nada pendente. Tudo em dia. 🎉</p>
+          ) : (
+            <div className="space-y-2">
+              {acoes.map(({ key, ...a }) => (
+                <Acao key={key} {...a} />
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card title="Este mês" subtitle="Pagamentos recebidos, custos lançados e o que falta entrar" href="/admin/financeiro" linkLabel="Financeiro">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { t: "Faturamento", v: brl(m.faturamentoBruto) },
+            { t: "Lucro estimado", v: brl(m.lucroEstimado) },
+            { t: "A receber", v: brl(m.aReceber) },
+            { t: "Ticket médio", v: brl(m.ticketMedio) },
+          ].map((c) => (
+            <div key={c.t}>
+              <div className="text-xs text-[var(--color-muted)]">{c.t}</div>
+              <div className="mt-0.5 text-lg font-extrabold tabular-nums">{c.v}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

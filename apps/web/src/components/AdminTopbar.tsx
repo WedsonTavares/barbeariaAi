@@ -16,7 +16,7 @@ export function AdminTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
       >
         <Bell className="size-5" />
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-red-500 px-1 text-[10px] font-bold leading-4 text-white">
+          <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-500 px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-white">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}

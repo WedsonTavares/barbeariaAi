@@ -32,6 +32,21 @@ export function spDayRange(now = new Date()): { start: Date; end: Date } {
   return { start, end: new Date(start.getTime() + 86_400_000) };
 }
 
+/**
+ * Relógio de SP para `d`: chave do dia ("2026-07-25"), hora, minuto e dia da
+ * semana (0 = domingo). Usado para agrupar por dia e para saber se um instante
+ * caiu dentro do expediente — sempre no fuso do negócio, nunca no do servidor.
+ */
+export function spClock(d: Date): { dayKey: string; hour: number; minute: number; weekday: number } {
+  const shifted = new Date(d.getTime() - OFFSET_MS);
+  return {
+    dayKey: shifted.toISOString().slice(0, 10),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+    weekday: shifted.getUTCDay(),
+  };
+}
+
 /** Intervalo [início, fim) do MÊS de SP que contém `ref`. */
 export function spMonthRange(ref = new Date()): { start: Date; end: Date } {
   const { y, m } = spParts(ref);
