@@ -195,6 +195,22 @@ export const agentSupportInput = z.object({
 export type AgentSupportInput = z.infer<typeof agentSupportInput>;
 
 /**
+ * Ferramenta "solicitar cancelamento": o cliente pede pra desmarcar pelo WhatsApp.
+ *
+ * A IA NÃO cancela — só registra o pedido e chama a equipe. Cancelar mexe em sinal
+ * já pago e em política de devolução; é decisão de gente, não de modelo. Sem isto,
+ * o pedido morria na conversa e a data continuava ocupada na agenda.
+ */
+export const agentCancelRequestInput = z.object({
+  phone: z.string().min(8).max(20),
+  name: z.string().max(120).optional(),
+  /** Data da festa que ele quer desmarcar, se disse qual (AAAA-MM-DD). */
+  date: agentDateText.optional(),
+  reason: z.string().max(300).optional(),
+});
+export type AgentCancelRequestInput = z.infer<typeof agentCancelRequestInput>;
+
+/**
  * Ferramenta "agendar": a IA fecha a reserva de verdade no nosso banco.
  * A checagem de conflito do banco (autoridade) rejeita reserva dupla mesmo que a IA
  * tenha errado a disponibilidade. Brinquedos vêm por NOME (o que a IA obteve da

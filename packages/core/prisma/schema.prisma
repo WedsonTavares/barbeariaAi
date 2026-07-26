@@ -123,6 +123,8 @@ enum NotificationType {
   BOOKING_PICKUP_NOW
   BOOKING_PICKUP_DELAYED
   BOOKING_RESCHEDULED
+  /// Cliente pediu para desmarcar pelo WhatsApp. A IA só registra — quem cancela é a equipe.
+  BOOKING_CANCEL_REQUESTED
   PAYMENT_PENDING
   MAINTENANCE_ALERT
   GOOGLE_CALENDAR_SYNC_FAILED
