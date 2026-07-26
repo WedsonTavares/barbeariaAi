@@ -12,9 +12,14 @@ dist
 credenciais.md
 
 # Docs internas / workflows n8n (incl. modelos de terceiros) — não versionar
-docs/
+# (exports de workflow do n8n têm token em texto puro — nunca comitar esses)
+docs/*
 
 # Nenhum .md no git (contexto/planejamento ficam só local)
 *.md
 
 .vercel
+
+# Exceção: base de conhecimento da IA não tem segredo nenhum, vale versionar
+# e sincronizar entre máquinas — ao contrário do resto de docs/.
+!docs/base_de_dados.md
