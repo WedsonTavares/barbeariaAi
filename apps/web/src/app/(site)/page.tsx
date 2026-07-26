@@ -39,7 +39,7 @@ function instagramHref(v?: string | null) {
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await resolveTenant();
-  if (!tenant) return { title: "Diny — Locação de Brinquedos" };
+  if (!tenant) return { title: "Diny Locação de Brinquedos" };
   const settings = await services.tenantService.getSettings(tenant.id);
   const city = settings?.city ? ` em ${settings.city}` : "";
   return {

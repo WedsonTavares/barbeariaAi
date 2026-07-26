@@ -3,7 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Diny — Locação de Brinquedos",
+  title: "Diny Locação de Brinquedos",
   description: "Plataforma multi-tenant de locação de brinquedos de festa.",
 };
 
