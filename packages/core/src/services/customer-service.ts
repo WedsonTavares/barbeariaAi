@@ -45,11 +45,23 @@ export type CustomerDirectoryEntry = {
   leadStatus: string | null;
   createdAt: Date;
   lastActivityAt: Date;
+  archived: boolean;
 };
 
 export type CustomerRemovalResult =
   | { removed: true; replacementId: string | null }
   | { removed: false; reason: "NOT_FOUND" | "BOOKINGS" | "HISTORY" | "DATA" };
+
+/**
+ * Uma linha do diretório pode ser sustentada por até três registros do mesmo
+ * telefone (cadastro, conversa e lead). Arquivar/restaurar age nos três juntos —
+ * senão a pessoa sumiria de Clientes mas continuaria no inbox e no funil.
+ */
+export type DirectoryTarget = {
+  customerId?: string | null;
+  conversationId?: string | null;
+  leadId?: string | null;
+};
 
 export const customerService = {
   list: (tenantId: string) =>
@@ -58,11 +70,16 @@ export const customerService = {
    * Diretório de pessoas do painel. Customer continua sendo a entidade usada por
    * reservas; aqui apenas reunimos também Conversation e Lead pelo telefone
    * normalizado para que um contato novo não suma da tela de Clientes.
+   *
+   * `archived: true` mostra a lixeira em vez da lista ativa. Os dois lados usam a
+   * mesma montagem — o que muda é só o filtro de `archivedAt`.
    */
-  directory: (tenantId: string): Promise<CustomerDirectoryEntry[]> =>
+  directory: (tenantId: string, { archived = false } = {}): Promise<CustomerDirectoryEntry[]> =>
     withTenant(tenantId, async (tx) => {
+      const archivedAt = archived ? { not: null } : null;
       const [customers, conversations, leads] = await Promise.all([
         tx.customer.findMany({
+          where: { archivedAt },
           orderBy: { createdAt: "desc" },
           select: {
             id: true,
@@ -77,6 +94,7 @@ export const customerService = {
           },
         }),
         tx.conversation.findMany({
+          where: { archivedAt },
           orderBy: { lastMessageAt: "desc" },
           select: {
             id: true,
@@ -89,6 +107,7 @@ export const customerService = {
           },
         }),
         tx.lead.findMany({
+          where: { archivedAt },
           orderBy: { createdAt: "desc" },
           select: {
             id: true,
@@ -164,6 +183,7 @@ export const customerService = {
           leadStatus: lead?.status ?? null,
           createdAt: customer.createdAt,
           lastActivityAt: latestDate(customer.createdAt, conversation?.lastMessageAt, lead?.createdAt),
+          archived,
         };
       });
 
@@ -195,6 +215,7 @@ export const customerService = {
           leadStatus: lead?.status ?? null,
           createdAt: conversation.createdAt,
           lastActivityAt: latestDate(conversation.lastMessageAt, lead?.createdAt),
+          archived,
         });
       }
 
@@ -229,6 +250,7 @@ export const customerService = {
           leadStatus: lead.status,
           createdAt: lead.createdAt,
           lastActivityAt: lead.createdAt,
+          archived,
         });
       }
 
@@ -364,6 +386,51 @@ export const customerService = {
       }
 
       return updated;
+    }),
+
+  /**
+   * Arquiva a pessoa: some do painel (Clientes, inbox e funil) sem apagar linha
+   * nenhuma — reservas, mensagens e leads continuam lá. É a saída segura para
+   * contato errado, teste e spam, já que excluir de verdade esbarra no histórico.
+   *
+   * Age nos três registros do mesmo telefone de uma vez (ver `DirectoryTarget`).
+   * Uma mensagem nova do contato desarquiva a conversa sozinha (ver
+   * `recordMessage` no conversation-service) — arquivar esconde, não bloqueia.
+   */
+  archive: (tenantId: string, target: DirectoryTarget, at = new Date()) =>
+    withTenant(tenantId, async (tx) => {
+      const archivedAt = at;
+      const [customer, conversation, lead] = await Promise.all([
+        target.customerId
+          ? tx.customer.updateMany({ where: { id: target.customerId }, data: { archivedAt } })
+          : null,
+        target.conversationId
+          ? tx.conversation.updateMany({ where: { id: target.conversationId }, data: { archivedAt } })
+          : null,
+        target.leadId
+          ? tx.lead.updateMany({ where: { id: target.leadId }, data: { archivedAt } })
+          : null,
+      ]);
+      const touched = (customer?.count ?? 0) + (conversation?.count ?? 0) + (lead?.count ?? 0);
+      return { archived: touched > 0, touched };
+    }),
+
+  /** Desfaz o arquivamento (botão "Restaurar" da lixeira). */
+  restore: (tenantId: string, target: DirectoryTarget) =>
+    withTenant(tenantId, async (tx) => {
+      const [customer, conversation, lead] = await Promise.all([
+        target.customerId
+          ? tx.customer.updateMany({ where: { id: target.customerId }, data: { archivedAt: null } })
+          : null,
+        target.conversationId
+          ? tx.conversation.updateMany({ where: { id: target.conversationId }, data: { archivedAt: null } })
+          : null,
+        target.leadId
+          ? tx.lead.updateMany({ where: { id: target.leadId }, data: { archivedAt: null } })
+          : null,
+      ]);
+      const touched = (customer?.count ?? 0) + (conversation?.count ?? 0) + (lead?.count ?? 0);
+      return { restored: touched > 0, touched };
     }),
 
   /**

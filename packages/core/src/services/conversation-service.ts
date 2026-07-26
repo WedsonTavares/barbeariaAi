@@ -28,6 +28,65 @@ export const STAGE_TAG: Record<ConversationStage, string | null> = {
 
 const ALL_STAGE_TAGS = Object.values(STAGE_TAG).filter((t): t is string => Boolean(t));
 
+/** Reservas ainda por acontecer, indexadas pelos dois jeitos de achar o dono. */
+type ActiveBookings = { byCustomer: Map<string, Date>; byPhone: Map<string, Date> };
+
+const NO_ACTIVE_BOOKINGS: ActiveBookings = { byCustomer: new Map(), byPhone: new Map() };
+
+/**
+ * Carrega as reservas ativas (confirmada/em entrega/montada e ainda não retirada).
+ * É a base para derivar AGENDADO na leitura, em vez de confiar no `stage` gravado:
+ * a festa acontecer, ser cancelada ou o horário passar não escreve no banco.
+ */
+async function loadActiveBookings(tx: Tx, now: Date): Promise<ActiveBookings> {
+  const bookings = await tx.booking.findMany({
+    where: { status: { in: ["CONFIRMED", "IN_DELIVERY", "MOUNTED"] }, pickupTime: { gte: now } },
+    orderBy: [{ setupTime: "asc" }, { eventDate: "asc" }, { id: "asc" }],
+    select: {
+      customerId: true,
+      eventDate: true,
+      setupTime: true,
+      customer: { select: { phone: true } },
+    },
+  });
+  const byCustomer = new Map<string, Date>();
+  const byPhone = new Map<string, Date>();
+  for (const booking of bookings) {
+    const at = booking.setupTime ?? booking.eventDate;
+    if (!byCustomer.has(booking.customerId)) byCustomer.set(booking.customerId, at);
+    const phone = customerPhoneKey(booking.customer.phone);
+    if (!byPhone.has(phone)) byPhone.set(phone, at);
+  }
+  return { byCustomer, byPhone };
+}
+
+/** Data da próxima festa desta conversa (pelo vínculo ou pelo telefone), se houver. */
+function activeBookingAt(
+  row: { phone: string; customerId?: string | null },
+  active: ActiveBookings
+): Date | null {
+  return (
+    (row.customerId ? active.byCustomer.get(row.customerId) : undefined) ??
+    active.byPhone.get(customerPhoneKey(row.phone)) ??
+    null
+  );
+}
+
+/**
+ * Etapa exibida. AGENDADO só vale enquanto existe reserva ativa — sem ela, o card
+ * volta para o fluxo natural (Suporte se a tag humana estiver marcada, senão IA).
+ * Regra única para Funil, inbox e detalhe do contato: a etapa não fica "presa"
+ * em Agendado depois que a festa passou ou foi cancelada.
+ */
+function displayStage(
+  row: { stage: ConversationStage; tags: string[] },
+  bookingAt: Date | null
+): ConversationStage {
+  if (bookingAt) return "AGENDADO";
+  if (row.stage !== "AGENDADO") return row.stage;
+  return row.tags.includes("atendimento-humano") ? "SUPORTE_HUMANO" : "IA_ATENDENDO";
+}
+
 async function lockConversation(tx: Tx, id: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`conversation-tag:${id}`}))`;
 }
@@ -115,7 +174,9 @@ export async function recordMessage(
     update: {
       lastMessageAt: now,
       ...(input.contactName ? { contactName: input.contactName } : {}),
-      ...(input.sender === "CONTACT" ? { unread: { increment: 1 } } : {}),
+      // Contato arquivado que volta a falar reaparece no inbox. Arquivar esconde,
+      // não bloqueia — senão uma mensagem nova ficaria invisível para a equipe.
+      ...(input.sender === "CONTACT" ? { unread: { increment: 1 }, archivedAt: null } : {}),
     },
   });
   await tx.message.create({
@@ -125,14 +186,27 @@ export async function recordMessage(
 }
 
 export const conversationService = {
-  /** Lista de conversas (mais recentes primeiro) pro inbox. */
-  list: (tenantId: string) =>
-    withTenant(tenantId, (tx) =>
-      tx.conversation.findMany({ orderBy: { lastMessageAt: "desc" }, take: 100 })
-    ),
+  /**
+   * Lista de conversas (mais recentes primeiro) pro inbox. A etapa vem derivada
+   * da reserva ativa, igual ao funil — sem isso o chip ficava "Agendado" para
+   * sempre, mesmo com a festa já realizada ou cancelada.
+   */
+  list: (tenantId: string, now = new Date()) =>
+    withTenant(tenantId, async (tx) => {
+      const rows = await tx.conversation.findMany({
+        where: { archivedAt: null },
+        orderBy: { lastMessageAt: "desc" },
+        take: 100,
+      });
+      const active = rows.length ? await loadActiveBookings(tx, now) : NO_ACTIVE_BOOKINGS;
+      return rows.map((row) => ({ ...row, stage: displayStage(row, activeBookingAt(row, active)) }));
+    }),
 
-  /** Uma conversa + suas mensagens (ordem cronológica). Zera o não-lido. */
-  get: (tenantId: string, id: string) =>
+  /**
+   * Uma conversa + suas mensagens (ordem cronológica). Zera o não-lido.
+   * A etapa segue a mesma derivação da lista e do funil (ver `displayStage`).
+   */
+  get: (tenantId: string, id: string, now = new Date()) =>
     withTenant(tenantId, async (tx) => {
       const convo = await tx.conversation.findFirst({ where: { id } });
       if (!convo) return null;
@@ -142,7 +216,13 @@ export const conversationService = {
         take: 500,
       });
       if (convo.unread > 0) await tx.conversation.update({ where: { id }, data: { unread: 0 } });
-      return { ...convo, unread: 0, messages };
+      const active = await loadActiveBookings(tx, now);
+      return {
+        ...convo,
+        stage: displayStage(convo, activeBookingAt(convo, active)),
+        unread: 0,
+        messages,
+      };
     }),
 
   /** Mensagem recebida do cliente (via webhook do WhatsApp). */
@@ -300,6 +380,7 @@ export const conversationService = {
   board: (tenantId: string, now = new Date()) =>
     withTenant(tenantId, async (tx) => {
       const rows = await tx.conversation.findMany({
+        where: { archivedAt: null },
         orderBy: { lastMessageAt: "desc" },
         take: 300,
         select: {
