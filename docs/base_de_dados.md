@@ -1,14 +1,14 @@
 # Base de Conhecimento — Diny Festas
 
 > **O que é este documento.** É a fonte de verdade que a IA consulta pela tool
-> `base_conhecimento` sempre que precisar de um detalhe que não está no prompt dela: medidas e
+> `base_de_dados` sempre que precisar de um detalhe que não está no prompt dela: medidas e
 > capacidade dos brinquedos, itens de segurança, horário, bairros atendidos, pagamento, sinal,
 > cancelamento e regra de chuva. Nada aqui foi inventado — o que ainda não temos está marcado
 > como `[PREENCHER: ...]`, e a IA foi instruída a **nunca adivinhar** um campo assim: ela diz
 > que confirma com a equipe.
 >
 > **Como usar:** edite este arquivo local, preencha os `[PREENCHER]` com o dado real, e quando
-> estiver pronto copie o conteúdo pro **Google Doc** que a tool `base_conhecimento` de fato lê
+> estiver pronto copie o conteúdo pro **Google Doc** que a tool `base_de_dados` de fato lê
 > (hoje ela ainda aponta pro doc do curso — pendência #4 do `CONTEXTO.md`). Me chame quando o
 > Doc novo existir que eu ajudo a trocar a credencial no nó.
 >
