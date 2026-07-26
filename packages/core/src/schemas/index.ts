@@ -218,3 +218,109 @@ export const agentLookupInput = z.object({
   phone: z.string().min(8).max(20),
 });
 export type AgentLookupInput = z.infer<typeof agentLookupInput>;
+
+/* ─────────────────────────── Configurações do tenant ─────────────────────────── */
+
+/*
+ * Três estados, e a diferença importa para o Prisma:
+ *   - chave AUSENTE  → `undefined` → Prisma não toca no campo (outra seção salvou)
+ *   - chave com ""   → `null`      → limpa o campo de verdade
+ *   - chave com valor→ grava
+ *
+ * Sem isso, "" viraria `undefined` e o campo esvaziado pelo usuário voltaria com
+ * o valor antigo — nunca daria para apagar um dado já preenchido.
+ */
+
+/** Texto opcional de coluna anulável: "" limpa (null). */
+const optText = (max: number) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.string().trim().max(max).nullish()
+  );
+
+/** Número opcional de coluna anulável: "" limpa (null); texto inválido é rejeitado. */
+const optNumber = (min: number, max: number) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.coerce.number().min(min).max(max).nullish()
+  );
+
+/**
+ * Número de coluna NÃO anulável (tem default no banco): "" apenas ignora o campo,
+ * mantendo o valor atual — gravar null quebraria a constraint.
+ */
+const optNumberKeep = (min: number, max: number) =>
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.coerce.number().min(min).max(max).optional()
+  );
+
+/** Cor hexadecimal (#RGB ou #RRGGBB) — vai direto pro CSS do site público. */
+/** Cor: coluna NÃO anulável (tem default). "" mantém a cor atual em vez de quebrar. */
+const hexColor = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+  z
+    .string()
+    .trim()
+    .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Use uma cor no formato #RRGGBB")
+    .optional()
+);
+
+const hhmm = z.string().trim().regex(/^\d{1,2}:\d{2}$/, "Use o formato HH:mm");
+
+/** Expediente: mesmo formato que `overview-service` já lê (start/end/days). */
+export const businessHoursInput = z.object({
+  start: hhmm,
+  end: hhmm,
+  days: z.array(z.number().int().min(0).max(6)).max(7),
+});
+export type BusinessHoursInput = z.infer<typeof businessHoursInput>;
+
+/**
+ * Configurações editáveis pelo painel.
+ *
+ * Existe para fechar um buraco real: `tenantService.updateSettings` aceitava
+ * `Record<string, unknown>` e repassava direto ao Prisma — qualquer campo do
+ * modelo (inclusive `evolutionInstance`, que amarra o WhatsApp do tenant)
+ * poderia ser sobrescrito por um POST forjado. Aqui a lista é fechada:
+ * o que não está descrito abaixo é descartado.
+ */
+export const tenantSettingsInput = z.object({
+  legalName: optText(150),
+  cnpj: optText(20),
+  email: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.string().trim().email("E-mail inválido").max(150).nullish()
+  ),
+  whatsappMain: optText(20),
+  whatsappAlerts: optText(20),
+
+  city: optText(100),
+  baseAddress: optText(200),
+  serviceRadiusKm: optNumber(0, 500),
+  deliveryFee: optNumber(0, 100_000),
+
+  // Estes dois têm default no banco (não anuláveis): "" mantém o valor atual.
+  minRentalHours: optNumberKeep(1, 24),
+  minRentalPrice: optNumberKeep(0, 100_000),
+  depositPolicy: optText(500),
+  businessHours: businessHoursInput.optional(),
+
+  headline: optText(150),
+  subheadline: optText(250),
+  ctaText: optText(60),
+  colorPrimary: hexColor,
+  colorSecondary: hexColor,
+  colorAccent: hexColor,
+
+  instagram: optText(200),
+  facebook: optText(200),
+  googleMaps: optText(300),
+});
+export type TenantSettingsInput = z.infer<typeof tenantSettingsInput>;
+
+/** Nome da empresa vive em `Tenant`, não em `TenantSettings` — por isso separado. */
+export const tenantNameInput = z.object({
+  name: z.string().trim().min(2, "Informe o nome da empresa").max(120),
+});
+export type TenantNameInput = z.infer<typeof tenantNameInput>;

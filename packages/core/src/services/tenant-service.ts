@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { withTenant } from "../db/withTenant";
+import type { TenantSettingsInput } from "../schemas";
 
 /** Instância do Evolution deste tenant (settings lidos dentro do próprio tenant). */
 async function resolveInstance(tenantId: string, slug: string) {
@@ -43,7 +44,13 @@ export const tenantService = {
     }
     return null;
   },
-  updateSettings: (tenantId: string, data: Record<string, unknown>) =>
+  /**
+   * Grava as configurações do painel. Recebe o objeto JÁ validado por
+   * `schemas.tenantSettingsInput` — que é uma lista fechada de campos. Campos
+   * sensíveis (como `evolutionInstance`, que amarra o WhatsApp do tenant) não
+   * estão nessa lista de propósito e não podem ser alterados por aqui.
+   */
+  updateSettings: (tenantId: string, data: TenantSettingsInput) =>
     withTenant(tenantId, (tx) =>
       tx.tenantSettings.upsert({
         where: { tenantId },
@@ -51,6 +58,10 @@ export const tenantService = {
         create: { tenantId, ...data },
       })
     ),
+
+  /** Nome da empresa (fica em `Tenant`, fora da RLS — por isso escopado por id). */
+  updateName: (tenantId: string, name: string) =>
+    prisma.tenant.update({ where: { id: tenantId }, data: { name: name.trim() } }),
   // plataforma / super-admin
   listAll: () => prisma.tenant.findMany({ orderBy: { createdAt: "desc" } }),
   createFromClerkOrg: (clerkOrgId: string, slug: string, name: string) =>

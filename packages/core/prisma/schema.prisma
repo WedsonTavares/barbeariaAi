@@ -164,6 +164,9 @@ model TenantSettings {
   // tem seu próprio número/instância). Se vazio, cai pro slug do tenant.
   evolutionInstance String?
   email          String?
+  /// Razão social e CNPJ: aparecem em contrato/recibo, não no site.
+  legalName      String?
+  cnpj           String?
   city           String?
   baseAddress    String?
   serviceRadiusKm Int?
