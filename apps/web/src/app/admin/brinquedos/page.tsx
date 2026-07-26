@@ -1,4 +1,4 @@
-import { Bot, Boxes, CalendarClock, Construction, PackageCheck } from "lucide-react";
+import { PackageCheck } from "lucide-react";
 
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@diny/core";
@@ -87,35 +87,6 @@ function situation(toy: { status: string; busyNow: boolean; busyUntil: Date | nu
   };
 }
 
-function MetricCard({
-  labelText,
-  value,
-  hint,
-  icon: Icon,
-  tint,
-}: {
-  labelText: string;
-  value: number;
-  hint: string;
-  icon: React.ComponentType<{ className?: string }>;
-  tint: string;
-}) {
-  return (
-    <article className="min-w-0 rounded-2xl border border-black/5 bg-white p-3.5 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold text-[var(--color-muted)] sm:text-xs">{labelText}</p>
-          <p className="mt-1 text-xl font-extrabold tabular-nums sm:text-2xl">{value}</p>
-        </div>
-        <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${tint}`}>
-          <Icon className="size-4" aria-hidden />
-        </span>
-      </div>
-      <p className="mt-1.5 truncate text-[10px] text-[var(--color-muted)] sm:text-[11px]">{hint}</p>
-    </article>
-  );
-}
-
 export default async function BrinquedosPage({
   searchParams,
 }: {
@@ -144,40 +115,6 @@ export default async function BrinquedosPage({
       : null,
     situation: situation(toy),
   }));
-
-  const inAiCatalog = cardToys.filter((toy) => toy.situation.inAiCatalog).length;
-  const withBookings = cardToys.filter((toy) => toy.busyNow || toy.upcoming > 0).length;
-  const maintenance = cardToys.filter((toy) => toy.status === "MAINTENANCE").length;
-  const metrics = [
-    {
-      labelText: "Cadastrados",
-      value: cardToys.length,
-      hint: "todos os brinquedos",
-      icon: Boxes,
-      tint: "bg-violet-50 text-violet-600",
-    },
-    {
-      labelText: "Catálogo da IA",
-      value: inAiCatalog,
-      hint: "disponíveis para oferecer",
-      icon: Bot,
-      tint: "bg-blue-50 text-blue-600",
-    },
-    {
-      labelText: "Com agendamento",
-      value: withBookings,
-      hint: "ocupados ou com reserva futura",
-      icon: CalendarClock,
-      tint: "bg-amber-50 text-amber-700",
-    },
-    {
-      labelText: "Em manutenção",
-      value: maintenance,
-      hint: "temporariamente fora da IA",
-      icon: Construction,
-      tint: "bg-orange-50 text-orange-700",
-    },
-  ];
 
   const photoError = sp.erro?.startsWith("foto") ? sp.erro : undefined;
   const unboundPhotoError = photoError && (!sp.foto || !cardToys.some((toy) => toy.id === sp.foto));
@@ -212,15 +149,6 @@ export default async function BrinquedosPage({
           {ERROS[photoError]}
         </p>
       )}
-
-      <section
-        aria-label="Resumo dos brinquedos"
-        className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-3"
-      >
-        {metrics.map((metric) => (
-          <MetricCard key={metric.labelText} {...metric} />
-        ))}
-      </section>
 
       <ToysCatalog toys={cardToys} photoErrorCode={photoError} photoErrorToyId={sp.foto} />
 
