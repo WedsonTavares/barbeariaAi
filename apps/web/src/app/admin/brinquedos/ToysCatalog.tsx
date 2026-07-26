@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Archive,
   Bot,
   Camera,
   Check,
@@ -575,19 +576,32 @@ export function ToysCatalog({
     if (toy) setPhotoToy(toy);
   }, [photoErrorConsumed, photoErrorToyId, toys]);
 
+  /**
+   * Aposentado sai do catálogo principal e vai para a gaveta do rodapé: ele não
+   * volta a ser alugado, então poluía a lista do dia a dia. Continua acessível
+   * (e reativável pelo select do card) porque o histórico de reservas depende dele.
+   */
+  const [activeToys, retiredToys] = useMemo(
+    () => [
+      toys.filter((toy) => toy.status !== "RETIRED"),
+      toys.filter((toy) => toy.status === "RETIRED"),
+    ],
+    [toys],
+  );
+
   const filterCounts = useMemo(
     () => ({
-      ALL: toys.length,
-      AI: toys.filter((toy) => toy.situation.inAiCatalog).length,
-      SCHEDULED: toys.filter((toy) => toy.busyNow || toy.upcoming > 0).length,
-      MAINTENANCE: toys.filter((toy) => toy.status === "MAINTENANCE").length,
+      ALL: activeToys.length,
+      AI: activeToys.filter((toy) => toy.situation.inAiCatalog).length,
+      SCHEDULED: activeToys.filter((toy) => toy.busyNow || toy.upcoming > 0).length,
+      MAINTENANCE: activeToys.filter((toy) => toy.status === "MAINTENANCE").length,
     }),
-    [toys],
+    [activeToys],
   );
 
   const visibleToys = useMemo(() => {
     const normalizedQuery = normalize(query.trim());
-    return toys.filter((toy) => {
+    return activeToys.filter((toy) => {
       const matchesQuery =
         !normalizedQuery ||
         normalize(`${toy.name} ${toy.categoryLabel} ${toy.description ?? ""}`).includes(normalizedQuery);
@@ -598,7 +612,7 @@ export function ToysCatalog({
         (filter === "MAINTENANCE" && toy.status === "MAINTENANCE");
       return matchesQuery && matchesFilter;
     });
-  }, [filter, query, toys]);
+  }, [activeToys, filter, query]);
 
   const filters: { id: Filter; label: string }[] = [
     { id: "ALL", label: "Todos" },
@@ -660,6 +674,29 @@ export function ToysCatalog({
           <p className="mt-2 text-sm font-bold">Nenhum brinquedo encontrado</p>
           <p className="mt-1 text-xs text-[var(--color-muted)]">Ajuste a busca ou escolha outro filtro.</p>
         </div>
+      )}
+
+      {retiredToys.length > 0 && (
+        <details className="group rounded-2xl border border-black/5 bg-white shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-bold text-[var(--color-muted)]">
+            <Archive className="size-4 shrink-0" aria-hidden />
+            Aposentados
+            <span className="tabular-nums opacity-60">{retiredToys.length}</span>
+            <span className="ml-auto text-xs font-semibold opacity-70 group-open:hidden">mostrar</span>
+            <span className="ml-auto hidden text-xs font-semibold opacity-70 group-open:inline">ocultar</span>
+          </summary>
+          <div className="border-t border-black/5 p-3">
+            <p className="mb-3 text-xs text-[var(--color-muted)]">
+              Fora do site e da IA. Ficam guardados porque as reservas antigas dependem deles —
+              para trazer um de volta, escolha um status no card e confirme.
+            </p>
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+              {retiredToys.map((toy) => (
+                <ToyCard key={toy.id} toy={toy} onConfirm={setPending} onPhoto={setPhotoToy} />
+              ))}
+            </div>
+          </div>
+        </details>
       )}
 
       <ConfirmDialog pending={pending} onClose={() => setPending(null)} />

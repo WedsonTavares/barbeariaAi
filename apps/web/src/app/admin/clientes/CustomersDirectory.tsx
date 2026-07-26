@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Archive,
+  ArchiveRestore,
   LockKeyhole,
   MessageCircle,
   Pencil,
@@ -15,7 +17,12 @@ import {
 import { SubmitButton } from "@/components/SubmitButton";
 import { waUrl } from "@/lib/format";
 import { initials } from "@/lib/stage";
-import { removeCustomer, updateCustomer } from "./actions";
+import {
+  archiveCustomerEntry,
+  removeCustomer,
+  restoreCustomerEntry,
+  updateCustomer,
+} from "./actions";
 
 export type CustomerDirectoryItem = {
   key: string;
@@ -35,6 +42,7 @@ export type CustomerDirectoryItem = {
   stage: string | null;
   leadStatus: string | null;
   lastActivityLabel: string;
+  archived: boolean;
 };
 
 type Filter = "ALL" | "CUSTOMERS" | "NEW";
@@ -249,9 +257,11 @@ function EditCustomerDialog({
 
 function RemoveCustomerDialog({
   customer,
+  showArchived = false,
   onClose,
 }: {
   customer: CustomerItem | null;
+  showArchived?: boolean;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -349,6 +359,7 @@ function RemoveCustomerDialog({
             className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
           >
             <input type="hidden" name="id" value={customer.customerId} />
+            <input type="hidden" name="arquivados" value={showArchived ? "1" : "0"} />
             <button
               type="button"
               disabled={submitting}
@@ -370,14 +381,94 @@ function RemoveCustomerDialog({
   );
 }
 
+/**
+ * Confirmação de arquivar/restaurar. Arquivar é reversível e não apaga nada, por
+ * isso o tom é neutro — o vermelho fica reservado para a exclusão definitiva.
+ */
+function ArchiveDialog({
+  item,
+  mode,
+  onClose,
+}: {
+  item: CustomerDirectoryItem | null;
+  mode: "archive" | "restore";
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (item && dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+    };
+  }, [item]);
+
+  if (!item) return null;
+  const archiving = mode === "archive";
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={onClose}
+      aria-labelledby="archive-title"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-3xl border-0 bg-white p-0 text-[var(--color-ink)] shadow-2xl backdrop:bg-slate-950/45 backdrop:backdrop-blur-[2px]"
+    >
+      <div className="p-5">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-amber-50 text-amber-600">
+            {archiving ? <Archive className="size-5" aria-hidden /> : <ArchiveRestore className="size-5" aria-hidden />}
+          </span>
+          <div className="min-w-0">
+            <h2 id="archive-title" className="font-extrabold">
+              {archiving ? `Arquivar ${item.name}?` : `Restaurar ${item.name}?`}
+            </h2>
+            <p className="mt-1 text-sm leading-5 text-[var(--color-muted)]">
+              {archiving
+                ? "Sai de Clientes, do inbox e do funil. Nada é apagado: reservas, conversas e leads continuam guardados, e você pode restaurar quando quiser. Se o contato mandar uma mensagem nova, ele volta sozinho."
+                : "Volta para Clientes e para o inbox, do jeito que estava."}
+            </p>
+          </div>
+        </div>
+
+        <form
+          action={archiving ? archiveCustomerEntry : restoreCustomerEntry}
+          className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+        >
+          <input type="hidden" name="customerId" value={item.customerId ?? ""} />
+          <input type="hidden" name="conversationId" value={item.conversationId ?? ""} />
+          <input type="hidden" name="leadId" value={item.leadId ?? ""} />
+          <button
+            type="button"
+            onClick={() => dialogRef.current?.close()}
+            className="rounded-full border border-black/10 px-4 py-2.5 text-sm font-semibold hover:bg-[var(--color-surface)]"
+          >
+            Cancelar
+          </button>
+          <SubmitButton
+            pendingText={archiving ? "Arquivando..." : "Restaurando..."}
+            className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-white hover:brightness-95"
+          >
+            {archiving ? "Arquivar" : "Restaurar"}
+          </SubmitButton>
+        </form>
+      </div>
+    </dialog>
+  );
+}
+
 export function CustomersDirectory({
   items,
   canRemove,
+  showArchived = false,
+  archivedCount = 0,
   initialEditId,
   editHasError = false,
 }: {
   items: CustomerDirectoryItem[];
   canRemove: boolean;
+  showArchived?: boolean;
+  archivedCount?: number;
   initialEditId?: string;
   editHasError?: boolean;
 }) {
@@ -388,6 +479,7 @@ export function CustomersDirectory({
   const [filter, setFilter] = useState<Filter>("ALL");
   const [editing, setEditing] = useState<CustomerItem | null>(initialEdit);
   const [removing, setRemoving] = useState<CustomerItem | null>(null);
+  const [archiving, setArchiving] = useState<CustomerDirectoryItem | null>(null);
 
   const counts = useMemo(
     () => ({
@@ -444,21 +536,41 @@ export function CustomersDirectory({
           </div>
 
           <div className="flex gap-1 overflow-x-auto rounded-xl bg-[var(--color-surface)] p-1">
-            {filters.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setFilter(item.key)}
-                aria-pressed={filter === item.key}
-                className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
-                  filter === item.key
-                    ? "bg-white text-[var(--color-ink)] shadow-sm"
-                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                }`}
-              >
-                {item.label} <span className="ml-0.5 tabular-nums opacity-60">{counts[item.key]}</span>
-              </button>
-            ))}
+            {!showArchived &&
+              filters.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setFilter(item.key)}
+                  aria-pressed={filter === item.key}
+                  className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                    filter === item.key
+                      ? "bg-white text-[var(--color-ink)] shadow-sm"
+                      : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                  }`}
+                >
+                  {item.label} <span className="ml-0.5 tabular-nums opacity-60">{counts[item.key]}</span>
+                </button>
+              ))}
+
+            {/* Arquivados é outra consulta, não um filtro em memória — por isso é link. */}
+            <Link
+              href={showArchived ? "/admin/clientes" : "/admin/clientes?arquivados=1"}
+              className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                showArchived
+                  ? "bg-white text-[var(--color-ink)] shadow-sm"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+              }`}
+            >
+              {showArchived ? (
+                <>← Voltar</>
+              ) : (
+                <>
+                  <Archive className="size-3.5" aria-hidden /> Arquivados
+                  <span className="tabular-nums opacity-60">{archivedCount}</span>
+                </>
+              )}
+            </Link>
           </div>
         </div>
 
@@ -547,26 +659,44 @@ export function CustomersDirectory({
                     </span>
                   )}
 
-                  {canRemove &&
-                    (customer ? (
+                  {/* Arquivar funciona para qualquer linha (cliente, contato ou lead);
+                      excluir de vez só faz sentido no cadastro, e só na lixeira. */}
+                  {canRemove && !showArchived && (
+                    <button
+                      type="button"
+                      onClick={() => setArchiving(item)}
+                      aria-label={`Arquivar ${item.name}`}
+                      title="Arquivar (sai do painel, nada é apagado)"
+                      className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-amber-50 hover:text-amber-700"
+                    >
+                      <Archive className="size-4" aria-hidden />
+                    </button>
+                  )}
+
+                  {canRemove && showArchived && (
+                    <>
                       <button
                         type="button"
-                        onClick={() => setRemoving(customer)}
-                        aria-label={`Remover cadastro de ${customer.name}`}
-                        title="Remover cadastro"
-                        className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-red-50 hover:text-red-700"
+                        onClick={() => setArchiving(item)}
+                        aria-label={`Restaurar ${item.name}`}
+                        title="Restaurar para o painel"
+                        className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-emerald-50 hover:text-emerald-700"
                       >
-                        <Trash2 className="size-4" aria-hidden />
+                        <ArchiveRestore className="size-4" aria-hidden />
                       </button>
-                    ) : (
-                      <span
-                        title="Contato ainda sem cadastro de cliente para remover"
-                        className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] opacity-30"
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                        <span className="sr-only">Sem cadastro de cliente para remover</span>
-                      </span>
-                    ))}
+                      {customer && (
+                        <button
+                          type="button"
+                          onClick={() => setRemoving(customer)}
+                          aria-label={`Excluir definitivamente o cadastro de ${customer.name}`}
+                          title="Excluir definitivamente"
+                          className="grid size-10 place-items-center rounded-full text-[var(--color-muted)] transition hover:bg-red-50 hover:text-red-700"
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </article>
             );
@@ -577,8 +707,12 @@ export function CustomersDirectory({
               <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-[var(--color-surface)] text-[var(--color-muted)]">
                 <Search className="size-5" aria-hidden />
               </span>
-              <p className="mt-3 font-bold">Nenhum resultado</p>
-              <p className="mt-1 text-sm text-[var(--color-muted)]">Tente outro nome, telefone ou filtro.</p>
+              <p className="mt-3 font-bold">{showArchived ? "Nada arquivado" : "Nenhum resultado"}</p>
+              <p className="mt-1 text-sm text-[var(--color-muted)]">
+                {showArchived
+                  ? "Ao arquivar um contato, ele aparece aqui e pode voltar quando você quiser."
+                  : "Tente outro nome, telefone ou filtro."}
+              </p>
             </div>
           )}
         </div>
@@ -589,7 +723,16 @@ export function CustomersDirectory({
         showError={Boolean(editHasError && editing?.customerId === initialEditId)}
         onClose={() => setEditing(null)}
       />
-      <RemoveCustomerDialog customer={removing} onClose={() => setRemoving(null)} />
+      <RemoveCustomerDialog
+        customer={removing}
+        showArchived={showArchived}
+        onClose={() => setRemoving(null)}
+      />
+      <ArchiveDialog
+        item={archiving}
+        mode={showArchived ? "restore" : "archive"}
+        onClose={() => setArchiving(null)}
+      />
     </>
   );
 }

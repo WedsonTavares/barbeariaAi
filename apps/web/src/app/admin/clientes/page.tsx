@@ -11,6 +11,8 @@ const OKS: Record<string, string> = {
   1: "Cliente adicionado.",
   editado: "Cadastro atualizado.",
   removido: "Cadastro removido sem apagar conversas, leads ou reservas.",
+  arquivado: "Arquivado. Saiu de Clientes, do inbox e do funil — nada foi apagado.",
+  restaurado: "Restaurado e de volta ao painel.",
 };
 
 const ERRORS: Record<string, string> = {
@@ -18,7 +20,7 @@ const ERRORS: Record<string, string> = {
   nao_encontrado: "Este cadastro não existe mais ou não pertence a esta empresa.",
   cliente_com_reservas: "Cadastro não removido: há reservas ligadas a ele e o histórico foi preservado.",
   cliente_com_historico:
-    "Cadastro não removido: existe conversa, lead ou orçamento ligado a ele. O histórico foi preservado.",
+    "Cadastro não removido: existe conversa, lead ou orçamento ligado a ele. Ele segue arquivado, fora do painel.",
   cliente_com_dados:
     "Cadastro não removido: o outro registro desse WhatsApp possui dados diferentes. Revise os cadastros antes de unificar.",
 };
@@ -43,11 +45,16 @@ function activityLabel(date: Date) {
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; ok?: string; editar?: string }>;
+  searchParams: Promise<{ erro?: string; ok?: string; editar?: string; arquivados?: string }>;
 }) {
   const { tenant, ctx } = await requireTenant();
   const sp = await searchParams;
-  const directory = await services.customerService.directory(tenant.id);
+  const showArchived = sp.arquivados === "1";
+  // A contagem da aba precisa do outro lado da lista, então busca os dois.
+  const [directory, archivedDirectory] = await Promise.all([
+    services.customerService.directory(tenant.id, { archived: showArchived }),
+    services.customerService.directory(tenant.id, { archived: true }),
+  ]);
   const role = currentRole(ctx);
   const canRemove = role === "OWNER" || role === "ADMIN";
 
@@ -69,6 +76,7 @@ export default async function ClientesPage({
     stage: item.stage,
     leadStatus: item.leadStatus,
     lastActivityLabel: activityLabel(item.lastActivityAt),
+    archived: item.archived,
   }));
 
   const validEditId = directory.some(
@@ -88,11 +96,13 @@ export default async function ClientesPage({
           <div className="min-w-0">
             <h1 className="text-2xl font-extrabold">Clientes</h1>
             <p className="text-sm text-[var(--color-muted)]">
-              Cadastros, leads e novos contatos do WhatsApp em um só lugar.
+              {showArchived
+                ? "Arquivados: fora do painel, mas com todo o histórico preservado."
+                : "Cadastros, leads e novos contatos do WhatsApp em um só lugar."}
             </p>
           </div>
         </div>
-        <NewCustomerDialog errorCode={createError} />
+        {!showArchived && <NewCustomerDialog errorCode={createError} />}
       </header>
 
       {sp.ok && OKS[sp.ok] && (
@@ -112,6 +122,8 @@ export default async function ClientesPage({
       <CustomersDirectory
         items={items}
         canRemove={canRemove}
+        showArchived={showArchived}
+        archivedCount={archivedDirectory.length}
         initialEditId={validEditId ? sp.editar : undefined}
         editHasError={sp.erro === "edicao"}
       />

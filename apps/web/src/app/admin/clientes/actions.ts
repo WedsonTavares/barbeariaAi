@@ -66,11 +66,80 @@ export async function updateCustomer(formData: FormData) {
   redirect(dest);
 }
 
+/** Lê um id opcional do form: string vazia/ausente vira null em vez de estourar. */
+function optionalId(formData: FormData, field: string) {
+  const raw = formData.get(field);
+  if (typeof raw !== "string" || !raw) return null;
+  const parsed = schemas.idInput.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Arquivar tira a pessoa do painel (Clientes, inbox e funil) sem apagar nada.
+ * É a saída para contato errado/teste/spam: excluir de verdade esbarra no
+ * histórico, e deixar na lista polui a operação do dia a dia.
+ */
+export async function archiveCustomerEntry(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+
+  const target = {
+    customerId: optionalId(formData, "customerId"),
+    conversationId: optionalId(formData, "conversationId"),
+    leadId: optionalId(formData, "leadId"),
+  };
+
+  let dest = `${BASE}?ok=arquivado`;
+  if (!target.customerId && !target.conversationId && !target.leadId) {
+    dest = `${BASE}?erro=nao_encontrado`;
+  } else {
+    const result = await services.customerService.archive(tenant.id, target);
+    if (!result.archived) dest = `${BASE}?erro=nao_encontrado`;
+  }
+
+  revalidatePath(BASE);
+  revalidatePath("/admin/conversas");
+  revalidatePath("/admin/funil");
+  redirect(dest);
+}
+
+/** Desfaz o arquivamento (botão "Restaurar" na aba Arquivados). */
+export async function restoreCustomerEntry(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+
+  const target = {
+    customerId: optionalId(formData, "customerId"),
+    conversationId: optionalId(formData, "conversationId"),
+    leadId: optionalId(formData, "leadId"),
+  };
+
+  let dest = `${BASE}?arquivados=1&ok=restaurado`;
+  if (!target.customerId && !target.conversationId && !target.leadId) {
+    dest = `${BASE}?arquivados=1&erro=nao_encontrado`;
+  } else {
+    const result = await services.customerService.restore(tenant.id, target);
+    if (!result.restored) dest = `${BASE}?arquivados=1&erro=nao_encontrado`;
+  }
+
+  revalidatePath(BASE);
+  revalidatePath("/admin/conversas");
+  revalidatePath("/admin/funil");
+  redirect(dest);
+}
+
+/**
+ * Exclusão definitiva, disparada só da aba Arquivados. Continua recusando quando
+ * há histórico — nesse caso o registro simplesmente segue arquivado, que já o
+ * mantém fora do painel.
+ */
 export async function removeCustomer(formData: FormData) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN"]);
 
-  let dest = `${BASE}?ok=removido`;
+  // Volta para a mesma aba de onde o usuário disparou a ação.
+  const view = formData.get("arquivados") === "1" ? "?arquivados=1&" : "?";
+  let dest = `${BASE}${view}ok=removido`;
   try {
     const id = schemas.idInput.parse(formData.get("id"));
     const result = await services.customerService.removeRegistration(tenant.id, id);
@@ -81,10 +150,10 @@ export async function removeCustomer(formData: FormData) {
         HISTORY: "cliente_com_historico",
         DATA: "cliente_com_dados",
       } as const;
-      dest = `${BASE}?erro=${errors[result.reason]}`;
+      dest = `${BASE}${view}erro=${errors[result.reason]}`;
     }
   } catch (error) {
-    if (error instanceof ZodError) dest = `${BASE}?erro=nao_encontrado`;
+    if (error instanceof ZodError) dest = `${BASE}${view}erro=nao_encontrado`;
     else throw error;
   }
 
