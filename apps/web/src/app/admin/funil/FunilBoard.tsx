@@ -184,26 +184,13 @@ export function FunilBoard({ initial }: { initial: Board }) {
     });
   }
 
-  const totalCards = Object.values(board).reduce((n, c) => n + c.length, 0);
   const tagCard = tagging ? findCard(tagging)?.card ?? null : null;
 
   return (
     <>
       {/* barra de ferramentas */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-[var(--color-muted)]">
-          {totalCards} conversa{totalCards === 1 ? "" : "s"}
-        </span>
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-1.5">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-muted)]" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Pesquisar conversas"
-              className="w-full rounded-lg border border-black/10 bg-white py-2 pl-9 pr-3 text-sm sm:w-64"
-            />
-          </div>
           <button
             type="button"
             onClick={() => startRefresh(() => router.refresh())}
@@ -214,6 +201,15 @@ export function FunilBoard({ initial }: { initial: Board }) {
           >
             <RotateCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
           </button>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-muted)]" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Pesquisar conversas"
+              className="w-full rounded-lg border border-black/10 bg-white py-2 pl-9 pr-3 text-sm sm:w-64"
+            />
+          </div>
         </div>
       </div>
 
