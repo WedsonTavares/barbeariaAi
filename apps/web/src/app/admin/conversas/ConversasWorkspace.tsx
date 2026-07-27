@@ -728,7 +728,11 @@ function TagsBox({
     ...TAG_CATALOG,
     ...extras.map((t) => ({ tag: t, label: t, hint: undefined })),
   ];
-  const visiveis = tags.filter((t) => !STAGE_ONLY_TAGS.has(t));
+  // Mostra TODAS as tags, inclusive as de etapa (novo-lead/agendado/pos-festa) —
+  // elas só não entram em `lista` (o checkbox), mas continuam visíveis aqui.
+  // Sem isso, uma conversa em Pós-festa mostrava "sem tags", como se a tag não
+  // tivesse sido aplicada — quando na real só não tinha CHIP nenhuma renderizando.
+  const visiveis = tags;
 
   function addCustom() {
     const t = normalizeTag(custom);
@@ -758,10 +762,13 @@ function TagsBox({
           visiveis.map((t) => (
             <span
               key={t}
+              title={STAGE_ONLY_TAGS.has(t) ? "Controlada pelo Funil — arraste o card pra mudar" : undefined}
               className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                 SILENCING_TAGS.has(t)
                   ? "bg-rose-100 text-rose-700"
-                  : "bg-[var(--color-surface)]"
+                  : STAGE_ONLY_TAGS.has(t)
+                    ? "border border-dashed border-black/15 text-[var(--color-muted)]"
+                    : "bg-[var(--color-surface)]"
               }`}
             >
               {t}
