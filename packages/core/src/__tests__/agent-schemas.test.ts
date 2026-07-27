@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentAvailabilityInput, agentBookingInput } from "../schemas";
+import { agentAvailabilityInput, agentBookingInput, agentLookupInput } from "../schemas";
 
 describe("schemas das ferramentas de agenda", () => {
   it("aceita disponibilidade para um intervalo exato", () => {
@@ -44,6 +44,25 @@ describe("schemas das ferramentas de agenda", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("limpa o telefone de caracteres que não são dígito (caso real: tab colado pelo n8n)", () => {
+    // Um input do "Executar: Pós-festa" veio com "\t5516992331680": a busca por
+    // telefone exato no banco não achava a conversa, e a ferramenta respondia
+    // ok:true sem ter feito nada — falso positivo silencioso.
+    const parsed = agentLookupInput.parse({ phone: "\t5516992331680" });
+    expect(parsed.phone).toBe("5516992331680");
+
+    const withSpaces = agentBookingInput.safeParse({
+      phone: " 5516999999999 ",
+      name: "Cliente Teste",
+      date: "2026-09-24",
+      setupTime: "14:00",
+      pickupTime: "18:00",
+      toys: ["Pula-pula Aranha"],
+    });
+    expect(withSpaces.success).toBe(true);
+    if (withSpaces.success) expect(withSpaces.data.phone).toBe("5516999999999");
   });
 
   it("rejeita uma data que o JavaScript normalizaria para outro dia", () => {

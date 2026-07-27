@@ -177,7 +177,7 @@ export type AgentAvailabilityInput = z.infer<typeof agentAvailabilityInput>;
 
 /** Ferramenta "criar lead": a IA manda os dados que colheu na conversa. */
 export const agentLeadInput = z.object({
-  phone: z.string().min(8).max(20),
+  phone: z.string().min(8).max(20).transform(phoneDigits),
   name: z.string().min(2).max(120),
   desiredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD").optional(),
   desiredToy: z.string().max(120).optional(),
@@ -188,7 +188,7 @@ export type AgentLeadInput = z.infer<typeof agentLeadInput>;
 
 /** Ferramenta "suporte humano": a IA escala pra equipe (cliente pediu, ou caso difícil). */
 export const agentSupportInput = z.object({
-  phone: z.string().min(8).max(20),
+  phone: z.string().min(8).max(20).transform(phoneDigits),
   name: z.string().max(120).optional(),
   reason: z.string().max(300).optional(),
 });
@@ -202,7 +202,7 @@ export type AgentSupportInput = z.infer<typeof agentSupportInput>;
  * o pedido morria na conversa e a data continuava ocupada na agenda.
  */
 export const agentCancelRequestInput = z.object({
-  phone: z.string().min(8).max(20),
+  phone: z.string().min(8).max(20).transform(phoneDigits),
   name: z.string().max(120).optional(),
   /** Data da festa que ele quer desmarcar, se disse qual (AAAA-MM-DD). */
   date: agentDateText.optional(),
@@ -211,18 +211,14 @@ export const agentCancelRequestInput = z.object({
 export type AgentCancelRequestInput = z.infer<typeof agentCancelRequestInput>;
 
 /**
- * Ferramenta "avaliação pós-festa": a IA de pós coletou a nota (0-10) que o
- * cliente deu depois do evento. O corte (bom/ruim) é decidido no backend, não
- * no prompt — é regra de negócio, muda num lugar só se um dia mudar o número.
- */
-/**
- * Quem decide bom/ruim agora é QUAL FERRAMENTA a IA chamou (positiva/negativa),
- * não mais um número comparado no backend — pedir pra IA preencher um `score`
- * numérico via $fromAI se mostrou frágil (o modelo às vezes deixa vazio, quebra
- * o JSON do corpo). `score` fica opcional, só como anotação pra relatório.
+ * Ferramenta "avaliação pós-festa". Quem decide bom/ruim é QUAL FERRAMENTA a IA
+ * chamou (positiva/negativa), não um número comparado no backend — pedir pra IA
+ * preencher um `score` numérico via $fromAI se mostrou frágil (o modelo às vezes
+ * deixa vazio, quebra o JSON do corpo). `score` fica opcional, só como anotação
+ * pra relatório.
  */
 export const agentPostEventInput = z.object({
-  phone: z.string().min(8).max(20),
+  phone: z.string().min(8).max(20).transform(phoneDigits),
   score: z.number().int().min(0).max(10).optional(),
   comment: z.string().max(500).optional(),
 });
@@ -235,7 +231,7 @@ export type AgentPostEventInput = z.infer<typeof agentPostEventInput>;
  * ferramenta disponibilidade); resolvidos p/ id no service. Horas em HH:mm no fuso de SP.
  */
 export const agentBookingInput = z.object({
-  phone: z.string().min(8).max(20),
+  phone: z.string().min(8).max(20).transform(phoneDigits),
   name: z.string().min(2).max(120),
   date: agentDateText,
   setupTime: agentTime,
@@ -249,7 +245,7 @@ export type AgentBookingInput = z.infer<typeof agentBookingInput>;
 
 /** Ferramenta "meus agendamentos": a IA consulta as festas já marcadas desse telefone. */
 export const agentLookupInput = z.object({
-  phone: z.string().min(8).max(20),
+  phone: z.string().min(8).max(20).transform(phoneDigits),
 });
 export type AgentLookupInput = z.infer<typeof agentLookupInput>;
 
