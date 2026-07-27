@@ -58,6 +58,12 @@ export async function POST(req: Request) {
     });
   }
 
+  // Nota boa fecha o ciclo: tira a tag de roteamento pra próxima mensagem
+  // deste contato voltar pro atendimento normal, sem passar de novo pela IA
+  // de pós-festa perguntando nota de novo. O card CONTINUA em "Pós-festa" no
+  // funil (não existe coluna "Concluído") — só a tag some, não o stage.
+  await services.conversationService.removeTagByPhone(tenant.id, input.phone, "pos-festa");
+
   const settings = await services.tenantService.getSettings(tenant.id);
   const link = settings?.reviewLink?.trim() || null;
 

@@ -485,4 +485,21 @@ export const conversationService = {
       if (!c) return;
       await takeOverConversation(tx, c.id);
     }),
+
+  /**
+   * Tira UMA tag por telefone, sem tocar em stage/botPaused/não-lida — pro
+   * fluxo que só precisa "desarmar" um roteamento (ex.: `pos-festa` depois que
+   * a avaliação foi coletada), não fazer nenhuma das outras transições. Nunca
+   * usa `stage`/`ALL_STAGE_TAGS` de propósito: se um dia esta função remover
+   * uma tag de OUTRA etapa por engano, o card não deve pular de coluna sozinho.
+   */
+  removeTagByPhone: (tenantId: string, phone: string, tag: string) =>
+    withTenant(tenantId, async (tx) => {
+      const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      if (!c) return;
+      await lockConversation(tx, c.id);
+      const tags = c.tags.filter((t) => t !== tag);
+      if (tags.length === c.tags.length) return; // já não tinha a tag — nada a fazer
+      await tx.conversation.update({ where: { id: c.id }, data: { tags } });
+    }),
 };
