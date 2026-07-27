@@ -215,9 +215,15 @@ export type AgentCancelRequestInput = z.infer<typeof agentCancelRequestInput>;
  * cliente deu depois do evento. O corte (bom/ruim) é decidido no backend, não
  * no prompt — é regra de negócio, muda num lugar só se um dia mudar o número.
  */
+/**
+ * Quem decide bom/ruim agora é QUAL FERRAMENTA a IA chamou (positiva/negativa),
+ * não mais um número comparado no backend — pedir pra IA preencher um `score`
+ * numérico via $fromAI se mostrou frágil (o modelo às vezes deixa vazio, quebra
+ * o JSON do corpo). `score` fica opcional, só como anotação pra relatório.
+ */
 export const agentPostEventInput = z.object({
   phone: z.string().min(8).max(20),
-  score: z.number().int().min(0).max(10),
+  score: z.number().int().min(0).max(10).optional(),
   comment: z.string().max(500).optional(),
 });
 export type AgentPostEventInput = z.infer<typeof agentPostEventInput>;
