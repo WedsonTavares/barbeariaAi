@@ -125,6 +125,8 @@ enum NotificationType {
   BOOKING_RESCHEDULED
   /// Cliente pediu para desmarcar pelo WhatsApp. A IA só registra — quem cancela é a equipe.
   BOOKING_CANCEL_REQUESTED
+  /// Avaliação pós-festa abaixo do corte (nota < 8): escalado pra equipe em vez do link público.
+  POST_EVENT_LOW_RATING
   PAYMENT_PENDING
   MAINTENANCE_ALERT
   GOOGLE_CALENDAR_SYNC_FAILED
@@ -178,6 +180,10 @@ model TenantSettings {
   instagram      String?
   facebook       String?
   googleMaps     String?
+  /// Mensagem automática ao mover o card pra "Pós-festa" (pergunta a nota da experiência).
+  postEventMessage String?
+  /// Link de avaliação (Google/Instagram) oferecido quando a nota do pós-festa é boa.
+  reviewLink       String?
   logoUrl        String?
   faviconUrl     String?
   colorPrimary   String   @default("#2563EB")

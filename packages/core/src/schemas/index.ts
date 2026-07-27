@@ -211,6 +211,18 @@ export const agentCancelRequestInput = z.object({
 export type AgentCancelRequestInput = z.infer<typeof agentCancelRequestInput>;
 
 /**
+ * Ferramenta "avaliação pós-festa": a IA de pós coletou a nota (0-10) que o
+ * cliente deu depois do evento. O corte (bom/ruim) é decidido no backend, não
+ * no prompt — é regra de negócio, muda num lugar só se um dia mudar o número.
+ */
+export const agentPostEventInput = z.object({
+  phone: z.string().min(8).max(20),
+  score: z.number().int().min(0).max(10),
+  comment: z.string().max(500).optional(),
+});
+export type AgentPostEventInput = z.infer<typeof agentPostEventInput>;
+
+/**
  * Ferramenta "agendar": a IA fecha a reserva de verdade no nosso banco.
  * A checagem de conflito do banco (autoridade) rejeita reserva dupla mesmo que a IA
  * tenha errado a disponibilidade. Brinquedos vêm por NOME (o que a IA obteve da
@@ -332,6 +344,9 @@ export const tenantSettingsInput = z.object({
   instagram: optText(200),
   facebook: optText(200),
   googleMaps: optText(300),
+
+  postEventMessage: optText(500),
+  reviewLink: optText(300),
 });
 export type TenantSettingsInput = z.infer<typeof tenantSettingsInput>;
 

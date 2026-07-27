@@ -443,6 +443,12 @@ export const conversationService = {
    * Move o card de coluna. Além do `stage`, sincroniza as tags e o bot:
    * SUPORTE_HUMANO pausa a IA (tag atendimento-humano); sair de lá religa.
    * Preserva as tags livres do usuário (só troca as tags de etapa).
+   *
+   * Devolve `previousStage` pra quem chama decidir side effects de TRANSIÇÃO
+   * (ex.: mandar a mensagem automática só ao ENTRAR em POS_FESTA, não a cada
+   * re-drag). Não usa `conversationService.get` pra isso de propósito: ele zera
+   * o não-lido como efeito colateral, o que aqui seria um bug — ninguém abriu
+   * a conversa, só arrastou o card.
    */
   setStage: (tenantId: string, id: string, stage: ConversationStage) =>
     withTenant(tenantId, async (tx) => {
@@ -451,10 +457,11 @@ export const conversationService = {
       const kept = c.tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
       const tag = STAGE_TAG[stage];
       const tags = tag ? [...kept, tag] : kept;
-      return tx.conversation.update({
+      const updated = await tx.conversation.update({
         where: { id },
         data: { stage, tags, botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)) },
       });
+      return { ...updated, previousStage: c.stage };
     }),
 
   /** Histórico recente pro contexto do bot (não zera não-lidas — quem lê é o atendente). */

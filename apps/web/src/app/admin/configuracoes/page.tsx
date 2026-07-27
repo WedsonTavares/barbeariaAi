@@ -220,6 +220,29 @@ export default async function ConfiguracoesPage({
         <ColorField name="colorAccent" label="Cor de destaque" defaultValue={settings?.colorAccent ?? "#7C3AED"} />
       </SettingsSection>
 
+      {/* ─────────── Pós-festa ─────────── */}
+      <SettingsSection
+        id="pos-festa"
+        title="Pós-festa"
+        description="Ao mover uma conversa pra coluna 'Pós-festa' no Funil, esta mensagem é enviada automaticamente."
+      >
+        <TextArea
+          name="postEventMessage"
+          label="Mensagem automática"
+          hint="Pergunte a nota de 0 a 10. Se deixar em branco, usamos um texto padrão."
+          defaultValue={settings?.postEventMessage}
+          placeholder="Oi! Como foi a festa? De 0 a 10, qual nota você daria pra experiência?"
+        />
+        <Field
+          name="reviewLink"
+          label="Link de avaliação"
+          wide
+          hint="Google, Instagram... A IA só oferece este link pra quem der nota 8 ou mais."
+          defaultValue={settings?.reviewLink}
+          placeholder="https://g.page/r/..."
+        />
+      </SettingsSection>
+
       {/* ─────────── Redes ─────────── */}
       <SettingsSection
         id="redes"
