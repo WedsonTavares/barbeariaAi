@@ -508,19 +508,29 @@ export const conversationService = {
     }),
 
   /**
-   * Tira UMA tag por telefone, sem tocar em stage/botPaused/não-lida — pro
-   * fluxo que só precisa "desarmar" um roteamento (ex.: `pos-festa` depois que
-   * a avaliação foi coletada), não fazer nenhuma das outras transições. Nunca
-   * usa `stage`/`ALL_STAGE_TAGS` de propósito: se um dia esta função remover
-   * uma tag de OUTRA etapa por engano, o card não deve pular de coluna sozinho.
+   * Tira UMA tag por telefone — pro fluxo que "desarma" um roteamento sem ser
+   * um toggle de checkbox (ex.: a IA concluindo o pós-festa via `encerrar_pos_festa`).
+   *
+   * Pra `pos-festa` especificamente, sai da etapa POS_FESTA de volta pra
+   * IA_ATENDENDO quando a tag sai — MESMO comportamento de desmarcar a tag na
+   * mão pelo checkbox (`toggleTag`). Sem isso, concluir pela IA e desmarcar na
+   * mão faziam coisas diferentes pro mesmo "sair do pós-festa": um deixava o
+   * card preso lá (sem coluna "Concluído" pra ele ir), o outro tirava.
+   * Qualquer OUTRA tag continua sem tocar em stage/botPaused/não-lida.
    */
   removeTagByPhone: (tenantId: string, phone: string, tag: string) =>
     withTenant(tenantId, async (tx) => {
       const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
       if (!c) return;
       await lockConversation(tx, c.id);
-      const tags = c.tags.filter((t) => t !== tag);
+      let tags = c.tags.filter((t) => t !== tag);
       if (tags.length === c.tags.length) return; // já não tinha a tag — nada a fazer
-      await tx.conversation.update({ where: { id: c.id }, data: { tags } });
+
+      let stage = c.stage;
+      if (tag === "pos-festa" && c.stage === "POS_FESTA") {
+        tags = tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
+        stage = "IA_ATENDENDO";
+      }
+      await tx.conversation.update({ where: { id: c.id }, data: { tags, stage } });
     }),
 };
