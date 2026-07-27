@@ -516,6 +516,13 @@ export const conversationService = {
    * mão pelo checkbox (`toggleTag`). Sem isso, concluir pela IA e desmarcar na
    * mão faziam coisas diferentes pro mesmo "sair do pós-festa": um deixava o
    * card preso lá (sem coluna "Concluído" pra ele ir), o outro tirava.
+   *
+   * A correção de stage é checada INDEPENDENTE da tag já ter saído ou não —
+   * de propósito: uma conversa que perdeu a tag (pela rede de segurança em
+   * /positiva, por exemplo) mas ainda ficou presa em POS_FESTA precisa sair
+   * na PRÓXIMA chamada, mesmo sem a tag pra remover de novo. Só "já não tinha
+   * tag E já não precisa corrigir stage" conta como nada-a-fazer.
+   *
    * Qualquer OUTRA tag continua sem tocar em stage/botPaused/não-lida.
    */
   removeTagByPhone: (tenantId: string, phone: string, tag: string) =>
@@ -523,14 +530,14 @@ export const conversationService = {
       const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
       if (!c) return;
       await lockConversation(tx, c.id);
-      let tags = c.tags.filter((t) => t !== tag);
-      if (tags.length === c.tags.length) return; // já não tinha a tag — nada a fazer
 
-      let stage = c.stage;
-      if (tag === "pos-festa" && c.stage === "POS_FESTA") {
-        tags = tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
-        stage = "IA_ATENDENDO";
-      }
-      await tx.conversation.update({ where: { id: c.id }, data: { tags, stage } });
+      const needsStageFix = tag === "pos-festa" && c.stage === "POS_FESTA";
+      const tags = c.tags.filter((t) => t !== tag);
+      const tagChanged = tags.length !== c.tags.length;
+      if (!tagChanged && !needsStageFix) return; // nada mudaria — não escreve à toa
+
+      const stage = needsStageFix ? "IA_ATENDENDO" : c.stage;
+      const finalTags = needsStageFix ? tags.filter((t) => !ALL_STAGE_TAGS.includes(t)) : tags;
+      await tx.conversation.update({ where: { id: c.id }, data: { tags: finalTags, stage } });
     }),
 };
