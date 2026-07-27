@@ -27,8 +27,6 @@ const COLUMNS = [
   { key: "POS_FESTA",      label: "Pós-festa",        head: "bg-violet-100 text-violet-900",   hint: "Acompanhamento" },
 ] as const;
 
-/** Tags de etapa não viram chip no card (a coluna já diz isso). */
-const STAGE_TAGS = ["novo-lead", "atendimento-humano", "agendado", "pos-festa"];
 
 const fmtActivity = (iso: string) => {
   const elapsed = Math.max(0, Date.now() - new Date(iso).getTime());
@@ -256,7 +254,7 @@ export function FunilBoard({ initial }: { initial: Board }) {
                 isOver ? "bg-black/5 outline-2 outline-dashed outline-black/20" : ""
               }`}>
                 {cards.map((c) => {
-                  const livres = c.tags.filter((t) => !STAGE_TAGS.includes(t));
+                  const livres = c.tags.filter((t) => !STAGE_ONLY_TAGS.has(t));
                   const iaDesligada = c.tags.includes("desligar-ia");
                   const outrasTags = livres.filter((tag) => tag !== "desligar-ia");
                   return (
