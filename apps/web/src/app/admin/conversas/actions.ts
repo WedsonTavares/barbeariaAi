@@ -4,6 +4,7 @@ import { requireRole, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
 import { sendText } from "@/lib/evolution";
 import { normalizeTag } from "@/lib/tags";
+import { sendPosFestaAutoMessage } from "@/lib/pos-festa";
 
 /**
  * Abre a conversa selecionada (thread + contexto). Zera o não-lido.
@@ -72,6 +73,13 @@ export async function toggleTagAction(id: string, tag: string, on: boolean) {
   if (!t) return { ok: false as const, tags: [] as string[] };
 
   const changed = await services.conversationService.toggleTag(tenant.id, id, t, on);
+
+  // "pos-festa" tem o mesmo efeito de arrastar o card no Funil: dispara a
+  // mesma mensagem automática, só na transição de verdade.
+  if (t === "pos-festa" && on && changed.previousStage !== "POS_FESTA") {
+    await sendPosFestaAutoMessage(tenant, changed.phone);
+  }
+
   revalidatePath("/admin/conversas");
   revalidatePath("/admin/funil");
   return { ok: true as const, tags: changed.tags };

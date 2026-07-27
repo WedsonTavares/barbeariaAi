@@ -293,6 +293,12 @@ export const conversationService = {
    * mudanças simultâneas no mesmo contato. "atendimento-humano" também move o
    * card, mantendo a tag, a coluna e o estado da IA sincronizados.
    */
+  /**
+   * `previousStage` no retorno permite que quem chamou saiba se foi uma
+   * TRANSIÇÃO de verdade (ex.: entrou em POS_FESTA agora) — é assim que a
+   * action web decide se dispara a mensagem automática do pós-festa, sem esta
+   * função (core) precisar saber nada de WhatsApp/Evolution.
+   */
   toggleTag: (tenantId: string, id: string, tag: string, on: boolean) =>
     withTenant(tenantId, async (tx) => {
       await lockConversation(tx, id);
@@ -313,6 +319,20 @@ export const conversationService = {
             stage = "IA_ATENDENDO";
           }
         }
+      } else if (tag === "pos-festa") {
+        // Mesma forma do atendimento-humano acima: marcar/desmarcar a tag na
+        // mão tem o MESMO efeito de arrastar o card no Funil (ver STAGE_TAG).
+        if (on) {
+          const kept = c.tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
+          tags = [...new Set([...kept, tag])];
+          stage = "POS_FESTA";
+        } else {
+          tags = c.tags.filter((t) => t !== tag);
+          if (c.stage === "POS_FESTA") {
+            tags = tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
+            stage = "IA_ATENDENDO";
+          }
+        }
       } else {
         tags = on
           ? [...new Set([...c.tags, tag])].slice(0, 20)
@@ -320,11 +340,12 @@ export const conversationService = {
       }
 
       const botPaused = tags.some((t) => BOT_SILENCING_TAGS.includes(t));
-      return tx.conversation.update({
+      const updated = await tx.conversation.update({
         where: { id },
         data: { tags, stage, botPaused },
-        select: { id: true, tags: true, stage: true, botPaused: true },
+        select: { id: true, phone: true, tags: true, stage: true, botPaused: true },
       });
+      return { ...updated, previousStage: c.stage };
     }),
 
   /** O bot pode responder este telefone? (não, se pausado ou com tag silenciadora) */
