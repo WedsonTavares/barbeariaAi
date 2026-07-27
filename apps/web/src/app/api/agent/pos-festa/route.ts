@@ -58,10 +58,11 @@ export async function POST(req: Request) {
     });
   }
 
-  // Nota boa fecha o ciclo: tira a tag de roteamento pra próxima mensagem
-  // deste contato voltar pro atendimento normal, sem passar de novo pela IA
-  // de pós-festa perguntando nota de novo. O card CONTINUA em "Pós-festa" no
-  // funil (não existe coluna "Concluído") — só a tag some, não o stage.
+  // Rede de segurança, não o caminho principal: quem fecha o ciclo de propósito
+  // é a IA chamando /api/agent/pos-festa/concluir DEPOIS de agradecer (assim a
+  // tag segura o roteamento até a última mensagem sair). Isto aqui só garante
+  // que a tag não fique presa pra sempre se a IA esquecer o segundo passo —
+  // é idempotente, então não conflita com o /concluir chamado em seguida.
   await services.conversationService.removeTagByPhone(tenant.id, input.phone, "pos-festa");
 
   const settings = await services.tenantService.getSettings(tenant.id);
