@@ -1,8 +1,8 @@
 "use client";
-import { useState, useTransition, useRef, useMemo } from "react";
+import { useEffect, useState, useTransition, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, CalendarDays, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, CalendarDays, ChevronLeft, ChevronRight, Plus, X, RotateCw } from "lucide-react";
 import { TAG_CATALOG, STAGE_ONLY_TAGS, normalizeTag } from "@/lib/tags";
 import { moveCardAction, toggleTagFromFunilAction } from "./actions";
 
@@ -83,6 +83,11 @@ const fmtBooking = (iso: string) => {
 };
 export function FunilBoard({ initial }: { initial: Board }) {
   const [board, setBoard] = useState<Board>(initial);
+  // `useState(initial)` só lê o valor inicial UMA vez — sem isto, um
+  // `router.refresh()` (ex.: o botão de recarregar) buscaria dado novo no
+  // servidor, mas o quadro continuaria mostrando o snapshot velho da primeira
+  // carga. Sincroniza sempre que o servidor mandar um `initial` novo.
+  useEffect(() => setBoard(initial), [initial]);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [tagging, setTagging] = useState<string | null>(null);
@@ -90,6 +95,7 @@ export function FunilBoard({ initial }: { initial: Board }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [, startTransition] = useTransition();
   const [tagPending, startTagTransition] = useTransition();
+  const [refreshing, startRefresh] = useTransition();
   const router = useRouter();
   const prev = useRef<Board | null>(null);
 
@@ -188,14 +194,26 @@ export function FunilBoard({ initial }: { initial: Board }) {
         <span className="text-sm font-semibold text-[var(--color-muted)]">
           {totalCards} conversa{totalCards === 1 ? "" : "s"}
         </span>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-muted)]" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Pesquisar conversas"
-            className="w-full rounded-lg border border-black/10 bg-white py-2 pl-9 pr-3 text-sm sm:w-64"
-          />
+        <div className="flex items-center gap-1.5">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-muted)]" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Pesquisar conversas"
+              className="w-full rounded-lg border border-black/10 bg-white py-2 pl-9 pr-3 text-sm sm:w-64"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => startRefresh(() => router.refresh())}
+            disabled={refreshing}
+            title="Recarregar os leads"
+            aria-label="Recarregar os leads"
+            className="grid size-9 shrink-0 place-items-center rounded-lg border border-black/10 bg-white text-[var(--color-muted)] transition hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)] disabled:opacity-50"
+          >
+            <RotateCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
         </div>
       </div>
 
