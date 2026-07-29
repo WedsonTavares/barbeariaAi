@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { agentAvailabilityInput, agentBookingInput, agentLookupInput } from "../schemas";
+import {
+  agentAvailabilityInput,
+  agentBookingInput,
+  agentContextInput,
+  agentLookupInput,
+} from "../schemas";
 
 describe("schemas das ferramentas de agenda", () => {
   it("aceita disponibilidade para um intervalo exato", () => {
@@ -83,5 +88,13 @@ describe("schemas das ferramentas de agenda", () => {
         toys: ["Pula-pula Aranha"],
       }).success
     ).toBe(false);
+  });
+
+  it("normaliza e limita a busca de contexto do n8n", () => {
+    const parsed = agentContextInput.parse({ phone: " +55 (16) 99233-1680 " });
+
+    expect(parsed.phone).toBe("5516992331680");
+    expect(parsed.limit).toBe(80);
+    expect(agentContextInput.safeParse({ phone: "sem telefone", limit: 101 }).success).toBe(false);
   });
 });

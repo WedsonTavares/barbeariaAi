@@ -379,6 +379,84 @@ export const conversationService = {
     }),
 
   /**
+   * Contexto somente leitura para o n8n compactar antes de chamar a IA.
+   * Retorna as mensagens mais recentes em ordem cronológica, sem alterar o inbox.
+   */
+  context: (tenantId: string, phone: string, limit = 80, now = new Date()) =>
+    withTenant(tenantId, async (tx) => {
+      const take = Math.max(1, Math.min(100, Math.trunc(limit)));
+      const conversation = await tx.conversation.findUnique({
+        where: { tenantId_phone: { tenantId, phone } },
+        select: {
+          id: true,
+          phone: true,
+          contactName: true,
+          customerId: true,
+          tags: true,
+          botPaused: true,
+          stage: true,
+          notes: true,
+          notesAt: true,
+          lastMessageAt: true,
+          createdAt: true,
+        },
+      });
+
+      if (!conversation) {
+        return {
+          found: false,
+          phone,
+          contactName: null as string | null,
+          tags: [] as string[],
+          tagHistoryAvailable: false,
+          tagHistory: [] as never[],
+          silenced: false,
+          silencedBy: BOT_SILENCING_TAGS,
+          historyTruncated: false,
+          messages: [] as { sender: MessageSender; text: string; createdAt: Date }[],
+        };
+      }
+
+      const rows = await tx.message.findMany({
+        where: { conversationId: conversation.id },
+        orderBy: { createdAt: "desc" },
+        take: take + 1,
+        select: { sender: true, text: true, createdAt: true },
+      });
+      const historyTruncated = rows.length > take;
+      const active = await loadActiveBookings(tx, now);
+
+      return {
+        found: true,
+        id: conversation.id,
+        phone: conversation.phone,
+        contactName: conversation.contactName,
+        tags: conversation.tags,
+        // O schema atual guarda só o estado presente das tags, não eventos de auditoria.
+        tagHistoryAvailable: false,
+        tagHistory: [] as never[],
+        silenced:
+          conversation.botPaused ||
+          conversation.tags.some((tag) => BOT_SILENCING_TAGS.includes(tag)),
+        silencedBy: BOT_SILENCING_TAGS,
+        botPaused: conversation.botPaused,
+        stage: displayStage(conversation, activeBookingAt(conversation, active)),
+        notes: conversation.notes,
+        notesAt: conversation.notesAt,
+        lastMessageAt: conversation.lastMessageAt,
+        createdAt: conversation.createdAt,
+        historyTruncated,
+        messages: rows
+          .slice(0, take)
+          .reverse()
+          .map((message) => ({
+            ...message,
+            text: message.text.slice(0, 2000),
+          })),
+      };
+    }),
+
+  /**
    * A IA grava o resumo do atendimento (tool "notas") pra equipe ter o contexto
    * sem ler a conversa toda. Guarda o resumo mais recente por telefone.
    */
