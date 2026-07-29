@@ -17,7 +17,6 @@ import { stageUi, initials } from "@/lib/stage";
 import {
   TAG_CATALOG,
   STAGE_ONLY_TAGS,
-  SILENCING_TAGS,
   normalizeTag,
 } from "@/lib/tags";
 import {
@@ -263,7 +262,6 @@ export function ConversasWorkspace({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {filtered.map((c) => {
               const s = stageUi(c.stage);
-              const tags = c.tags.filter((t) => !STAGE_ONLY_TAGS.has(t));
               const active = c.id === selected;
               return (
                 <button
@@ -304,14 +302,6 @@ export function ConversasWorkspace({
                           ⏸ IA
                         </span>
                       )}
-                      {tags.slice(0, 2).map((t) => (
-                        <span
-                          key={t}
-                          className="rounded border border-black/10 px-1 py-0.5 text-[9px] font-medium text-[var(--color-muted)]"
-                        >
-                          {t}
-                        </span>
-                      ))}
                     </span>
                   </span>
 
@@ -688,7 +678,7 @@ function DetalhesContato({
 }
 
 /**
- * "Tags ⊕": a palavra, um + pequeno ao lado e os chips do que está marcado.
+ * "Tags 2 ⊕": o contador mostra quantas existem; hover/foco revela os nomes.
  * O + abre a lista com checkbox — marcar/desmarcar grava na hora, uma tag por vez.
  */
 function TagsBox({
@@ -744,8 +734,31 @@ function TagsBox({
   return (
     <div ref={boxRef} className="relative mt-4">
       <div className="flex items-center gap-1">
-        <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-muted)]">
-          Tags
+        <span className="group/tags relative">
+          <span
+            tabIndex={visiveis.length ? 0 : undefined}
+            title={visiveis.length ? `Tags: ${visiveis.join(", ")}` : "Sem tags"}
+            className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide ${
+              visiveis.length
+                ? "cursor-help text-[var(--color-primary)]"
+                : "text-[var(--color-muted)]"
+            }`}
+          >
+            Tags
+            {visiveis.length > 0 && (
+              <span className="rounded-full bg-[var(--color-primary)] px-1.5 text-[9px] leading-4 text-white">
+                {visiveis.length}
+              </span>
+            )}
+          </span>
+          {visiveis.length > 0 && (
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-max max-w-64 rounded-lg bg-[var(--color-ink)] px-2.5 py-2 text-[11px] font-medium normal-case leading-4 text-white shadow-lg group-hover/tags:block group-focus-within/tags:block"
+            >
+              {visiveis.join(", ")}
+            </span>
+          )}
         </span>
         <button
           onClick={() => setOpen((v) => !v)}
@@ -755,28 +768,6 @@ function TagsBox({
         >
           <Plus className="size-2.5" />
         </button>
-      </div>
-
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {visiveis.length ? (
-          visiveis.map((t) => (
-            <span
-              key={t}
-              title={STAGE_ONLY_TAGS.has(t) ? "Controlada pelo Funil — arraste o card pra mudar" : undefined}
-              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                SILENCING_TAGS.has(t)
-                  ? "bg-rose-100 text-rose-700"
-                  : STAGE_ONLY_TAGS.has(t)
-                    ? "border border-dashed border-black/15 text-[var(--color-muted)]"
-                    : "bg-[var(--color-surface)]"
-              }`}
-            >
-              {t}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-[var(--color-muted)]">sem tags</span>
-        )}
       </div>
 
       {open && (
