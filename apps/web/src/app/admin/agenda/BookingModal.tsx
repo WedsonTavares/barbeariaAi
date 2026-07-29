@@ -1,8 +1,13 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { X, ChevronRight, Ban, Check, Phone, MapPin, Package, Pencil } from "lucide-react";
-import { loadBookingAction, setBookingStatusAction, recordPaymentAction } from "./actions";
+import { X, ChevronRight, Ban, Check, Phone, MapPin, Package, Pencil, Trash2 } from "lucide-react";
+import {
+  deleteCanceledBookingAction,
+  loadBookingAction,
+  setBookingStatusAction,
+  recordPaymentAction,
+} from "./actions";
 import { STATUS_UI, PAYMENT_UI, ui } from "./status";
 
 type Booking = Awaited<ReturnType<typeof loadBookingAction>>;
@@ -19,6 +24,7 @@ export function BookingModal({ id, onClose, onChanged }: { id: string; onClose: 
   const [err, setErr] = useState<string | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [payValue, setPayValue] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, start] = useTransition();
 
   async function refresh() {
@@ -35,10 +41,25 @@ export function BookingModal({ id, onClose, onChanged }: { id: string; onClose: 
 
   function changeStatus(status: string) {
     setErr(null);
+    setConfirmDelete(false);
     start(async () => {
       const r = await setBookingStatusAction(id, status);
       if (!r.ok) setErr(r.error ?? "Não foi possível mudar o status.");
       else { await refresh(); onChanged(); }
+    });
+  }
+
+  function deleteBooking() {
+    setErr(null);
+    start(async () => {
+      const r = await deleteCanceledBookingAction(id);
+      if (!r.ok) {
+        setConfirmDelete(false);
+        setErr(r.error ?? "Não foi possível excluir a reserva.");
+        return;
+      }
+      onChanged();
+      onClose();
     });
   }
 
@@ -187,6 +208,43 @@ export function BookingModal({ id, onClose, onChanged }: { id: string; onClose: 
                     <button disabled={pending} onClick={() => changeStatus("CANCELED")} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60">
                       <Ban className="size-4" /> Cancelar reserva
                     </button>
+                  )}
+
+                  {b.status === "CANCELED" && b.canDelete && (
+                    confirmDelete ? (
+                      <div className="mt-3 border-t border-red-100 pt-3">
+                        <p className="text-xs text-red-700">
+                          Esta ação apaga definitivamente somente esta reserva e não pode ser desfeita.
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => setConfirmDelete(false)}
+                            className="flex-1 rounded-full border border-black/10 px-3 py-2 text-sm font-semibold hover:bg-[var(--color-surface)] disabled:opacity-60"
+                          >
+                            Manter
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={deleteBooking}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                          >
+                            <Trash2 className="size-4" /> {pending ? "Excluindo..." : "Excluir"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => setConfirmDelete(true)}
+                        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                      >
+                        <Trash2 className="size-4" /> Excluir definitivamente
+                      </button>
+                    )
                   )}
                 </div>
 

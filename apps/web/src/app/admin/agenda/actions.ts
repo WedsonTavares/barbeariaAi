@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { requireRole, services } from "@diny/core";
+import { currentRole, requireRole, schemas, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
 
 /** Fluxo operacional da reserva (mesma ordem usada na tela de reservas). */
@@ -22,6 +22,7 @@ export async function loadBookingAction(id: string) {
   const b = await services.bookingService.get(tenant.id, id);
   if (!b) return null;
   const paid = b.payments.reduce((s, p) => s + Number(p.amount), 0);
+  const role = currentRole(ctx);
   return {
     id: b.id,
     status: b.status as string,
@@ -38,6 +39,7 @@ export async function loadBookingAction(id: string) {
     customer: { id: b.customer.id, name: b.customer.name, phone: b.customer.phone },
     toys: b.items.map((i) => ({ id: i.toyId, name: i.toy.name, price: Number(i.price) })),
     nextStatus: NEXT_STATUS[b.status] ?? null,
+    canDelete: role === "OWNER" || role === "ADMIN",
   };
 }
 
@@ -50,6 +52,24 @@ export async function setBookingStatusAction(id: string, status: string) {
   try {
     if (status === "CONFIRMED") await services.bookingService.confirm(tenant.id, id);
     else await services.bookingService.setStatus(tenant.id, id, status as Parameters<typeof services.bookingService.setStatus>[2]);
+  } catch (e) {
+    if (e instanceof services.BookingStateError) return { ok: false as const, error: e.message };
+    throw e;
+  }
+  revalidatePath("/admin/agenda");
+  revalidatePath("/admin/reservas");
+  return { ok: true as const };
+}
+
+/** Apaga fisicamente somente uma reserva que já esteja cancelada. */
+export async function deleteCanceledBookingAction(id: string) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  const parsed = schemas.idInput.safeParse(id);
+  if (!parsed.success) return { ok: false as const, error: "Reserva inválida" };
+
+  try {
+    await services.bookingService.removeCanceled(tenant.id, parsed.data);
   } catch (e) {
     if (e instanceof services.BookingStateError) return { ok: false as const, error: e.message };
     throw e;

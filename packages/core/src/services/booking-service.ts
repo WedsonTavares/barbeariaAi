@@ -452,6 +452,38 @@ export const bookingService = {
       await syncToyStatus(tx, id, status);
       return b;
     }),
+
+  /**
+   * Exclusão definitiva restrita a reservas canceladas e sem movimentação
+   * financeira. Itens e lembretes pertencem à reserva e saem por cascata;
+   * cliente, conversa, tags, notas e brinquedos permanecem intactos.
+   */
+  removeCanceled: (tenantId: string, id: string) =>
+    withTenant(tenantId, async (tx) => {
+      const [existing] = await tx.$queryRaw<Array<{ id: string; status: BookingStatusLike }>>`
+        SELECT "id", "status"
+        FROM "Booking"
+        WHERE "id" = ${id} AND "tenantId" = ${tenantId}
+        FOR UPDATE
+      `;
+      if (!existing) throw new BookingStateError("Reserva não encontrada");
+      if (existing.status !== "CANCELED") {
+        throw new BookingStateError("Cancele a reserva antes de excluí-la definitivamente");
+      }
+
+      const [payments, expenses] = await Promise.all([
+        tx.payment.count({ where: { bookingId: id } }),
+        tx.expense.count({ where: { bookingId: id } }),
+      ]);
+      if (payments > 0 || expenses > 0) {
+        throw new BookingStateError(
+          "Esta reserva possui movimentação financeira e deve permanecer cancelada para preservar o histórico"
+        );
+      }
+
+      await tx.booking.delete({ where: { id } });
+      return { id };
+    }),
 };
 
 type BookingStatusLike =
