@@ -194,6 +194,17 @@ export const agentSupportInput = z.object({
 });
 export type AgentSupportInput = z.infer<typeof agentSupportInput>;
 
+/** Contexto salvo que o n8n compacta antes de chamar o agente. */
+export const agentContextInput = z.object({
+  phone: z
+    .string()
+    .max(30)
+    .transform(phoneDigits)
+    .refine((value) => value.length >= 8 && value.length <= 20, "telefone inválido"),
+  limit: z.coerce.number().int().min(1).max(100).default(80),
+});
+export type AgentContextInput = z.infer<typeof agentContextInput>;
+
 /**
  * Ferramenta "solicitar cancelamento": o cliente pede pra desmarcar pelo WhatsApp.
  *
