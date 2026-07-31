@@ -24,3 +24,10 @@ base_de_dados.md
 # Exceção: base de conhecimento da IA não tem segredo nenhum, vale versionar
 # e sincronizar entre máquinas — ao contrário do resto de docs/.
 !docs/base_de_dados.md
+
+# Exceções: documentação do próprio sistema. Não tem segredo — descreve
+# arquitetura, rotas e pendências, e precisa acompanhar o repo entre máquinas.
+# Os exports de workflow do n8n continuam fora (têm token em texto puro).
+!README.md
+!PENDENTE.md
+!docs/openapi.yaml
