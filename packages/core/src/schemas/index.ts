@@ -142,7 +142,36 @@ const agentDateText = z
     );
   }, "data inexistente");
 
+/**
+ * Telefone das ferramentas novas: normaliza ANTES de medir. O n8n manda só
+ * dígitos, mas um número formatado ("+55 (16) 99233-1680") passa dos 20
+ * caracteres e seria rejeitado se o limite valesse sobre o texto cru.
+ */
+const agentPhone = z
+  .string()
+  .max(30)
+  .transform(phoneDigits)
+  .refine((value) => value.length >= 8 && value.length <= 20, "telefone inválido");
+
 const agentTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:mm");
+const agentPickupTime = z
+  .string()
+  .regex(/^(?:([01]\d|2[0-3]):[0-5]\d|24:00)$/, "use HH:mm (24:00 somente para retirada)");
+const optionalAgentTime = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  agentTime.optional()
+);
+const optionalAgentPickupTime = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  agentPickupTime.optional()
+);
+const availabilitySlotMinutes = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    return typeof value === "string" ? Number(value) : value;
+  },
+  z.literal(30).optional()
+);
 
 /**
  * Ferramenta "disponibilidade": aceita o dia inteiro (compatibilidade) ou,
@@ -151,8 +180,9 @@ const agentTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:mm");
 export const agentAvailabilityInput = z
   .object({
     date: agentDateText.transform(parseLocalDate),
-    setupTime: agentTime.optional(),
-    pickupTime: agentTime.optional(),
+    setupTime: optionalAgentTime,
+    pickupTime: optionalAgentPickupTime,
+    slotMinutes: availabilitySlotMinutes,
     toyName: z.string().max(120).optional(),
     category: toyCategory.optional(),
   })
@@ -170,6 +200,13 @@ export const agentAvailabilityInput = z
         code: z.ZodIssueCode.custom,
         path: ["pickupTime"],
         message: "a retirada deve ser depois da montagem",
+      });
+    }
+    if (data.slotMinutes && (hasSetup || hasPickup)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["slotMinutes"],
+        message: "não combine grade de slots com intervalo exato",
       });
     }
   });
@@ -196,11 +233,7 @@ export type AgentSupportInput = z.infer<typeof agentSupportInput>;
 
 /** Contexto salvo que o n8n compacta antes de chamar o agente. */
 export const agentContextInput = z.object({
-  phone: z
-    .string()
-    .max(30)
-    .transform(phoneDigits)
-    .refine((value) => value.length >= 8 && value.length <= 20, "telefone inválido"),
+  phone: agentPhone,
   limit: z.coerce.number().int().min(1).max(100).default(80),
 });
 export type AgentContextInput = z.infer<typeof agentContextInput>;
@@ -246,13 +279,42 @@ export const agentBookingInput = z.object({
   name: z.string().min(2).max(120),
   date: agentDateText,
   setupTime: agentTime,
-  pickupTime: agentTime,
+  pickupTime: agentPickupTime,
   toys: z.array(z.string().min(1).max(120)).min(1, "informe ao menos um brinquedo"),
   neighborhood: z.string().max(120).optional(),
   address: z.string().max(200).optional(),
   notes: z.string().max(500).optional(),
 });
 export type AgentBookingInput = z.infer<typeof agentBookingInput>;
+
+/**
+ * Reagenda uma reserva identificada pela consulta "meus agendamentos".
+ * O telefone impede que um bookingId de outro cliente seja alterado.
+ */
+export const agentBookingRescheduleInput = z
+  .object({
+    bookingId: z.string().uuid(),
+    phone: agentPhone,
+    date: agentDateText,
+    setupTime: agentTime,
+    pickupTime: agentPickupTime,
+  })
+  .refine((data) => data.pickupTime > data.setupTime, {
+    message: "a retirada deve ser depois da montagem",
+    path: ["pickupTime"],
+  });
+export type AgentBookingRescheduleInput = z.infer<typeof agentBookingRescheduleInput>;
+
+/**
+ * Cancela uma reserva específica. `confirmed: true` é obrigatório para impedir
+ * que uma chamada incompleta ou de consulta execute uma alteração destrutiva.
+ */
+export const agentBookingCancelInput = z.object({
+  bookingId: z.string().uuid(),
+  phone: agentPhone,
+  confirmed: z.literal(true),
+});
+export type AgentBookingCancelInput = z.infer<typeof agentBookingCancelInput>;
 
 /** Ferramenta "meus agendamentos": a IA consulta as festas já marcadas desse telefone. */
 export const agentLookupInput = z.object({

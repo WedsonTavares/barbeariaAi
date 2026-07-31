@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { withTenant } from "../db/withTenant";
-import { bookingService, BookingConflictError } from "../services/booking-service";
+import {
+  bookingService,
+  BookingAgentError,
+  BookingConflictError,
+  BookingPaymentError,
+} from "../services/booking-service";
 import { conversationService } from "../services/conversation-service";
 import { notificationService } from "../services/notification-service";
 import { customerPhoneKey } from "../phone";
@@ -559,5 +564,208 @@ describe("reserva criada pelo agente", () => {
     expect(upcoming.map((item) => item.id)).toContain(booking.bookingId);
     const board = await conversationService.board(tenantId, new Date("2031-01-01T00:00:00Z"));
     expect(board.AGENDADO.some((card) => card.id === conversation.id)).toBe(true);
+  });
+
+  it("reagenda pelo bookingId sem alterar brinquedo, preço ou cliente", async () => {
+    const phone = "5516999990110";
+    const original = await bookingService.createFromAgent(tenantId, {
+      phone,
+      name: "Cliente Reagendamento",
+      date: "2032-02-10",
+      setupTime: "10:00",
+      pickupTime: "14:00",
+      toys: ["Pula-pula Teste"],
+    });
+    const before = await bookingService.get(tenantId, original.bookingId);
+
+    const result = await bookingService.rescheduleFromAgent(tenantId, {
+      bookingId: original.bookingId,
+      phone,
+      date: "2032-02-11",
+      setupTime: "15:30",
+      pickupTime: "19:30",
+    });
+    const after = await bookingService.get(tenantId, original.bookingId);
+
+    expect(result.alreadyUpdated).toBe(false);
+    expect(after?.setupTime?.toISOString()).toBe("2032-02-11T18:30:00.000Z");
+    expect(after?.pickupTime?.toISOString()).toBe("2032-02-11T22:30:00.000Z");
+    expect(after?.customerId).toBe(before?.customerId);
+    expect(Number(after?.total)).toBe(Number(before?.total));
+    expect(after?.items.map((item) => item.toyId)).toEqual(
+      before?.items.map((item) => item.toyId)
+    );
+
+    const replay = await bookingService.rescheduleFromAgent(tenantId, {
+      bookingId: original.bookingId,
+      phone,
+      date: "2032-02-11",
+      setupTime: "15:30",
+      pickupTime: "19:30",
+    });
+    expect(replay.alreadyUpdated).toBe(true);
+  });
+
+  it("rejeita reagendamento com telefone errado ou horário ocupado", async () => {
+    const source = await bookingService.createFromAgent(tenantId, {
+      phone: "5516999990111",
+      name: "Cliente Origem",
+      date: "2032-02-12",
+      setupTime: "08:00",
+      pickupTime: "12:00",
+      toys: ["Pula-pula Teste"],
+    });
+    await bookingService.createFromAgent(tenantId, {
+      phone: "5516999990112",
+      name: "Cliente Destino",
+      date: "2032-02-13",
+      setupTime: "14:00",
+      pickupTime: "18:00",
+      toys: ["Pula-pula Teste"],
+    });
+
+    await expect(
+      bookingService.rescheduleFromAgent(tenantId, {
+        bookingId: source.bookingId,
+        phone: "5516999990999",
+        date: "2032-02-14",
+        setupTime: "14:00",
+        pickupTime: "18:00",
+      })
+    ).rejects.toBeInstanceOf(BookingAgentError);
+
+    await expect(
+      bookingService.rescheduleFromAgent(tenantId, {
+        bookingId: source.bookingId,
+        phone: "5516999990111",
+        date: "2032-02-13",
+        setupTime: "15:00",
+        pickupTime: "17:00",
+      })
+    ).rejects.toBeInstanceOf(BookingConflictError);
+  });
+
+  it("cancela de forma idempotente, libera o horário e preserva o registro", async () => {
+    const phone = "5516999990113";
+    const original = await bookingService.createFromAgent(tenantId, {
+      phone,
+      name: "Cliente Cancelamento",
+      date: "2032-02-15",
+      setupTime: "09:00",
+      pickupTime: "13:00",
+      toys: ["Pula-pula Teste"],
+    });
+    const booking = await bookingService.get(tenantId, original.bookingId);
+    const toyIds = booking?.items.map((item) => item.toyId) ?? [];
+
+    const first = await bookingService.cancelFromAgent(tenantId, {
+      bookingId: original.bookingId,
+      phone,
+      confirmed: true,
+    });
+    const replay = await bookingService.cancelFromAgent(tenantId, {
+      bookingId: original.bookingId,
+      phone,
+      confirmed: true,
+    });
+
+    expect(first.alreadyCanceled).toBe(false);
+    expect(replay.alreadyCanceled).toBe(true);
+    expect((await bookingService.get(tenantId, original.bookingId))?.status).toBe("CANCELED");
+    expect(
+      await bookingService.checkAvailability(
+        tenantId,
+        toyIds,
+        new Date("2032-02-15T12:00:00.000Z"),
+        new Date("2032-02-15T16:00:00.000Z")
+      )
+    ).toEqual([]);
+    expect(
+      await bookingService.upcomingForPhone(
+        tenantId,
+        phone,
+        new Date("2032-01-01T00:00:00.000Z")
+      )
+    ).toEqual([]);
+  });
+
+  it("avisa a equipe quando a IA cancela", async () => {
+    const phone = "5516999990114";
+    const original = await bookingService.createFromAgent(tenantId, {
+      phone,
+      name: "Cliente Aviso",
+      date: "2032-02-16",
+      setupTime: "09:00",
+      pickupTime: "13:00",
+      toys: ["Pula-pula Teste"],
+    });
+
+    await bookingService.cancelFromAgent(tenantId, {
+      bookingId: original.bookingId,
+      phone,
+      confirmed: true,
+    });
+
+    const unread = await notificationService.listUnread(tenantId);
+    expect(
+      unread.some(
+        (n) => n.bookingId === original.bookingId && n.title === "Festa cancelada pela IA"
+      )
+    ).toBe(true);
+  });
+
+  it("recusa cancelar automaticamente quando já existe pagamento", async () => {
+    const phone = "5516999990115";
+    const original = await bookingService.createFromAgent(tenantId, {
+      phone,
+      name: "Cliente Com Sinal",
+      date: "2032-02-17",
+      setupTime: "09:00",
+      pickupTime: "13:00",
+      toys: ["Pula-pula Teste"],
+    });
+    await withTenant(tenantId, (tx) =>
+      tx.payment.create({
+        data: { tenantId, bookingId: original.bookingId, amount: 50, kind: "DEPOSIT" },
+      })
+    );
+
+    await expect(
+      bookingService.cancelFromAgent(tenantId, {
+        bookingId: original.bookingId,
+        phone,
+        confirmed: true,
+      })
+    ).rejects.toBeInstanceOf(BookingPaymentError);
+    expect((await bookingService.get(tenantId, original.bookingId))?.status).toBe("CONFIRMED");
+  });
+
+  it("recusa reagendar para um horário que já passou", async () => {
+    const phone = "5516999990116";
+    const original = await bookingService.createFromAgent(tenantId, {
+      phone,
+      name: "Cliente Passado",
+      date: "2032-02-18",
+      setupTime: "09:00",
+      pickupTime: "13:00",
+      toys: ["Pula-pula Teste"],
+    });
+
+    await expect(
+      bookingService.rescheduleFromAgent(
+        tenantId,
+        {
+          bookingId: original.bookingId,
+          phone,
+          date: "2032-02-17",
+          setupTime: "09:00",
+          pickupTime: "13:00",
+        },
+        new Date("2032-02-18T00:00:00.000Z")
+      )
+    ).rejects.toBeInstanceOf(BookingAgentError);
+    expect((await bookingService.get(tenantId, original.bookingId))?.setupTime?.toISOString()).toBe(
+      "2032-02-18T12:00:00.000Z"
+    );
   });
 });

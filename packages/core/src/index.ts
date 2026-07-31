@@ -10,6 +10,7 @@ export { withTenant, platformDb, type Tx } from "./db/withTenant";
 export * from "./tenant/resolve";
 export * from "./auth/permissions";
 export * from "./calculations";
+export * from "./availability";
 export * from "./time";
 export * from "./phone";
 export * from "./text";

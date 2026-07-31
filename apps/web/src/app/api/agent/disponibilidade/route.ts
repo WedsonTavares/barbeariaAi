@@ -27,6 +27,7 @@ export async function POST(req: Request) {
 
   const dayStart = input.date;
   const date = dayStart.toISOString().slice(0, 10);
+  const slotMode = input.slotMinutes === 30;
   const exactInterval = Boolean(input.setupTime && input.pickupTime);
   const rangeStart = exactInterval
     ? parseLocalDateTime(`${date}T${input.setupTime}`)
@@ -44,6 +45,34 @@ export async function POST(req: Request) {
     if (input.category) return t.category === input.category;
     return true;
   });
+
+  if (slotMode) {
+    const slotsByToy = candidates.length
+      ? await services.bookingService.availabilitySlots(
+          tenant.id,
+          candidates.map((t) => t.id),
+          dayStart,
+          input.slotMinutes
+        )
+      : {};
+
+    return NextResponse.json({
+      date,
+      scope: "slots",
+      slotMinutes: input.slotMinutes,
+      toys: candidates.map((t) => {
+        const slots = (slotsByToy[t.id] ?? [])
+          .filter((slot) => slot.available)
+          .map(({ startTime, endTime }) => ({ startTime, endTime }));
+
+        return {
+          name: t.name,
+          category: t.category,
+          slots,
+        };
+      }),
+    });
+  }
 
   const conflicts = candidates.length
     ? await services.bookingService.checkAvailability(tenant.id, candidates.map((t) => t.id), rangeStart, rangeEnd)
