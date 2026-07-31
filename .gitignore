@@ -26,8 +26,9 @@ base_de_dados.md
 !docs/base_de_dados.md
 
 # Exceções: documentação do próprio sistema. Não tem segredo — descreve
-# arquitetura, rotas e pendências, e precisa acompanhar o repo entre máquinas.
+# arquitetura e pendências, e precisa acompanhar o repo entre máquinas.
 # Os exports de workflow do n8n continuam fora (têm token em texto puro).
+# O openapi.yaml mora em apps/web/public/ (servido pela tela /admin/api-docs)
+# e não precisa de exceção aqui.
 !README.md
 !PENDENTE.md
-!docs/openapi.yaml

@@ -20,8 +20,13 @@ info:
     fuso `America/Sao_Paulo`. A retirada aceita `24:00` (fim do dia).
 
 servers:
+  # Primeiro de propósito: aberto pelo painel, o "Try it out" bate no mesmo host
+  # em que você está logado — ou seja, no tenant certo, sem CORS e sem risco de
+  # testar contra a empresa errada.
+  - url: /
+    description: O tenant desta aba (mesma origem do painel)
   - url: https://{slug}.{rootDomain}
-    description: Um tenant
+    description: Um tenant específico
     variables:
       slug:
         default: dinyplay

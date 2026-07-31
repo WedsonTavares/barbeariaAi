@@ -37,6 +37,7 @@ apps/
     src/app/api/          rotas HTTP
     src/lib/              tenant.ts, evolution.ts, labels.ts
     src/middleware.ts     Clerk + redirect do domínio raiz
+    public/openapi.yaml   especificação da API (servida em /admin/api-docs)
   worker/                 BullMQ: dispara lembretes a cada 60s
 
 packages/
@@ -49,7 +50,6 @@ packages/
 
 docs/
   base_de_dados.md        base de conhecimento que a IA consulta
-  openapi.yaml            especificação das rotas de API
   *.json                  exports dos workflows do n8n (NÃO versionados)
 ```
 
@@ -124,7 +124,12 @@ cancelar com menos de 24h de antecedência (regra no workflow).
 
 ## Rotas
 
-Especificação completa com corpos e respostas: [`docs/openapi.yaml`](docs/openapi.yaml).
+**Documentação navegável:** `/admin/api-docs` no painel, com Swagger UI e
+"Try it out" — as requisições vão para o tenant da aba em que você está logado.
+Cuidado: são chamadas reais, não sandbox.
+
+Fonte da especificação: [`apps/web/public/openapi.yaml`](apps/web/public/openapi.yaml)
+(OpenAPI 3.1). Também abre em editor.swagger.io, Insomnia ou Postman.
 
 ### Ferramentas do agente — `/api/agent/*`
 
