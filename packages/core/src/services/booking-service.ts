@@ -1,5 +1,11 @@
 import { withTenant, type Tx } from "../db/withTenant";
-import type { BookingInput, BookingUpdateInput, AgentBookingInput } from "../schemas";
+import type {
+  BookingInput,
+  BookingUpdateInput,
+  AgentBookingInput,
+  AgentBookingCancelInput,
+  AgentBookingRescheduleInput,
+} from "../schemas";
 import { createBookingReminders, cancelBookingReminders } from "./reminder-service";
 import { pushNotification } from "./notification-service";
 import { APP_TZ, parseLocalDateTime } from "../time";
@@ -7,8 +13,14 @@ import { quoteWithMinimum } from "../calculations";
 import { customerPhoneKey, toWhatsAppPhone } from "../phone";
 import { matchesToyName } from "../text";
 import { markConversationScheduled } from "./conversation-service";
+import {
+  AVAILABILITY_SLOT_MINUTES,
+  buildDailyAvailabilitySlots,
+  type OccupiedToyInterval,
+} from "../availability";
 
 const SP_DATETIME = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short", timeStyle: "short" });
+const SP_DATE = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short" });
 
 /** Brinquedo "fora" enquanto a reserva está em entrega/montado; volta a disponível ao retirar. */
 const OUT_STATUSES = new Set(["IN_DELIVERY", "MOUNTED"]);
@@ -52,6 +64,19 @@ export class BookingStateError extends Error {
 }
 
 /**
+ * Reserva com dinheiro em jogo (sinal recebido). Cancelar aqui mexe em política
+ * de devolução — é decisão de gente, não do modelo. A IA cai de volta no fluxo
+ * humano de /api/agent/cancelamento. Estende BookingStateError de propósito:
+ * quem já tratava "estado" continua tratando.
+ */
+export class BookingPaymentError extends BookingStateError {
+  constructor(message: string) {
+    super(message);
+    this.name = "BookingPaymentError";
+  }
+}
+
+/**
  * Serializa reservas concorrentes dos MESMOS brinquedos na mesma transação:
  * sem isso, duas criações simultâneas passam ambas no findConflicts e geram
  * reserva dupla. Lock por toyId (ordenado p/ evitar deadlock), solto no commit.
@@ -65,6 +90,40 @@ async function lockToys(tx: Tx, toyIds: string[]) {
 async function lockCustomerPhone(tx: Tx, tenantId: string, phone: string) {
   const key = customerPhoneKey(phone);
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`customer:${tenantId}:${key}`}))`;
+}
+
+async function lockBooking(tx: Tx, tenantId: string, bookingId: string) {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "Booking"
+    WHERE "id" = ${bookingId} AND "tenantId" = ${tenantId}
+    FOR UPDATE
+  `;
+  return rows.length > 0;
+}
+
+async function bookingForAgent(tx: Tx, bookingId: string, phone: string) {
+  const booking = await tx.booking.findFirst({
+    where: { id: bookingId },
+    include: { customer: true, items: { include: { toy: true } } },
+  });
+  if (!booking || customerPhoneKey(booking.customer.phone) !== customerPhoneKey(phone)) {
+    throw new BookingAgentError("Agendamento não encontrado para este telefone.");
+  }
+  return booking;
+}
+
+const AGENT_MUTABLE_STATUSES = new Set([
+  "LEAD",
+  "QUOTE_SENT",
+  "WAITING_DEPOSIT",
+  "CONFIRMED",
+]);
+
+function assertAgentMutable(status: string) {
+  if (!AGENT_MUTABLE_STATUSES.has(status)) {
+    throw new BookingStateError("Este agendamento não pode mais ser alterado automaticamente.");
+  }
 }
 
 async function matchingOpenLeadIds(tx: Tx, phone: string, createdBefore?: Date) {
@@ -160,6 +219,165 @@ export const bookingService = {
   /** Disponibilidade: retorna lista de toyIds em conflito (vazia = livre). */
   checkAvailability: (tenantId: string, toyIds: string[], setup: Date, pickup: Date, excludeBookingId?: string) =>
     withTenant(tenantId, (tx) => findConflicts(tx, toyIds, setup, pickup, excludeBookingId)),
+
+  /**
+   * Grade diária de slots para o n8n combinar em blocos contínuos. Somente
+   * leitura. Slots que já começaram saem como indisponíveis (ver `now`).
+   */
+  availabilitySlots: (
+    tenantId: string,
+    toyIds: string[],
+    dayStart: Date,
+    slotMinutes = AVAILABILITY_SLOT_MINUTES,
+    now = new Date()
+  ) =>
+    withTenant(tenantId, async (tx) => {
+      const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+      const rows = await tx.bookingItem.findMany({
+        where: {
+          toyId: { in: toyIds },
+          booking: {
+            status: { not: "CANCELED" },
+            setupTime: { lt: dayEnd },
+            pickupTime: { gt: dayStart },
+          },
+        },
+        select: {
+          toyId: true,
+          booking: { select: { setupTime: true, pickupTime: true } },
+        },
+      });
+      const occupied: OccupiedToyInterval[] = [];
+      for (const row of rows) {
+        if (row.booking.setupTime && row.booking.pickupTime) {
+          occupied.push({
+            toyId: row.toyId,
+            setupTime: row.booking.setupTime,
+            pickupTime: row.booking.pickupTime,
+          });
+        }
+      }
+      return buildDailyAvailabilitySlots(dayStart, toyIds, occupied, slotMinutes, now);
+    }),
+
+  /**
+   * Reagenda sem alterar brinquedos, preço, pagamento, cliente, CRM ou tags.
+   * O bookingId precisa pertencer ao telefone e o novo intervalo é revalidado
+   * sob o mesmo lock usado na criação de reservas.
+   */
+  rescheduleFromAgent: (tenantId: string, input: AgentBookingRescheduleInput, now = new Date()) =>
+    withTenant(tenantId, async (tx) => {
+      if (!(await lockBooking(tx, tenantId, input.bookingId))) {
+        throw new BookingAgentError("Agendamento não encontrado para este telefone.");
+      }
+      const existing = await bookingForAgent(tx, input.bookingId, input.phone);
+      assertAgentMutable(existing.status);
+
+      const setup = parseLocalDateTime(`${input.date}T${input.setupTime}`);
+      const pickup = parseLocalDateTime(`${input.date}T${input.pickupTime}`);
+      if (!(pickup > setup)) {
+        throw new BookingAgentError("O horário de retirada precisa ser depois do de montagem.");
+      }
+      // A grade de slots já esconde horário passado; aqui é a rede de segurança
+      // para a IA não empurrar a festa para trás quando erra a data.
+      if (setup.getTime() < now.getTime()) {
+        throw new BookingAgentError("Esse horário já passou — escolha uma data ou horário futuro.");
+      }
+
+      const toyIds = existing.items.map((item) => item.toyId);
+      if (!toyIds.length) throw new BookingStateError("Este agendamento não possui brinquedos.");
+      await lockToys(tx, toyIds);
+
+      const conflicts = await findConflicts(tx, toyIds, setup, pickup, existing.id);
+      if (conflicts.length) throw new BookingConflictError(conflicts);
+
+      const unchanged =
+        existing.setupTime?.getTime() === setup.getTime() &&
+        existing.pickupTime?.getTime() === pickup.getTime();
+      if (!unchanged) {
+        await tx.booking.update({
+          where: { id: existing.id },
+          data: { eventDate: setup, setupTime: setup, pickupTime: pickup },
+        });
+
+        if (existing.status === "CONFIRMED") {
+          await cancelBookingReminders(tx, existing.id);
+          await createBookingReminders(tx, tenantId, existing.id, setup, pickup);
+        }
+        await pushNotification(tx, tenantId, {
+          type: "BOOKING_RESCHEDULED",
+          title: "Reserva reagendada",
+          body: `Novo horário: entrega ${SP_DATETIME.format(setup)} · retirada ${SP_DATETIME.format(pickup)}`,
+          bookingId: existing.id,
+        });
+      }
+
+      return {
+        bookingId: existing.id,
+        date: input.date,
+        setupTime: input.setupTime,
+        pickupTime: input.pickupTime,
+        setupISO: setup.toISOString(),
+        pickupISO: pickup.toISOString(),
+        toys: existing.items.map((item) => item.toy.name),
+        calendarEventId: existing.googleCalendarEventId,
+        alreadyUpdated: unchanged,
+      };
+    }),
+
+  /**
+   * Cancela uma reserva específica e libera seus horários. A operação é
+   * idempotente e não apaga histórico financeiro, cliente, conversa ou tags.
+   */
+  cancelFromAgent: (tenantId: string, input: AgentBookingCancelInput) =>
+    withTenant(tenantId, async (tx) => {
+      if (!input.confirmed) throw new BookingAgentError("Confirmação de cancelamento ausente.");
+
+      if (!(await lockBooking(tx, tenantId, input.bookingId))) {
+        throw new BookingAgentError("Agendamento não encontrado para este telefone.");
+      }
+      const existing = await bookingForAgent(tx, input.bookingId, input.phone);
+      if (existing.status === "CANCELED") {
+        return {
+          bookingId: existing.id,
+          canceled: true,
+          alreadyCanceled: true,
+          calendarEventId: existing.googleCalendarEventId,
+        };
+      }
+      assertAgentMutable(existing.status);
+
+      // Sinal já recebido → devolução é conversa de gente. A IA não decide isso.
+      const paid = await tx.payment.count({ where: { bookingId: existing.id } });
+      if (paid > 0 || existing.paymentStatus === "DEPOSIT_PAID" || existing.paymentStatus === "PAID") {
+        throw new BookingPaymentError(
+          "Essa reserva já tem pagamento registrado — a equipe precisa tratar o cancelamento e a devolução."
+        );
+      }
+
+      await tx.booking.update({ where: { id: existing.id }, data: { status: "CANCELED" } });
+      await cancelBookingReminders(tx, existing.id);
+      await syncToyStatus(tx, existing.id, "CANCELED");
+
+      // A equipe precisa saber que a agenda abriu — senão o cancelamento da IA
+      // só aparece pra quem for olhar o painel por acaso.
+      const quando = existing.setupTime
+        ? SP_DATETIME.format(existing.setupTime)
+        : SP_DATE.format(existing.eventDate);
+      await pushNotification(tx, tenantId, {
+        type: "BOOKING_CANCEL_REQUESTED",
+        title: "Festa cancelada pela IA",
+        body: `${existing.customer.name} · ${quando} · ${existing.items.map((item) => item.toy.name).join(", ") || "sem brinquedo"}`,
+        bookingId: existing.id,
+      });
+
+      return {
+        bookingId: existing.id,
+        canceled: true,
+        alreadyCanceled: false,
+        calendarEventId: existing.googleCalendarEventId,
+      };
+    }),
 
   /**
    * Reserva fechada pelo agente de IA (WhatsApp). Fecha DE VERDADE (status CONFIRMED,
@@ -363,6 +581,9 @@ export const bookingService = {
    */
   update: (tenantId: string, id: string, input: BookingUpdateInput) =>
     withTenant(tenantId, async (tx) => {
+      if (!(await lockBooking(tx, tenantId, id))) {
+        throw new BookingStateError("Reserva não encontrada");
+      }
       const existing = await tx.booking.findFirst({ where: { id } });
       if (!existing) throw new BookingStateError("Reserva não encontrada");
       if (existing.status === "CANCELED" || existing.status === "FINISHED") {

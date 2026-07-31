@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services, schemas, ZodError } from "@diny/core";
+import { services, schemas, spClock, ZodError } from "@diny/core";
 import { BOOKING_STATUS, label } from "@/lib/labels";
+
+/** HH:mm no fuso do negócio — o ISO em UTC fazia a IA anunciar 3h a mais. */
+function spTimeLabel(d: Date | null) {
+  if (!d) return null;
+  const { hour, minute } = spClock(d);
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
 
 /**
  * Ferramenta pro agente de IA (n8n): "quando é meu agendamento?" / "confirma minha
@@ -31,9 +38,12 @@ export async function POST(req: Request) {
     ok: true,
     count: bookings.length,
     bookings: bookings.map((b) => ({
-      date: b.eventDate.toISOString().slice(0, 10),
+      bookingId: b.id,
+      date: spClock(b.eventDate).dayKey,
       setupTime: b.setupTime ? b.setupTime.toISOString() : null,
       pickupTime: b.pickupTime ? b.pickupTime.toISOString() : null,
+      setupTimeLabel: spTimeLabel(b.setupTime),
+      pickupTimeLabel: spTimeLabel(b.pickupTime),
       status: label(BOOKING_STATUS, b.status),
       toys: b.items.map((i) => i.toy.name),
       address: b.address,
