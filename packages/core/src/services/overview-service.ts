@@ -51,7 +51,7 @@ function toMinutes(value: string, fallback: number): number {
 }
 
 /** Lê `TenantSettings.businessHours` (JSON livre) de forma tolerante. */
-function parseBusinessHours(raw: unknown): BusinessHours {
+export function parseBusinessHours(raw: unknown): BusinessHours {
   if (!raw || typeof raw !== "object") return DEFAULT_HOURS;
   const o = raw as Record<string, unknown>;
   const start = typeof o.start === "string" ? o.start : DEFAULT_HOURS.start;

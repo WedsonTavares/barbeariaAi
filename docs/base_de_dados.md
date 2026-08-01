@@ -1,16 +1,15 @@
 # Base de Conhecimento — Diny Festas
 
 > **O que é este documento.** É a fonte de verdade que a IA consulta pela tool
-> `base_de_dados` sempre que precisar de um detalhe que não está no prompt dela: medidas e
-> capacidade dos brinquedos, itens de segurança, horário, bairros atendidos, pagamento, sinal,
-> cancelamento e regra de chuva. Nada aqui foi inventado — o que ainda não temos está marcado
-> como `[PREENCHER: ...]`, e a IA foi instruída a **nunca adivinhar** um campo assim: ela diz
-> que confirma com a equipe.
+> `base_conhecimento` sempre que precisar de um detalhe que não está no prompt dela: medidas e
+> capacidade dos brinquedos, itens de segurança, horário, bairros atendidos, **preços acima do
+> mínimo**, pagamento, sinal, cancelamento e regra de chuva. Nada aqui foi inventado — o que
+> ainda não temos está marcado como `[PREENCHER: ...]`, e a IA foi instruída a **nunca
+> adivinhar** um campo assim: ela diz que confirma com a equipe.
 >
-> **Como usar:** edite este arquivo local, preencha os `[PREENCHER]` com o dado real, e quando
-> estiver pronto copie o conteúdo pro **Google Doc** que a tool `base_de_dados` de fato lê
-> (hoje ela ainda aponta pro doc do curso — pendência #4 do `CONTEXTO.md`). Me chame quando o
-> Doc novo existir que eu ajudo a trocar a credencial no nó.
+> **Como usar:** edite este arquivo local, preencha os `[PREENCHER]` com o dado real, e copie o
+> conteúdo pro Google Doc que a tool lê:
+> https://docs.google.com/document/d/1AOPG2XvxeIeZeNQPN1LPVUOqmFybUA6yDc3BZT3vq2s/edit
 >
 > **Formato pergunta-e-resposta de propósito:** a tool busca um trecho relevante neste texto
 > pra responder — perguntas curtas e diretas na FAQ ajudam a achar a resposta certa mais rápido
@@ -22,7 +21,10 @@
 
 **Nome:** Diny Festas
 **O que fazemos:** locação de brinquedos infláveis para festas infantis, com foco principal em **pula-pulas**.
-**Clima da marca:** infantil, alegre, divertido, animado, acolhedor — tudo girando em torno de festa e comemoração.
+**Clima da marca:** alegre, animado e acolhedor, girando em torno de festa e comemoração. A
+festa é da criança, mas **quem contrata é adulto** (mãe, pai, avó, quem organiza) — o tom é de
+vendedora simpática que entende do assunto e resolve rápido, nunca linguagem infantilizada
+com quem está contratando.
 
 ## Local de atendimento
 
@@ -104,12 +106,24 @@ pra IA conseguir responder dúvida técnica sobre ele.
 **Precisa de tomada elétrica perto?** `[PREENCHER: sim/não em geral, qual distância máxima do ponto de energia]`
 **Pode ser em área com grama, laje, terra?** `[PREENCHER]`
 
+## Duração da locação
+
+- **Mínimo: 4 horas.** Não alugamos por menos.
+- Acima do mínimo, o cliente escolhe quanto tempo quiser, **em blocos de 30 minutos** (4h, 4h30, 5h, 7h, 12h...).
+- **Não existe limite máximo de pacote** — quem limita é o horário livre na agenda.
+- A agenda trabalha em slots de 30 minutos e é consultada em tempo real; não há "pacotes" fixos de 4h ou 7h.
+
 ## Valores
 
-- **4 horas de locação:** R$ 150,00
-- **7 horas de locação:** R$ 250,00
+- **Valor mínimo: R$ 150,00 pelas 4 horas.** Esse é o único valor que a IA informa de cabeça, sempre como "a partir de".
 
-**Tabela completa por quantidade de horas** (se o cliente quiser um período diferente): `[PREENCHER: tabela ou regra de cálculo — a IA hoje é instruída a não confirmar valor fora dessas 2 opções e chamar a equipe]`
+**Tabela por quantidade de horas acima do mínimo:** `[PREENCHER: quanto custa 5h, 6h, 7h, 12h, dia todo — ou a regra de cálculo, ex. "R$ X por hora adicional"]`
+
+**Mais de um brinquedo na mesma festa:** `[PREENCHER: soma os valores? tem desconto de combo? qual?]`
+
+> ⚠️ **Esta seção é a única fonte de preço acima do mínimo.** A IA está proibida de estimar
+> valor ou calcular proporção ("7 horas dá quase o dobro" é proibido). O que não estiver
+> preenchido aqui vira encaminhamento para o suporte humano.
 
 ### Pagamento
 
@@ -127,9 +141,13 @@ pra IA conseguir responder dúvida técnica sobre ele.
 
 ## Negociação
 
-A Diny Festas está aberta a negociações. Pedidos de desconto, condição especial, período
-personalizado ou proposta fora dos valores acima são sempre encaminhados para o **suporte
-humano** (a IA não fecha negociação sozinha).
+A Diny Festas está aberta a negociações. Pedidos de desconto, condição especial de pagamento
+ou proposta fora dos valores acima são sempre encaminhados para o **suporte humano** (a IA não
+fecha negociação sozinha).
+
+Período personalizado **não** é negociação: qualquer duração a partir de 4 horas, em blocos de
+30 minutos, é atendida normalmente pela agenda. O que vai para o humano é só o **valor**, se a
+tabela acima não cobrir aquela duração.
 
 ---
 
@@ -155,7 +173,8 @@ O Pula Pula Profissional tem 3,05 metros de diâmetro — cabe bem em quintais, 
 - [ ] Telefone/WhatsApp oficial e endereço
 - [ ] Pula Pula Profissional: tipo (inflável/cama elástica), capacidade de crianças, necessidade de tomada
 - [ ] Espaço necessário para montagem + tipo de piso aceito
-- [ ] Tabela completa de preços por hora (além de 4h/7h)
+- [ ] **Tabela de preços acima do mínimo de 4h** (5h, 6h, 7h, dia todo — ou regra por hora adicional)
+- [ ] **Valor de combo / mais de um brinquedo na mesma festa**
 - [ ] Formas de pagamento + valor de sinal
 - [ ] Política de cancelamento
 - [ ] Regra para chuva
