@@ -243,7 +243,12 @@ export function FunilBoard({ initial }: { initial: Board }) {
               onDragOver={(e) => { e.preventDefault(); setOver(col.key); }}
               onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
               onDrop={() => drop(col.key)}
-              className="flex w-72 shrink-0 flex-col"
+              // w-64 e não w-72: com 288px as quatro colunas somavam 1188px e
+              // não cabiam nos 1168px úteis de uma tela 1440 — a coluna
+              // Pós-festa ficava cortada na borda. Com 256px cabem inteiras a
+              // partir de ~1366px, e abaixo disso o quadro rola na horizontal,
+              // que é o comportamento normal de kanban.
+              className="flex w-64 shrink-0 flex-col"
             >
               {/* cabeçalho colorido */}
               <header className={`rounded-lg px-3 py-2 ${col.head}`} title={col.hint}>
@@ -502,8 +507,14 @@ function CardTagsDialog({
           </button>
         </div>
 
+        {/*
+          Dizia que Pós-festa só era controlado ao arrastar — mas ele está aí em
+          cima como checkbox, e marcar tem exatamente o mesmo efeito (inclusive
+          a mensagem automática). Só Agendado é que não se marca à mão: ele
+          espelha uma reserva ativa.
+        */}
         <p className="mt-2 text-[10px] text-[var(--color-muted)]">
-          Agendado e Pós-festa continuam sendo controlados ao arrastar o card.
+          Agendado não se marca à mão: ele acompanha a reserva ativa do contato.
         </p>
       </div>
     </div>
