@@ -3,25 +3,21 @@ import type { ReminderType } from "@prisma/client";
 
 const MIN = 60_000;
 
-/** Aviso de entrega/montagem: 30min antes e na hora (pra equipe saber que já devia estar lá). */
+/**
+ * Um aviso por operação: 30 minutos antes de montar e 30 minutos antes de retirar.
+ *
+ * Antes eram sete por festa (2 de entrega + 5 de retirada, incluindo "na hora",
+ * "15 min" e "atrasada"). Sete mensagens no mesmo celular pela mesma festa vira
+ * ruído, e alerta que vira ruído deixa de ser lido — que é o contrário do que o
+ * lembrete existe pra fazer. Os outros tipos continuam no enum porque há
+ * lembretes antigos gravados com eles; só não são criados mais.
+ */
 export function deliveryTimes(setup: Date): { type: ReminderType; fireAt: Date }[] {
-  const t = setup.getTime();
-  return [
-    { type: "DELIVERY_30M", fireAt: new Date(t - 30 * MIN) },
-    { type: "DELIVERY_NOW", fireAt: new Date(t) },
-  ];
+  return [{ type: "DELIVERY_30M", fireAt: new Date(setup.getTime() - 30 * MIN) }];
 }
 
-/** Os 5 lembretes baseados no horário de retirada. */
 export function reminderTimes(pickup: Date): { type: ReminderType; fireAt: Date }[] {
-  const t = pickup.getTime();
-  return [
-    { type: "PICKUP_1H", fireAt: new Date(t - 60 * MIN) },
-    { type: "PICKUP_30M", fireAt: new Date(t - 30 * MIN) },
-    { type: "PICKUP_15M", fireAt: new Date(t - 15 * MIN) },
-    { type: "PICKUP_NOW", fireAt: new Date(t) },
-    { type: "PICKUP_DELAYED", fireAt: new Date(t + 15 * MIN) },
-  ];
+  return [{ type: "PICKUP_30M", fireAt: new Date(pickup.getTime() - 30 * MIN) }];
 }
 
 /** Cria os lembretes de entrega (setup) + retirada (pickup) de uma reserva. */

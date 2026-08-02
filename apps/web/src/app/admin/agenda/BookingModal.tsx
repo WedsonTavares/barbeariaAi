@@ -185,11 +185,29 @@ export function BookingModal({ id, onClose, onChanged }: { id: string; onClose: 
                           <Check className="size-4" /> Confirmar reserva
                         </button>
                       ) : null}
-                      {b.nextStatus && (
-                        <button disabled={pending} onClick={() => changeStatus(b.nextStatus!)} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-sm font-semibold hover:bg-[var(--color-surface)] disabled:opacity-60">
-                          Avançar para {STATUS_UI[b.nextStatus]?.label ?? b.nextStatus} <ChevronRight className="size-4" />
-                        </button>
-                      )}
+                      {b.nextStatus && (() => {
+                        // Retirado exige pagamento (a regra vive no core; aqui
+                        // o botão só antecipa o motivo em vez de deixar clicar
+                        // pra receber erro).
+                        const travado = b.nextStatus === "PICKED_UP" && b.paid <= 0;
+                        return (
+                          <>
+                            <button
+                              disabled={pending || travado}
+                              onClick={() => changeStatus(b.nextStatus!)}
+                              title={travado ? "Registre o pagamento antes de marcar como retirado" : undefined}
+                              className="flex w-full items-center justify-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-sm font-semibold hover:bg-[var(--color-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Avançar para {STATUS_UI[b.nextStatus]?.label ?? b.nextStatus} <ChevronRight className="size-4" />
+                            </button>
+                            {travado && (
+                              <p className="text-center text-[11px] font-semibold text-amber-700">
+                                Registre o pagamento para liberar “Retirado”.
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
 

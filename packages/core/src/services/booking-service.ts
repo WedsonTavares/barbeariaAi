@@ -666,6 +666,18 @@ export const bookingService = {
 
   setStatus: (tenantId: string, id: string, status: BookingStatusLike) =>
     withTenant(tenantId, async (tx) => {
+      // Retirado só com dinheiro registrado. A trava mora aqui, e não no botão,
+      // porque a tela não é o único caminho: as tools da IA também chamam por
+      // aqui. Marcar como retirado é o que encerra a festa — depois disso a
+      // cobrança fica muito mais difícil de lembrar.
+      if (status === "PICKED_UP") {
+        const pago = await tx.payment.aggregate({ where: { bookingId: id }, _sum: { amount: true } });
+        if (Number(pago._sum.amount ?? 0) <= 0) {
+          throw new BookingStateError(
+            "Registre o pagamento antes de marcar como retirado."
+          );
+        }
+      }
       const b = await tx.booking.update({ where: { id }, data: { status } });
       if (status === "PICKED_UP" || status === "CANCELED" || status === "FINISHED") {
         await cancelBookingReminders(tx, id);

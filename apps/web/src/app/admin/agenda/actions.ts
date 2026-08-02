@@ -3,12 +3,18 @@ import { revalidatePath } from "next/cache";
 import { currentRole, requireRole, schemas, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
 
-/** Fluxo operacional da reserva (mesma ordem usada na tela de reservas). */
+/**
+ * Fluxo operacional do dia a dia: confirmada → montado → retirado.
+ *
+ * Os outros status continuam existindo no banco e no histórico (e na gaveta
+ * "Mudar para outro status"), mas o caminho de um clique é esse: na prática só
+ * interessa saber se o brinquedo já foi montado e se já foi buscado. "Em
+ * entrega" e "finalizada" viravam clique a mais sem informação nova.
+ */
 const NEXT_STATUS: Record<string, string> = {
-  CONFIRMED: "IN_DELIVERY",
+  CONFIRMED: "MOUNTED",
   IN_DELIVERY: "MOUNTED",
   MOUNTED: "PICKED_UP",
-  PICKED_UP: "FINISHED",
 };
 const ALLOWED = new Set([
   "LEAD", "QUOTE_SENT", "WAITING_DEPOSIT", "CONFIRMED",
