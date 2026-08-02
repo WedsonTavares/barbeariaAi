@@ -28,6 +28,7 @@ import {
   toggleTagAction,
   toggleBotAction,
   updateContactAction,
+  summarizeConversationAction,
 } from "./actions";
 
 export type ConversaRow = {
@@ -476,6 +477,17 @@ export function ConversasWorkspace({
                   router.refresh();
                 })
               }
+              /*
+                Fora do `start()` de propósito: o resumo demora alguns segundos
+                e a transição deixaria o painel inteiro em `pending`, travando
+                as tags e o botão de assumir enquanto isso. O ResumoBox mostra
+                o próprio "Lendo…".
+              */
+              onResumir={async () => {
+                const r = await summarizeConversationAction(d.id);
+                if (r.ok) await refresh(d.id);
+                return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
+              }}
             />
           ) : (
             <p className="p-4 text-sm text-[var(--color-muted)]">
@@ -532,11 +544,13 @@ function DetalhesContato({
   pending,
   onSaveName,
   onToggleTag,
+  onResumir,
 }: {
   d: NonNullable<Detail>;
   pending: boolean;
   onSaveName: (name: string) => void;
   onToggleTag: (tag: string, on: boolean) => void;
+  onResumir: () => Promise<{ ok: boolean; motivo?: string }>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(d.contactName ?? "");
@@ -618,6 +632,13 @@ function DetalhesContato({
         <h3 className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-muted)]">
           Contexto da conversa
         </h3>
+
+        <ResumoBox
+          summary={d.summary}
+          summaryAt={d.summaryAt}
+          total={d.messages.length}
+          onGerar={onResumir}
+        />
 
         {/* Festas: vêm da tabela de reservas AGORA, não do texto da IA. */}
         <div className="mt-2">
@@ -704,6 +725,82 @@ function DetalhesContato({
  * "Tags 2 ⊕": o contador mostra quantas existem; hover/foco revela os nomes.
  * O + abre a lista com checkbox — marcar/desmarcar grava na hora, uma tag por vez.
  */
+const ERRO_RESUMO: Record<string, string> = {
+  sem_chave: "Resumo automático não está configurado neste ambiente.",
+  sem_mensagens: "Esta conversa ainda não tem mensagens para resumir.",
+  falhou: "Não foi possível gerar agora. Tente de novo.",
+};
+
+/**
+ * Resumo da conversa inteira. Diferente da "Anotação da IA" logo abaixo, que é
+ * a última nota de evento: aqui é a história do começo ao fim, para quem vai
+ * assumir sem ter lido nada. Quando a IA escala pra humano ele já vem pronto;
+ * fora disso, é o botão que gera.
+ */
+function ResumoBox({
+  summary,
+  summaryAt,
+  total,
+  onGerar,
+}: {
+  summary: string | null;
+  summaryAt: string | null;
+  total: number;
+  onGerar: () => Promise<{ ok: boolean; motivo?: string }>;
+}) {
+  const [rodando, setRodando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function gerar() {
+    setRodando(true);
+    setErro(null);
+    const r = await onGerar();
+    if (!r.ok) setErro(ERRO_RESUMO[r.motivo ?? "falhou"] ?? ERRO_RESUMO.falhou!);
+    setRodando(false);
+  }
+
+  return (
+    <div className="mt-2 rounded-xl bg-sky-50 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[10px] font-bold uppercase text-sky-800">
+          🧾 Resumo da conversa
+          {summaryAt ? ` · ${fmt(summaryAt)}` : ""}
+        </div>
+        <button
+          type="button"
+          onClick={gerar}
+          disabled={rodando || total === 0}
+          className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-sky-800 shadow-sm transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {rodando ? "Lendo…" : summary ? "Atualizar" : "Resumir"}
+        </button>
+      </div>
+
+      {summary ? (
+        <p className="mt-1.5 whitespace-pre-wrap text-sm text-sky-900">{summary}</p>
+      ) : (
+        <p className="mt-1.5 text-xs text-sky-800/80">
+          {total === 0
+            ? "Sem mensagens ainda."
+            : `Ainda sem resumo. Gere a partir das ${total} mensagens desta conversa.`}
+        </p>
+      )}
+
+      {/* O resumo é de quando foi gerado; mensagens novas depois dele não entram. */}
+      {summary && (
+        <p className="mt-1.5 text-[10px] text-sky-800/70">
+          Retrato de quando foi gerado — use “Atualizar” para incluir o que veio depois.
+        </p>
+      )}
+      {erro && (
+        <p role="alert" className="mt-1.5 text-[11px] font-semibold text-red-600">
+          {erro}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function TagsBox({
   tags,
   pending,

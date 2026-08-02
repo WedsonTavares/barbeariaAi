@@ -435,6 +435,12 @@ model Conversation {
   stage         ConversationStage @default(IA_ATENDENDO) // coluna no funil (/admin/funil)
   notes         String?  // resumo do atendimento escrito pela IA (tool "notas")
   notesAt       DateTime?
+  /// Resumo da conversa INTEIRA, gerado sob demanda (botão) ou ao a IA escalar
+  /// pra humano. Campo separado do `notes` de propósito: `notes` é a última
+  /// nota de evento e é sobrescrita a cada reserva/lead/escalonamento — se
+  /// dividissem o mesmo campo, um apagaria o outro.
+  summary       String?
+  summaryAt     DateTime?
   lastMessageAt DateTime @default(now())
   unread        Int      @default(0)
   createdAt     DateTime @default(now())

@@ -31,6 +31,8 @@ export async function loadConversationAction(id: string) {
     stage: c.stage as string,
     notes: c.notes,
     notesAt: c.notesAt ? c.notesAt.toISOString() : null,
+    summary: c.summary,
+    summaryAt: c.summaryAt ? c.summaryAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
     bookings: bookings.map((b) => ({
       id: b.id,
@@ -63,6 +65,21 @@ export async function replyAction(id: string, phone: string, text: string) {
   if (sent) await services.conversationService.recordOutbound(tenant.id, to, msg, "AGENT");
   revalidatePath("/admin/conversas");
   return { ok: sent };
+}
+
+/**
+ * Gera (ou refaz) o resumo da conversa inteira, sob demanda pelo botão.
+ *
+ * Não usa `revalidatePath`: quem chamou já recebe o texto de volta e atualiza
+ * o painel na hora — recarregar a rota inteira aqui só faria a lista piscar.
+ */
+export async function summarizeConversationAction(id: string) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
+
+  const r = await services.summaryService.generate(tenant.id, id);
+  if (!r.ok) return { ok: false as const, motivo: r.motivo };
+  return { ok: true as const, summary: r.summary, summaryAt: r.summaryAt.toISOString() };
 }
 
 /** Liga/desliga UMA tag sem zerar não-lidas nem substituir as demais. */

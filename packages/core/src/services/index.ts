@@ -17,6 +17,7 @@ export { tenantService } from "./tenant-service";
 export { notificationService, pushNotification } from "./notification-service";
 export { conversationService, BOT_SILENCING_TAGS, CONVERSATION_STAGES, STAGE_TAG } from "./conversation-service";
 export { botService, botConfigured } from "./bot-service";
+export { summaryService, summaryConfigured, type SummaryResult } from "./summary-service";
 export {
   reminderService,
   reminderTimes,

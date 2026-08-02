@@ -53,5 +53,17 @@ export async function POST(req: Request) {
   await services.notificationService.humanRequested(tenant.id, input.phone, input.name, input.reason);
   // Grava o contexto sozinho — não depende da IA lembrar de chamar a tool "notas".
   if (input.reason) await services.conversationService.setNote(tenant.id, input.phone, `Escalado para a equipe: ${input.reason}`);
+
+  // Resumo da conversa pra quem vai assumir — é AQUI que ele mais vale, porque
+  // o atendente entra sem ter lido nada. Fica por último e dentro de try/catch
+  // de propósito: o escalonamento e o aviso já aconteceram acima, então mesmo
+  // que isto demore ou falhe, nada do que importa se perde. Sem OPENAI_API_KEY
+  // a função devolve "sem_chave" sem chamar ninguém.
+  try {
+    await services.summaryService.generateByPhone(tenant.id, input.phone);
+  } catch (error) {
+    console.error("[suporte] resumo não gerado", error);
+  }
+
   return NextResponse.json({ ok: true, message: "Um atendente humano foi avisado e vai continuar por aqui em breve." });
 }
