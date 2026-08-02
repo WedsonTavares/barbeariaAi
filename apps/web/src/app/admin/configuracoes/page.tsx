@@ -84,6 +84,13 @@ export default async function ConfiguracoesPage({
           defaultValue={settings?.whatsappAlerts}
           placeholder="5516999999999"
         />
+        <Field
+          name="logoUrl"
+          label="Logo (URL)"
+          hint="Aparece no topo, no destaque e no rodapé do site. Sem logo, entra um ícone genérico."
+          defaultValue={settings?.logoUrl}
+          placeholder="/dinyfestas.png"
+        />
       </SettingsSection>
 
       {/* ─────────── Atendimento ─────────── */}

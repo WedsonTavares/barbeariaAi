@@ -424,6 +424,7 @@ export const tenantSettingsInput = z.object({
   colorSecondary: hexColor,
   colorAccent: hexColor,
 
+  logoUrl: optText(300),
   instagram: optText(200),
   facebook: optText(200),
   googleMaps: optText(300),
