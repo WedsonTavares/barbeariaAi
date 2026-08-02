@@ -10,16 +10,18 @@ import {
   Camera,
   Check,
   ImagePlus,
+  Pencil,
   Search,
   Trash2,
   X,
 } from "lucide-react";
 
 import { SubmitButton } from "@/components/SubmitButton";
-import { TOY_STATUS, label } from "@/lib/labels";
-import { removeToy, setToyStatus, uploadToyPhoto } from "./actions";
+import { TOY_CATEGORY, TOY_STATUS, label } from "@/lib/labels";
+import { removeToy, setToyStatus, updateToy, uploadToyPhoto } from "./actions";
 
 const STATUSES = ["AVAILABLE", "RENTED", "MAINTENANCE"];
+const CATEGORIES = ["INFLAVEL", "PISCINA_BOLINHAS", "CAMA_ELASTICA", "ESCORREGADOR", "MESA_CADEIRA", "OUTRO"];
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
 const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
@@ -40,6 +42,9 @@ export type ToyCardData = {
   status: string;
   description: string | null;
   priceLabel: string;
+  /** Valores crus, para preencher o formulário de edição (priceLabel já vem formatado). */
+  purchasePrice: number;
+  defaultRentPrice: number;
   imageUrl: string | null;
   busyNow: boolean;
   upcoming: number;
@@ -429,14 +434,225 @@ function PhotoDialog({
   );
 }
 
+/** Edição do cadastro: nome, categoria, valores e descrição. Foto e status têm botão próprio. */
+function EditDialog({
+  toy,
+  showError,
+  onClose,
+}: {
+  toy: ToyCardData | null;
+  showError: boolean;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const previousOverflow = useRef("");
+  const scrollLocked = useRef(false);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (toy && dialog && !dialog.open) {
+      previousOverflow.current = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      scrollLocked.current = true;
+      dialog.showModal();
+      window.setTimeout(() => nameRef.current?.focus(), 0);
+    } else if (!toy && dialog?.open) {
+      dialog.close();
+    }
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (scrollLocked.current) {
+        document.body.style.overflow = previousOverflow.current;
+        scrollLocked.current = false;
+      }
+    };
+  }, [toy]);
+
+  function restorePage() {
+    if (scrollLocked.current) {
+      document.body.style.overflow = previousOverflow.current;
+      scrollLocked.current = false;
+    }
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={() => {
+        restorePage();
+        onClose();
+      }}
+      onClick={(event) => {
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const outside =
+          event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom;
+        if (outside) dialog.close();
+      }}
+      aria-labelledby="toy-edit-title"
+      aria-modal="true"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-3xl border-0 bg-white p-0 text-[var(--color-ink)] shadow-2xl backdrop:bg-slate-950/45 backdrop:backdrop-blur-[2px]"
+    >
+      {toy && (
+        <>
+          <div className="border-b border-black/5 px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-[var(--color-primary)]">
+                  <Pencil className="size-5" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <h2 id="toy-edit-title" className="font-extrabold">
+                    Editar brinquedo
+                  </h2>
+                  <p className="mt-0.5 truncate text-xs text-[var(--color-muted)]">{toy.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => dialogRef.current?.close()}
+                aria-label="Fechar edição"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+
+          {/*
+            `key` força o React a recriar os campos ao trocar de brinquedo — sem
+            isso os defaultValue ficariam presos no primeiro que foi aberto.
+          */}
+          <form key={toy.id} action={updateToy} className="space-y-4 p-5">
+            <input type="hidden" name="id" value={toy.id} />
+
+            {showError && (
+              <p role="alert" className="rounded-xl bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700">
+                Alterações não salvas. Confira os campos abaixo.
+              </p>
+            )}
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-[var(--color-muted)]">Nome</span>
+              <input
+                ref={nameRef}
+                name="name"
+                required
+                defaultValue={toy.name}
+                className="w-full rounded-xl border border-black/10 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-[var(--color-muted)]">Categoria</span>
+              <select
+                name="category"
+                defaultValue={toy.category}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              >
+                {CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {label(TOY_CATEGORY, category)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[var(--color-muted)]">Valor de compra</span>
+                <div className="flex overflow-hidden rounded-xl border border-black/10 bg-white transition focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+                  <span className="grid place-items-center border-r border-black/5 bg-[var(--color-surface)] px-3 text-sm font-semibold text-[var(--color-muted)]">
+                    R$
+                  </span>
+                  <input
+                    name="purchasePrice"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    required
+                    defaultValue={toy.purchasePrice}
+                    className="min-w-0 flex-1 px-3 py-2.5 text-sm outline-none"
+                  />
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold text-[var(--color-muted)]">Valor do aluguel</span>
+                <div className="flex overflow-hidden rounded-xl border border-black/10 bg-white transition focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+                  <span className="grid place-items-center border-r border-black/5 bg-[var(--color-surface)] px-3 text-sm font-semibold text-[var(--color-muted)]">
+                    R$
+                  </span>
+                  <input
+                    name="defaultRentPrice"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    required
+                    defaultValue={toy.defaultRentPrice}
+                    className="min-w-0 flex-1 px-3 py-2.5 text-sm outline-none"
+                  />
+                </div>
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-[var(--color-muted)]">
+                Descrição <span className="font-normal">(opcional)</span>
+              </span>
+              <textarea
+                name="description"
+                rows={3}
+                defaultValue={toy.description ?? ""}
+                placeholder="Informações que ajudam a apresentar o brinquedo"
+                className="w-full resize-none rounded-xl border border-black/10 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            <p className="rounded-xl bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+              O que você salvar aqui vale também para o site e para a IA. Foto e situação
+              continuam nos botões do card.
+            </p>
+
+            <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => dialogRef.current?.close()}
+                className="rounded-full border border-black/10 px-4 py-2.5 text-sm font-semibold hover:bg-[var(--color-surface)]"
+              >
+                Cancelar
+              </button>
+              <SubmitButton
+                pendingText="Salvando..."
+                className="rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-white hover:brightness-95"
+              >
+                Salvar alterações
+              </SubmitButton>
+            </div>
+          </form>
+        </>
+      )}
+    </dialog>
+  );
+}
+
 function ToyCard({
   toy,
   onConfirm,
   onPhoto,
+  onEdit,
 }: {
   toy: ToyCardData;
   onConfirm: (action: PendingAction) => void;
   onPhoto: (toy: ToyCardData) => void;
+  onEdit: (toy: ToyCardData) => void;
 }) {
   const [selectedStatus, setSelectedStatus] = useState(toy.status === "RETIRED" ? "" : toy.status);
 
@@ -542,6 +758,16 @@ function ToyCard({
 
         <button
           type="button"
+          onClick={() => onEdit(toy)}
+          aria-label={`Editar ${toy.name}`}
+          title="Editar brinquedo"
+          className="grid size-9 shrink-0 place-items-center rounded-full border border-black/10 text-[var(--color-ink)] transition hover:bg-[var(--color-surface)]"
+        >
+          <Pencil className="size-4" aria-hidden />
+        </button>
+
+        <button
+          type="button"
           onClick={() => onConfirm({ kind: "remove", toy })}
           aria-label={`Remover ${toy.name}`}
           title="Remover brinquedo"
@@ -558,10 +784,12 @@ export function ToysCatalog({
   toys,
   photoErrorCode,
   photoErrorToyId,
+  editErrorToyId,
 }: {
   toys: ToyCardData[];
   photoErrorCode?: string;
   photoErrorToyId?: string;
+  editErrorToyId?: string;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -569,12 +797,21 @@ export function ToysCatalog({
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [photoToy, setPhotoToy] = useState<ToyCardData | null>(null);
   const [photoErrorConsumed, setPhotoErrorConsumed] = useState(false);
+  const [editToy, setEditToy] = useState<ToyCardData | null>(null);
+  const [editErrorConsumed, setEditErrorConsumed] = useState(false);
 
   useEffect(() => {
     if (photoErrorConsumed || !photoErrorToyId) return;
     const toy = toys.find((item) => item.id === photoErrorToyId);
     if (toy) setPhotoToy(toy);
   }, [photoErrorConsumed, photoErrorToyId, toys]);
+
+  // Validação falhou no servidor: reabre a edição no brinquedo certo.
+  useEffect(() => {
+    if (editErrorConsumed || !editErrorToyId) return;
+    const toy = toys.find((item) => item.id === editErrorToyId);
+    if (toy) setEditToy(toy);
+  }, [editErrorConsumed, editErrorToyId, toys]);
 
   /**
    * Aposentado sai do catálogo principal e vai para a gaveta do rodapé: ele não
@@ -665,7 +902,7 @@ export function ToysCatalog({
       {visibleToys.length > 0 ? (
         <section aria-label="Lista de brinquedos" className="grid min-w-0 gap-3 md:grid-cols-2">
           {visibleToys.map((toy) => (
-            <ToyCard key={toy.id} toy={toy} onConfirm={setPending} onPhoto={setPhotoToy} />
+            <ToyCard key={toy.id} toy={toy} onConfirm={setPending} onPhoto={setPhotoToy} onEdit={setEditToy} />
           ))}
         </section>
       ) : (
@@ -692,7 +929,7 @@ export function ToysCatalog({
             </p>
             <div className="grid min-w-0 gap-3 md:grid-cols-2">
               {retiredToys.map((toy) => (
-                <ToyCard key={toy.id} toy={toy} onConfirm={setPending} onPhoto={setPhotoToy} />
+                <ToyCard key={toy.id} toy={toy} onConfirm={setPending} onPhoto={setPhotoToy} onEdit={setEditToy} />
               ))}
             </div>
           </div>
@@ -709,6 +946,17 @@ export function ToysCatalog({
           setPhotoToy(null);
           if (photoErrorCode) {
             setPhotoErrorConsumed(true);
+            router.replace("/admin/brinquedos", { scroll: false });
+          }
+        }}
+      />
+      <EditDialog
+        toy={editToy}
+        showError={!editErrorConsumed && Boolean(editErrorToyId) && editToy?.id === editErrorToyId}
+        onClose={() => {
+          setEditToy(null);
+          if (editErrorToyId) {
+            setEditErrorConsumed(true);
             router.replace("/admin/brinquedos", { scroll: false });
           }
         }}

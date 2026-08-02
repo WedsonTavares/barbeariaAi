@@ -30,6 +30,41 @@ export async function createToy(formData: FormData) {
   redirect(dest);
 }
 
+/**
+ * Edita o cadastro. O id volta na URL quando a validação falha pra tela
+ * reabrir o diálogo do brinquedo certo, sem o usuário procurar de novo.
+ */
+export async function updateToy(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+
+  let id: string;
+  try {
+    id = schemas.idInput.parse(formData.get("id"));
+  } catch (error) {
+    if (error instanceof ZodError) redirect(`${BASE}?erro=validacao`);
+    throw error;
+  }
+
+  let dest = `${BASE}?ok=editado`;
+  try {
+    const data = schemas.toyInput.parse({
+      name: formData.get("name"),
+      category: formData.get("category"),
+      description: formData.get("description") || undefined,
+      purchasePrice: formData.get("purchasePrice"),
+      defaultRentPrice: formData.get("defaultRentPrice"),
+    });
+    await services.toyService.update(tenant.id, id, data);
+  } catch (e) {
+    if (e instanceof ZodError) dest = `${BASE}?erro=validacao&editar=${id}`;
+    else throw e;
+  }
+  revalidatePath(BASE);
+  revalidatePath("/");
+  redirect(dest);
+}
+
 function photoError(code: string, id?: string) {
   const params = new URLSearchParams({ erro: code });
   if (id) params.set("foto", id);

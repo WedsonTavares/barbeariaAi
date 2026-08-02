@@ -88,6 +88,24 @@ export const toyService = {
         },
       })
     ),
+  /**
+   * Edita os dados de cadastro. Não mexe em `status` nem em `imageUrl`: cada um
+   * tem o seu caminho próprio (`setStatus`/`setImage`), e passar por aqui
+   * apagaria a foto sempre que alguém só corrigisse o nome.
+   */
+  update: (tenantId: string, id: string, data: ToyInput) =>
+    withTenant(tenantId, (tx) =>
+      tx.toy.update({
+        where: { id },
+        data: {
+          name: data.name,
+          category: data.category,
+          description: data.description ?? null,
+          purchasePrice: data.purchasePrice,
+          defaultRentPrice: data.defaultRentPrice,
+        },
+      })
+    ),
   setStatus: (tenantId: string, id: string, status: ToyStatus) =>
     withTenant(tenantId, (tx) => tx.toy.update({ where: { id }, data: { status } })),
   /** Foto do brinquedo (URL pública do Supabase Storage). */

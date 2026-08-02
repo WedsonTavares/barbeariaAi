@@ -20,6 +20,7 @@ const ERROS: Record<string, string> = {
 
 const OKS: Record<string, string> = {
   1: "Brinquedo adicionado e disponível para a IA.",
+  editado: "Brinquedo atualizado no catálogo, no site e na IA.",
   foto: "Foto atualizada e disponível no site.",
   removido: "Brinquedo removido do catálogo.",
   aposentado: "O brinquedo tinha histórico: saiu do catálogo, mas as reservas foram preservadas.",
@@ -90,7 +91,7 @@ function situation(toy: { status: string; busyNow: boolean; busyUntil: Date | nu
 export default async function BrinquedosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; ok?: string; foto?: string }>;
+  searchParams: Promise<{ erro?: string; ok?: string; foto?: string; editar?: string }>;
 }) {
   const { tenant } = await requireTenant();
   const sp = await searchParams;
@@ -104,6 +105,8 @@ export default async function BrinquedosPage({
     status: toy.status,
     description: toy.description,
     priceLabel: brl(toy.defaultRentPrice),
+    purchasePrice: Number(toy.purchasePrice),
+    defaultRentPrice: Number(toy.defaultRentPrice),
     imageUrl: toy.imageUrl,
     busyNow: toy.busyNow,
     upcoming: toy.upcoming,
@@ -133,7 +136,9 @@ export default async function BrinquedosPage({
             </p>
           </div>
         </div>
-        <NewToyDialog initialOpen={sp.erro === "validacao"} />
+        {/* `erro=validacao` também volta da edição — nesse caso vem com `editar`
+            e quem reabre é o diálogo de edição, não o de cadastro. */}
+        <NewToyDialog initialOpen={sp.erro === "validacao" && !sp.editar} />
       </header>
 
       {sp.ok && OKS[sp.ok] && (
@@ -150,7 +155,12 @@ export default async function BrinquedosPage({
         </p>
       )}
 
-      <ToysCatalog toys={cardToys} photoErrorCode={photoError} photoErrorToyId={sp.foto} />
+      <ToysCatalog
+        toys={cardToys}
+        photoErrorCode={photoError}
+        photoErrorToyId={sp.foto}
+        editErrorToyId={sp.editar}
+      />
 
       <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-2xl border border-black/5 bg-white px-4 py-3 text-[11px] text-[var(--color-muted)] shadow-sm">
         <span className="flex items-center gap-1.5">
