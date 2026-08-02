@@ -19,7 +19,7 @@ export * as services from "./services";
 // Tipos que a UI precisa nomear (props de componentes da Visão Geral).
 export type { OverviewDay, OverviewSummary, OverviewTrend } from "./services/overview-service";
 // Expediente: a disponibilidade da IA usa a MESMA leitura tolerante do painel.
-export { parseBusinessHours } from "./services/overview-service";
+export { parseBusinessHours, isAlwaysOpen } from "./services/overview-service";
 export type { BusinessHours } from "./services/overview-service";
 // Apps tratam erro de validação sem depender do zod diretamente.
 export { ZodError } from "zod";

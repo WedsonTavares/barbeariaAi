@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services, isAlwaysOpen } from "@diny/core";
 import type { OverviewTrend } from "@diny/core";
 import { brl, fmtDateTime } from "@/lib/format";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -156,13 +156,21 @@ function Acao({
 
 export default async function VisaoGeralPage() {
   const { tenant } = await requireTenant();
-  const [o, s, m] = await Promise.all([
+  const [o, s, m, funil] = await Promise.all([
     services.overviewService.summary(tenant.id),
     services.financeService.dashboard(tenant.id),
     services.financeService.monthSummary(tenant.id),
+    // A contagem do funil sai do MESMO board que a tela mostra. Antes vinha da
+    // tabela Lead, que nenhuma tela exibe: o card dizia 0 enquanto o funil
+    // tinha conversas, e o número nunca batia com o destino do link.
+    services.conversationService.board(tenant.id),
   ]);
 
+  const emNegociacao = funil.IA_ATENDENDO.length + funil.SUPORTE_HUMANO.length;
   const expediente = `${o.businessHours.start}–${o.businessHours.end}`;
+  // Com atendimento 24h/7 nada cai "fora do expediente": mostrar 0 sugeriria
+  // que a IA não fechou nada de madrugada, quando na verdade a conta não existe.
+  const semExpediente = isAlwaysOpen(o.businessHours);
   const acoes = [
     {
       key: "conversas",
@@ -183,8 +191,8 @@ export default async function VisaoGeralPage() {
     {
       key: "leads",
       icon: UserPlus,
-      label: "Leads em aberto no funil",
-      count: s.orcamentosAbertos,
+      label: "Conversas em negociação no funil",
+      count: emNegociacao,
       href: "/admin/funil",
       tint: "bg-sky-50 text-sky-600",
     },
@@ -214,8 +222,10 @@ export default async function VisaoGeralPage() {
           label="Novos contatos"
           value={o.contacts.current}
           hint={
+            // O formulário de orçamento saiu do site: hoje a tabela Lead só
+            // recebe o que a IA registra pela tool de lead.
             o.leads.current > 0
-              ? `${o.leads.current} pelo formulário do site`
+              ? `conversas novas no WhatsApp · ${o.leads.current} registrado${o.leads.current === 1 ? "" : "s"} como lead pela IA`
               : "conversas novas no WhatsApp"
           }
           icon={UserPlus}
@@ -237,12 +247,16 @@ export default async function VisaoGeralPage() {
         </Tile>
         <Tile
           label="Fora do expediente"
-          value={o.ai.afterHours.current}
-          hint={`${brl(o.ai.afterHoursRevenue)} fechados pela IA fora de ${expediente}`}
+          value={semExpediente ? "—" : o.ai.afterHours.current}
+          hint={
+            semExpediente
+              ? "Com atendimento 24h não existe “fora do expediente”. Defina um horário em Configurações para medir o que a IA fecha fora dele."
+              : `${brl(o.ai.afterHoursRevenue)} fechados pela IA fora de ${expediente}`
+          }
           icon={Moon}
           tint="bg-violet-50 text-violet-600"
         >
-          <Delta trend={o.ai.afterHours} periodDays={o.periodDays} />
+          {!semExpediente && <Delta trend={o.ai.afterHours} periodDays={o.periodDays} />}
         </Tile>
       </div>
 
@@ -274,7 +288,11 @@ export default async function VisaoGeralPage() {
             <Stat label="Conversas atendidas pela IA" value={String(o.ai.attended)} />
             <Stat label="Resolvidas sem humano" value={pct(o.ai.autonomyPct)} hint={`${o.ai.escalated} passaram para a equipe`} />
             <Stat label="Receita fechada pela IA" value={brl(o.ai.revenue)} />
-            <Stat label="Fora do expediente" value={`${o.ai.afterHours.current} · ${brl(o.ai.afterHoursRevenue)}`} hint={`Expediente ${expediente}`} />
+            <Stat
+              label="Fora do expediente"
+              value={semExpediente ? "—" : `${o.ai.afterHours.current} · ${brl(o.ai.afterHoursRevenue)}`}
+              hint={semExpediente ? "Atendimento 24h" : `Expediente ${expediente}`}
+            />
           </div>
         </Card>
       </div>

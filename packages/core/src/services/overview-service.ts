@@ -83,6 +83,18 @@ export function parseBusinessHours(raw: unknown): BusinessHours {
   return { start, end, days, setupStart, setupEnd };
 }
 
+/**
+ * O expediente cobre a semana inteira, 24h? Nesse caso nada nunca é "fora do
+ * expediente" — quem exibe essa métrica precisa saber disso pra não mostrar um
+ * zero que parece resultado quando na verdade é a conta não existir.
+ */
+export function isAlwaysOpen(hours: BusinessHours): boolean {
+  const todosOsDias = [0, 1, 2, 3, 4, 5, 6].every((d) => hours.days.includes(d));
+  // 23:59 é o maior valor que o <input type="time"> aceita, então tratamos o
+  // último minuto do dia como "fecha na virada".
+  return todosOsDias && toMinutes(hours.start, -1) === 0 && toMinutes(hours.end, -1) >= 23 * 60 + 59;
+}
+
 function isAfterHours(at: Date, hours: BusinessHours): boolean {
   const { hour, minute, weekday } = spClock(at);
   if (!hours.days.includes(weekday)) return true;

@@ -51,7 +51,16 @@ export const financeService = {
             orderBy: { pickupTime: "asc" },
             take: 10,
           }),
-          tx.booking.count({ where: { paymentStatus: { in: ["PENDING", "DEPOSIT_PAID", "OVERDUE"] }, status: { not: "CANCELED" } } }),
+          // Sinal REALMENTE pendente: DEPOSIT_PAID fica de fora (o sinal já
+          // entrou, o que falta é o saldo) e a festa precisa estar por vir —
+          // sem limitar o status, toda festa antiga com saldo em aberto ficava
+          // somando nesse contador pra sempre.
+          tx.booking.count({
+            where: {
+              paymentStatus: { in: ["PENDING", "OVERDUE"] },
+              status: { in: ["WAITING_DEPOSIT", "CONFIRMED", "IN_DELIVERY", "MOUNTED"] },
+            },
+          }),
           tx.toy.count({ where: { status: "AVAILABLE" } }),
           tx.toy.count({ where: { status: "MAINTENANCE" } }),
           tx.lead.count({ where: { status: { in: ["NEW", "CONTACTED", "QUOTED"] } } }),
