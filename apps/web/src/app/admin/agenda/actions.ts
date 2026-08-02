@@ -2,6 +2,34 @@
 import { revalidatePath } from "next/cache";
 import { currentRole, requireRole, schemas, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
+import { avisarEquipe } from "@/lib/aviso-interno";
+
+const SP_FMT = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  dateStyle: "short",
+  timeStyle: "short",
+});
+
+/**
+ * Aviso de cancelamento no WhatsApp da equipe. Lê a reserva DEPOIS de cancelar
+ * pra mandar os dados reais (cliente, data, endereço) em vez de só o id.
+ */
+async function avisoDeCancelamento(tenant: { id: string; slug: string }, bookingId: string) {
+  try {
+    const b = await services.bookingService.get(tenant.id, bookingId);
+    if (!b) return;
+    const linhas = [
+      "❌ Reserva CANCELADA",
+      `👤 ${b.customer.name} (${b.customer.phone})`,
+      b.setupTime ? `🕒 Era ${SP_FMT.format(b.setupTime)}` : null,
+      b.address || b.neighborhood ? `📍 ${[b.address, b.neighborhood].filter(Boolean).join(" — ")}` : null,
+      b.items.length ? `🎪 ${b.items.map((i) => i.toy.name).join(", ")}` : null,
+    ].filter(Boolean);
+    await avisarEquipe(tenant, linhas.join("\n"));
+  } catch (error) {
+    console.error("[cancelamento] aviso não enviado", error);
+  }
+}
 
 /**
  * Fluxo operacional do dia a dia: confirmada → montado → retirado.
@@ -62,6 +90,11 @@ export async function setBookingStatusAction(id: string, status: string) {
     if (e instanceof services.BookingStateError) return { ok: false as const, error: e.message };
     throw e;
   }
+
+  // Cancelou: avisa a equipe no WhatsApp. Fica DEPOIS do cancelamento e sem
+  // await bloqueante de erro — o cancelamento já aconteceu, o aviso é extra.
+  if (status === "CANCELED") await avisoDeCancelamento(tenant, id);
+
   revalidatePath("/admin/agenda");
   revalidatePath("/admin/reservas");
   return { ok: true as const };

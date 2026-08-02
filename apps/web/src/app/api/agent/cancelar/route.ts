@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
 import { services, schemas, ZodError } from "@diny/core";
+import { avisarEquipe } from "@/lib/aviso-interno";
 
 /**
  * Cancela de verdade uma reserva identificada por /api/agent/meus-agendamentos.
@@ -30,6 +31,16 @@ export async function POST(req: Request) {
 
   try {
     const result = await services.bookingService.cancelFromAgent(tenant.id, input);
+
+    // Cancelou de verdade agora: a equipe precisa saber na hora, senão só
+    // descobre abrindo o painel. Cancelamento repetido não reavisa.
+    if (!result.alreadyCanceled) {
+      await avisarEquipe(
+        tenant,
+        ["❌ Reserva CANCELADA pelo cliente (via IA)", `📱 ${input.phone}`].join("\n")
+      ).catch(() => {});
+    }
+
     return NextResponse.json({
       ok: true,
       ...result,
