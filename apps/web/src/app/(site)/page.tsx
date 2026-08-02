@@ -149,11 +149,20 @@ export default async function TenantHome() {
 
       {/* ===== Hero ===== */}
       <section className="relative isolate overflow-hidden px-5 pb-24 pt-14 sm:pb-32 sm:pt-20">
-        {/* Fundo: manchas de cor desfocadas — dá profundidade sem imagem pesada. */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute -left-32 -top-24 h-[28rem] w-[28rem] rounded-full blur-3xl pulsa" style={{ background: `radial-gradient(circle, ${primary}55, transparent 70%)` }} />
-          <div className="absolute -right-28 top-10 h-[24rem] w-[24rem] rounded-full blur-3xl pulsa" style={{ background: `radial-gradient(circle, ${accent}55, transparent 70%)`, animationDelay: "3s" }} />
-          <div className="absolute bottom-0 left-1/3 h-[20rem] w-[20rem] rounded-full blur-3xl pulsa" style={{ background: `radial-gradient(circle, ${secondary}55, transparent 70%)`, animationDelay: "5s" }} />
+        {/*
+          Fundo: uma base tingida com a paleta + manchas desfocadas por cima.
+          Sem a base o hero ficava branco demais e as manchas pareciam sujeira
+          solta; com ela a cor cobre a seção inteira e as manchas viram relevo.
+        */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-20"
+          style={{ background: `linear-gradient(165deg, ${secondary}2e 0%, ${primary}1f 45%, ${accent}17 75%, ${primary}0f 100%)` }}
+        />
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div aria-hidden className="absolute -left-32 -top-24 h-[28rem] w-[28rem] rounded-full blur-3xl pulsa" style={{ background: `radial-gradient(circle, ${primary}66, transparent 70%)` }} />
+          <div aria-hidden className="absolute -right-28 top-10 h-[24rem] w-[24rem] rounded-full blur-3xl pulsa" style={{ background: `radial-gradient(circle, ${accent}66, transparent 70%)`, animationDelay: "3s" }} />
+          <div aria-hidden className="absolute bottom-0 left-1/3 h-[20rem] w-[20rem] rounded-full blur-3xl pulsa" style={{ background: `radial-gradient(circle, ${secondary}66, transparent 70%)`, animationDelay: "5s" }} />
           {CONFETTI.map((c, i) => (
             <span
               key={i}
@@ -216,8 +225,12 @@ export default async function TenantHome() {
             </div>
           </div>
 
-          {/* Logo em destaque, flutuando sobre um halo colorido. */}
-          <div className="relative mx-auto hidden w-full max-w-sm lg:block">
+          {/*
+            Logo em destaque, flutuando sobre um halo colorido. No celular ele
+            vem ANTES do texto (order-first): é o primeiro reconhecimento da
+            marca, e antes ele simplesmente não aparecia em tela pequena.
+          */}
+          <div className="relative order-first mx-auto w-full max-w-[14rem] sm:max-w-[17rem] lg:order-none lg:max-w-sm">
             <div
               aria-hidden
               className="absolute inset-6 rounded-full blur-2xl"
@@ -227,7 +240,7 @@ export default async function TenantHome() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={settings.logoUrl} alt={tenant.name} className="gira relative w-full drop-shadow-2xl" />
             ) : (
-              <div className="gira relative grid aspect-square w-full place-items-center rounded-full text-[8rem] shadow-2xl" style={{ background: `linear-gradient(135deg, ${primary}, ${accent})` }} aria-hidden>
+              <div className="gira relative grid aspect-square w-full place-items-center rounded-full text-[5rem] shadow-2xl lg:text-[8rem]" style={{ background: `linear-gradient(135deg, ${primary}, ${accent})` }} aria-hidden>
                 🎪
               </div>
             )}
@@ -236,29 +249,50 @@ export default async function TenantHome() {
       </section>
 
       {/* ===== Benefícios ===== */}
-      <section className="mx-auto max-w-6xl px-5 pb-16">
-        <div className="grid gap-5 sm:grid-cols-3">
-          {BENEFITS.map((b, i) => (
-            <div
-              key={b.title}
-              className="card3d rounded-3xl border border-black/5 bg-white p-6 shadow-[0_4px_24px_-8px_rgba(0,0,0,.12)]"
-            >
+      <section className="relative isolate px-5 pb-16">
+        {/* Emenda a cor entre o hero e o catálogo: sem isso ficava uma tira
+            branca no meio da página, bem onde os cards precisam de contraste. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10"
+          style={{ background: `linear-gradient(180deg, ${primary}0f, ${primary}14)` }}
+        />
+        <div className="mx-auto grid max-w-6xl gap-5 sm:grid-cols-3">
+          {BENEFITS.map((b, i) => {
+            // Um card por cor da paleta: o fundo tingido e a barra do topo dão
+            // cor à seção sem precisar pintar a faixa inteira atrás dela.
+            const cor = [primary, accent, secondary][i];
+            return (
               <div
-                className="grid h-12 w-12 place-items-center rounded-2xl text-2xl"
-                style={{ background: `linear-gradient(135deg, ${[primary, accent, secondary][i]}22, ${[primary, accent, secondary][i]}0d)` }}
-                aria-hidden
+                key={b.title}
+                className="card3d relative overflow-hidden rounded-3xl border p-6 shadow-[0_4px_24px_-8px_rgba(0,0,0,.12)]"
+                style={{ background: `linear-gradient(160deg, ${cor}1f, #ffffff 70%)`, borderColor: `${cor}40` }}
               >
-                {b.emoji}
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1.5" style={{ background: cor }} />
+                <div
+                  className="grid h-12 w-12 place-items-center rounded-2xl text-2xl shadow-sm"
+                  style={{ background: `linear-gradient(135deg, ${cor}3d, #ffffff)` }}
+                  aria-hidden
+                >
+                  {b.emoji}
+                </div>
+                <h3 className="mt-4 text-lg font-extrabold">{b.title}</h3>
+                <p className="mt-1.5 text-sm text-[var(--color-muted)]">{b.desc}</p>
               </div>
-              <h3 className="mt-4 text-lg font-extrabold">{b.title}</h3>
-              <p className="mt-1.5 text-sm text-[var(--color-muted)]">{b.desc}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
       {/* ===== Catálogo ===== */}
-      <section id="brinquedos" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-14">
+      <section id="brinquedos" className="relative isolate scroll-mt-20 px-5 py-16">
+        {/* Faixa tingida: os cards continuam brancos e saltam por cima dela. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10"
+          style={{ background: `linear-gradient(180deg, ${primary}14, ${accent}14 100%)` }}
+        />
+        <div className="mx-auto max-w-6xl">
         <div className="text-center">
           <h2 className="text-3xl font-black tracking-tight sm:text-4xl">Nossos brinquedos</h2>
           <p className="mt-2 text-[var(--color-muted)]">Escolha o favorito e chame no zap — a gente responde na hora.</p>
@@ -274,8 +308,11 @@ export default async function TenantHome() {
           </div>
         ) : (
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {toys.map((t) => {
+            {toys.map((t, i) => {
               const indisponivel = t.status !== "AVAILABLE";
+              // A etiqueta gira pela paleta: uma fileira de cards com a mesma
+              // cor de chip lia como lista de sistema, não como catálogo.
+              const cor = [primary, accent, secondary][i % 3];
               return (
                 <article
                   key={t.id}
@@ -295,7 +332,10 @@ export default async function TenantHome() {
                   )}
                   <div className="flex flex-1 flex-col p-5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full px-3 py-1 text-xs font-bold text-white" style={{ background: primary }}>
+                      <span
+                        className="rounded-full px-3 py-1 text-xs font-bold"
+                        style={{ background: cor, color: cor === secondary ? "#0f172a" : "#ffffff" }}
+                      >
                         {label(TOY_CATEGORY, t.category)}
                       </span>
                       {indisponivel && (
@@ -326,6 +366,7 @@ export default async function TenantHome() {
             })}
           </div>
         )}
+        </div>
       </section>
 
       {/*
@@ -336,7 +377,13 @@ export default async function TenantHome() {
         dá um ponto de entrada pro olho.
       */}
       {fotos.length > 0 && (
-        <section id="galeria" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-14">
+        <section id="galeria" className="relative isolate scroll-mt-20 overflow-hidden px-5 py-16">
+          <div
+            aria-hidden
+            className="absolute inset-0 -z-10"
+            style={{ background: `linear-gradient(180deg, ${accent}1c, ${secondary}22)` }}
+          />
+          <div className="mx-auto max-w-6xl">
           <div className="text-center">
             <h2 className="text-3xl font-black tracking-tight sm:text-4xl">Festas que a gente já fez</h2>
             <p className="mt-2 text-[var(--color-muted)]">Um pouquinho da alegria que já montamos por aí. 🎈</p>
@@ -347,7 +394,9 @@ export default async function TenantHome() {
               <figure
                 key={foto.id}
                 className={`group relative m-0 overflow-hidden rounded-3xl border border-black/5 bg-[var(--color-surface)] shadow-[0_4px_24px_-8px_rgba(0,0,0,.12)] ${
-                  i === 0 ? "col-span-2 row-span-2" : ""
+                  // A primeira só ganha o dobro quando há grade pra preencher:
+                  // com uma ou duas fotos o destaque vira um buraco ao lado.
+                  i === 0 && fotos.length >= 3 ? "col-span-2 row-span-2" : ""
                 }`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -377,11 +426,12 @@ export default async function TenantHome() {
               Quero uma festa assim
             </a>
           </div>
+          </div>
         </section>
       )}
 
       {/* ===== Como funciona ===== */}
-      <section id="como-funciona" className="relative scroll-mt-20 overflow-hidden px-5 py-20">
+      <section id="como-funciona" className="relative isolate scroll-mt-20 overflow-hidden px-5 py-20">
         <div aria-hidden className="absolute inset-0 -z-10" style={{ background: `linear-gradient(135deg, ${primary}, ${accent})` }} />
         <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 -z-10 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
         <div className="mx-auto max-w-6xl text-white">
@@ -405,56 +455,77 @@ export default async function TenantHome() {
       </section>
 
       {/* ===== Chamada final ===== */}
-      <section className="mx-auto max-w-4xl px-5 py-20 text-center">
-        <div className="text-5xl" aria-hidden>🎈</div>
-        <h2 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Bora garantir a data?</h2>
-        <p className="mx-auto mt-3 max-w-md text-[var(--color-muted)]">
-          Chama no WhatsApp que a gente confere a disponibilidade e responde na hora.
-        </p>
-        <a
-          href={wa}
-          target="_blank"
-          rel="noopener"
-          className="mt-8 inline-block rounded-full bg-[#25D366] px-10 py-4 text-lg font-bold text-white shadow-xl shadow-[#25D366]/30 transition-transform hover:scale-105"
-        >
-          {settings?.ctaText ?? "Reservar no WhatsApp"}
-        </a>
+      <section className="relative isolate overflow-hidden px-5 py-20 text-center">
+        {/* Faixa quente: fecha a página com a cor de destaque, não com branco. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10"
+          style={{ background: `linear-gradient(135deg, ${secondary}, ${secondary}c9 55%, ${accent}5c)` }}
+        />
+        <div aria-hidden className="pointer-events-none absolute -left-16 -bottom-16 -z-10 h-72 w-72 rounded-full bg-white/25 blur-3xl" />
+        <div className="mx-auto max-w-4xl">
+          <div className="text-5xl flutua" aria-hidden>🎈</div>
+          <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Bora garantir a data?</h2>
+          <p className="mx-auto mt-3 max-w-md font-medium text-slate-800">
+            Chama no WhatsApp que a gente confere a disponibilidade e responde na hora.
+          </p>
+          <a
+            href={wa}
+            target="_blank"
+            rel="noopener"
+            className="mt-8 inline-block rounded-full bg-[#25D366] px-10 py-4 text-lg font-bold text-white shadow-xl shadow-black/20 transition-transform hover:scale-105"
+          >
+            {settings?.ctaText ?? "Reservar no WhatsApp"}
+          </a>
+        </div>
       </section>
 
       {/* ===== Footer ===== */}
-      <footer className="border-t border-black/5 bg-[var(--color-surface)] px-5 py-12">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 text-center sm:flex-row sm:justify-between sm:text-left">
+      <footer className="relative overflow-hidden bg-slate-950 px-5 py-12 text-white">
+        {/* Fita da paleta no topo e um brilho de cor ao fundo: o rodapé escuro
+            fecha a página, mas continua sendo da marca. */}
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1.5"
+          style={{ background: `linear-gradient(90deg, ${primary}, ${accent}, ${secondary})` }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl"
+          style={{ background: `radial-gradient(circle, ${accent}66, transparent 70%)` }}
+        />
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-5 text-center sm:flex-row sm:justify-between sm:text-left">
           <div className="flex items-center gap-3">
             {settings?.logoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={settings.logoUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
+              <img src={settings.logoUrl} alt="" className="h-14 w-14 rounded-full object-cover ring-2 ring-white/20" />
             )}
             <div>
               <div className="text-lg font-extrabold">{tenant.name}</div>
-              <p className="mt-0.5 text-sm text-[var(--color-muted)]">
+              <p className="mt-0.5 text-sm text-white/65">
                 {settings?.city ? `${settings.city} e região · ` : ""}Aluguel de brinquedos para festas
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3 text-sm font-semibold">
             {settings?.whatsappMain && (
-              <a href={wa} target="_blank" rel="noopener" className="rounded-full bg-[#25D366] px-5 py-2.5 text-white shadow-lg shadow-[#25D366]/25">
+              <a href={wa} target="_blank" rel="noopener" className="rounded-full bg-[#25D366] px-5 py-2.5 text-white shadow-lg shadow-[#25D366]/25 transition-transform hover:scale-105">
                 WhatsApp
               </a>
             )}
             {insta && (
-              <a href={insta} target="_blank" rel="noopener" className="rounded-full border border-black/10 bg-white px-5 py-2.5">
+              <a href={insta} target="_blank" rel="noopener" className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 transition-colors hover:bg-white/20">
                 Instagram
               </a>
             )}
             {settings?.googleMaps && (
-              <a href={settings.googleMaps} target="_blank" rel="noopener" className="rounded-full border border-black/10 bg-white px-5 py-2.5">
+              <a href={settings.googleMaps} target="_blank" rel="noopener" className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 transition-colors hover:bg-white/20">
                 Google Maps
               </a>
             )}
           </div>
         </div>
-        <p className="mt-8 text-center text-xs text-[var(--color-muted)]">
+        <p className="relative mt-8 text-center text-xs text-white/45">
           © {new Date().getFullYear()} {tenant.name}. Todos os direitos reservados.
         </p>
       </footer>
