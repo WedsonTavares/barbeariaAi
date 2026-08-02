@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireRole, services, schemas, ZodError } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
+import { validarFoto, subirParaStorage } from "@/lib/foto-upload";
 
 const BASE = "/admin/brinquedos";
 
@@ -29,35 +30,10 @@ export async function createToy(formData: FormData) {
   redirect(dest);
 }
 
-const MAX_PHOTO_BYTES = 4 * 1024 * 1024; // 4MB
-const PHOTO_TYPES: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
-
 function photoError(code: string, id?: string) {
   const params = new URLSearchParams({ erro: code });
   if (id) params.set("foto", id);
   return `${BASE}?${params.toString()}`;
-}
-
-function hasPhotoSignature(type: string, bytes: Uint8Array) {
-  if (type === "image/jpeg") {
-    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-  }
-  if (type === "image/png") {
-    const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-    return bytes.length >= png.length && png.every((byte, index) => bytes[index] === byte);
-  }
-  if (type === "image/webp") {
-    return (
-      bytes.length >= 12 &&
-      String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
-      String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
-    );
-  }
-  return false;
 }
 
 /**
@@ -76,53 +52,18 @@ export async function uploadToyPhoto(formData: FormData) {
     throw error;
   }
 
-  const file = formData.get("photo");
-  if (!(file instanceof File) || file.size === 0) {
-    redirect(photoError("foto_arquivo", id));
-  }
-
-  const ext = PHOTO_TYPES[file.type];
-  if (!ext) redirect(photoError("foto_tipo", id));
-  if (file.size > MAX_PHOTO_BYTES) redirect(photoError("foto_tamanho", id));
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) {
-    console.error("[foto] SUPABASE_URL/SERVICE_ROLE_KEY ausentes no ambiente");
-    redirect(photoError("foto_config", id));
-  }
+  const foto = await validarFoto(formData.get("photo"));
+  if (!foto.ok) redirect(photoError(foto.erro, id));
 
   // Confirma que o brinquedo é DESTE tenant antes de subir qualquer coisa.
   const toy = await services.toyService.get(tenant.id, id);
   if (!toy) redirect(photoError("foto_arquivo", id));
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!hasPhotoSignature(file.type, bytes)) redirect(photoError("foto_tipo", id));
+  const path = `${tenant.id}/${id}-${Date.now()}.${foto.ext}`;
+  const envio = await subirParaStorage("toys", path, foto.bytes, foto.type);
+  if (!envio.ok) redirect(photoError(envio.erro, id));
 
-  const path = `${tenant.id}/${id}-${Date.now()}.${ext}`;
-  let uploadFailed = false;
-  try {
-    const res = await fetch(`${supabaseUrl}/storage/v1/object/toys/${path}`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${serviceKey}`,
-        "content-type": file.type,
-        "x-upsert": "true",
-      },
-      body: Buffer.from(bytes),
-    });
-    if (!res.ok) {
-      console.error("[foto] upload falhou", res.status, await res.text().catch(() => ""));
-      uploadFailed = true;
-    } else {
-      const publicUrl = `${supabaseUrl}/storage/v1/object/public/toys/${path}`;
-      await services.toyService.setImage(tenant.id, id, publicUrl);
-    }
-  } catch (error) {
-    console.error("[foto] falha inesperada no upload", error);
-    uploadFailed = true;
-  }
-  if (uploadFailed) redirect(photoError("foto_storage", id));
+  await services.toyService.setImage(tenant.id, id, envio.url);
 
   revalidatePath(BASE);
   revalidatePath("/");

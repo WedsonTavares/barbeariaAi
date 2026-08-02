@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Boxes, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Braces } from "lucide-react";
+import { LayoutDashboard, Boxes, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Braces, Images } from "lucide-react";
 
 // Reservas não fica no menu: as festas se abrem pelo calendário da Agenda.
 const GROUPS = [
@@ -19,6 +19,7 @@ const GROUPS = [
     links: [
       { href: "/admin/clientes", label: "Clientes", icon: Users },
       { href: "/admin/brinquedos", label: "Brinquedos", icon: Boxes },
+      { href: "/admin/galeria", label: "Galeria", icon: Images },
       { href: "/admin/financeiro", label: "Financeiro", icon: Wallet },
       { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
       { href: "/admin/api-docs", label: "API", icon: Braces },

@@ -77,6 +77,7 @@ export default async function TenantHome() {
 
   const settings = await services.tenantService.getSettings(tenant.id);
   const toys = (await services.toyService.list(tenant.id)).filter((t) => t.status !== "RETIRED");
+  const fotos = await services.eventPhotoService.list(tenant.id);
 
   // Identidade do tenant (TenantSettings) — cada empresa com as suas cores.
   const primary = settings?.colorPrimary ?? "#2563eb";
@@ -130,6 +131,9 @@ export default async function TenantHome() {
           </a>
           <div className="hidden items-center gap-6 text-sm font-semibold sm:flex">
             <a href="#brinquedos" className="transition-colors hover:text-[var(--color-muted)]">Brinquedos</a>
+            {fotos.length > 0 && (
+              <a href="#galeria" className="transition-colors hover:text-[var(--color-muted)]">Galeria</a>
+            )}
             <a href="#como-funciona" className="transition-colors hover:text-[var(--color-muted)]">Como funciona</a>
           </div>
           <a
@@ -323,6 +327,58 @@ export default async function TenantHome() {
           </div>
         )}
       </section>
+
+      {/*
+        ===== Galeria de eventos =====
+        Só aparece quando o painel já publicou alguma foto — uma seção "Nossas
+        festas" vazia passaria a impressão contrária da que ela existe pra dar.
+        A primeira foto ocupa o dobro no desktop: quebra a grade quadriculada e
+        dá um ponto de entrada pro olho.
+      */}
+      {fotos.length > 0 && (
+        <section id="galeria" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-14">
+          <div className="text-center">
+            <h2 className="text-3xl font-black tracking-tight sm:text-4xl">Festas que a gente já fez</h2>
+            <p className="mt-2 text-[var(--color-muted)]">Um pouquinho da alegria que já montamos por aí. 🎈</p>
+          </div>
+
+          <div className="mt-10 grid auto-rows-[11rem] grid-cols-2 gap-3 sm:auto-rows-[13rem] sm:gap-4 lg:grid-cols-4">
+            {fotos.map((foto, i) => (
+              <figure
+                key={foto.id}
+                className={`group relative m-0 overflow-hidden rounded-3xl border border-black/5 bg-[var(--color-surface)] shadow-[0_4px_24px_-8px_rgba(0,0,0,.12)] ${
+                  i === 0 ? "col-span-2 row-span-2" : ""
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={foto.imageUrl}
+                  alt={foto.caption ?? `Festa montada por ${tenant.name}`}
+                  loading="lazy"
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+                {foto.caption && (
+                  <figcaption className="absolute inset-x-0 bottom-0 bg-linear-to-t from-slate-950/80 to-transparent p-3 pt-8 text-xs font-semibold text-white sm:text-sm">
+                    {foto.caption}
+                  </figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+
+          <div className="mt-10 text-center">
+            <a
+              href={wa}
+              target="_blank"
+              rel="noopener"
+              className="inline-block rounded-full px-7 py-3 font-bold text-white shadow-lg transition-transform hover:scale-105"
+              style={{ background: `linear-gradient(135deg, ${primary}, ${accent})` }}
+            >
+              Quero uma festa assim
+            </a>
+          </div>
+        </section>
+      )}
 
       {/* ===== Como funciona ===== */}
       <section id="como-funciona" className="relative scroll-mt-20 overflow-hidden px-5 py-20">
