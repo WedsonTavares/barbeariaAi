@@ -51,15 +51,21 @@ export async function saveSettings(formData: FormData) {
   const raw: Record<string, unknown> = {};
   for (const [key, value] of formData.entries()) {
     if (key === "secao" || key === "name" || key === "days") continue;
-    if (key === "businessHoursStart" || key === "businessHoursEnd") continue;
+    if (key.startsWith("businessHours") || key.startsWith("setupWindow")) continue;
     if (typeof value === "string") raw[key] = value;
   }
   // O expediente chega como campos soltos (start/end + checkboxes) e vira JSON.
+  // A janela de montagem viaja no mesmo JSON: `businessHours` é Json livre, e
+  // guardar junto evita uma migration só pra dois horários.
   if (formData.has("businessHoursStart")) {
+    const setupStart = formData.get("setupWindowStart");
+    const setupEnd = formData.get("setupWindowEnd");
     raw.businessHours = {
       start: formData.get("businessHoursStart"),
       end: formData.get("businessHoursEnd"),
       days: readDays(formData),
+      ...(typeof setupStart === "string" && setupStart ? { setupStart } : {}),
+      ...(typeof setupEnd === "string" && setupEnd ? { setupEnd } : {}),
     };
   }
 

@@ -371,11 +371,19 @@ const hexColor = z.preprocess(
 
 const hhmm = z.string().trim().regex(/^\d{1,2}:\d{2}$/, "Use o formato HH:mm");
 
-/** Expediente: mesmo formato que `overview-service` já lê (start/end/days). */
+/**
+ * Expediente: mesmo formato que `overview-service` já lê (start/end/days).
+ *
+ * `setupStart`/`setupEnd` são a janela em que a equipe monta e retira — outra
+ * coisa que o atendimento. Opcionais: sem eles, o parser cai no expediente,
+ * que é como funcionava antes de existirem.
+ */
 export const businessHoursInput = z.object({
   start: hhmm,
   end: hhmm,
   days: z.array(z.number().int().min(0).max(6)).max(7),
+  setupStart: hhmm.optional(),
+  setupEnd: hhmm.optional(),
 });
 export type BusinessHoursInput = z.infer<typeof businessHoursInput>;
 

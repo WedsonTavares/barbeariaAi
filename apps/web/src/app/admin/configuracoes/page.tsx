@@ -1,7 +1,7 @@
 import { Building2, MessageCircle } from "lucide-react";
 
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services, parseBusinessHours } from "@diny/core";
 import { getConnectionState, evolutionConfigured } from "@/lib/evolution";
 import { WhatsappConnect } from "./WhatsappConnect";
 import { SettingsSection, Field, TextArea, ColorField } from "./SettingsSection";
@@ -18,19 +18,6 @@ const DIAS = [
   { v: 6, label: "Sáb" },
 ];
 
-/** Lê o JSON livre de `businessHours` com os mesmos padrões do overview-service. */
-function readHours(raw: unknown) {
-  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return {
-    start: typeof o.start === "string" ? o.start : "08:00",
-    end: typeof o.end === "string" ? o.end : "18:00",
-    days:
-      Array.isArray(o.days) && o.days.every((d) => typeof d === "number")
-        ? (o.days as number[])
-        : [1, 2, 3, 4, 5, 6],
-  };
-}
-
 export default async function ConfiguracoesPage({
   searchParams,
 }: {
@@ -44,7 +31,9 @@ export default async function ConfiguracoesPage({
   ]);
   const configured = evolutionConfigured();
   const state = configured ? await getConnectionState(instance) : "unknown";
-  const hours = readHours(settings?.businessHours);
+  // Mesma leitura que a API de disponibilidade usa — evita a tela mostrar um
+  // valor e a agenda respeitar outro.
+  const hours = parseBusinessHours(settings?.businessHours);
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 sm:space-y-5">
@@ -167,7 +156,34 @@ export default async function ConfiguracoesPage({
             ))}
           </div>
           <span className="mt-1 block text-[11px] text-[var(--color-muted)]">
-            Fora desse horário o painel marca o contato como fora do expediente.
+            Quando vocês atendem. Fora disso o painel marca o contato como fora do expediente.
+          </span>
+        </div>
+
+        <div className="sm:col-span-2">
+          <span className="mb-1.5 block text-xs font-bold text-[var(--color-muted)]">
+            Janela de montagem e retirada
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              name="setupWindowStart"
+              type="time"
+              defaultValue={hours.setupStart}
+              aria-label="Monta a partir das"
+              className="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+            />
+            <span className="text-sm text-[var(--color-muted)]">até</span>
+            <input
+              name="setupWindowEnd"
+              type="time"
+              defaultValue={hours.setupEnd}
+              aria-label="Retira até as"
+              className="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+            />
+          </div>
+          <span className="mt-1 block text-[11px] text-[var(--color-muted)]">
+            A IA só oferece horários dentro dessa faixa. É diferente do expediente: você pode
+            atender 24h e só montar das 8h às 20h.
           </span>
         </div>
       </SettingsSection>

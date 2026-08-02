@@ -53,14 +53,15 @@ export async function POST(req: Request) {
   });
 
   if (slotMode) {
-    // A grade crua cobre 00:00–24:00. Sem recortar pelo expediente, a IA acaba
-    // oferecendo montagem de madrugada. Só restringe quando o tenant configurou
-    // o horário: sem configuração, devolver a grade inteira é melhor do que
-    // esconder disponibilidade real por causa de um padrão que ninguém revisou.
+    // A grade crua cobre 00:00–24:00. Sem recortar, a IA oferece montagem de
+    // madrugada. O corte é pela JANELA DE MONTAGEM, não pelo expediente de
+    // atendimento: dá pra atender 24h e só montar das 8h às 20h. Sem nada
+    // configurado, devolver a grade inteira é melhor do que esconder
+    // disponibilidade real por causa de um padrão que ninguém revisou.
     const settings = await services.tenantService.getSettings(tenant.id);
     const hours = settings?.businessHours ? parseBusinessHours(settings.businessHours) : null;
-    const opensAt = hours ? hhmmToMin(hours.start) : null;
-    const closesAt = hours ? hhmmToMin(hours.end) : null;
+    const opensAt = hours ? hhmmToMin(hours.setupStart) : null;
+    const closesAt = hours ? hhmmToMin(hours.setupEnd) : null;
 
     const slotsByToy = candidates.length
       ? await services.bookingService.availabilitySlots(
