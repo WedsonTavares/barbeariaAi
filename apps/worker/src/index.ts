@@ -1,6 +1,7 @@
 import { Queue, Worker } from "bullmq";
 import { connection } from "./redis";
 import { processDueReminders } from "./reminder-worker";
+import { expirePosFesta } from "./pos-festa-worker";
 
 const SCHEDULER = "scheduler";
 
@@ -23,7 +24,12 @@ await queue.add(
 const worker = new Worker(
   SCHEDULER,
   async (job) => {
-    if (job.name === "tick") await processDueReminders();
+    if (job.name === "tick") {
+      await processDueReminders();
+      // Roda no mesmo tick: é uma varredura barata e a janela é de horas, não
+      // de minutos — não justifica uma fila própria.
+      await expirePosFesta();
+    }
   },
   { connection }
 );

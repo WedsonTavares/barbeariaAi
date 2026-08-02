@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { parseLocalDateTime, matchesToyName, services, schemas, ZodError } from "@diny/core";
+import { parseLocalDateTime, matchesToyName, parseBusinessHours, services, schemas, ZodError } from "@diny/core";
+
+/** "08:00" → 480. Entrada já validada como HH:mm pelo schema do expediente. */
+function hhmmToMin(value: string): number {
+  const [hour, minute] = value.split(":").map(Number);
+  return (hour || 0) * 60 + (minute || 0);
+}
 
 /**
  * Ferramenta pro agente de IA (que roda no n8n): "esse brinquedo/categoria está livre
@@ -47,6 +53,15 @@ export async function POST(req: Request) {
   });
 
   if (slotMode) {
+    // A grade crua cobre 00:00–24:00. Sem recortar pelo expediente, a IA acaba
+    // oferecendo montagem de madrugada. Só restringe quando o tenant configurou
+    // o horário: sem configuração, devolver a grade inteira é melhor do que
+    // esconder disponibilidade real por causa de um padrão que ninguém revisou.
+    const settings = await services.tenantService.getSettings(tenant.id);
+    const hours = settings?.businessHours ? parseBusinessHours(settings.businessHours) : null;
+    const opensAt = hours ? hhmmToMin(hours.start) : null;
+    const closesAt = hours ? hhmmToMin(hours.end) : null;
+
     const slotsByToy = candidates.length
       ? await services.bookingService.availabilitySlots(
           tenant.id,
@@ -60,9 +75,16 @@ export async function POST(req: Request) {
       date,
       scope: "slots",
       slotMinutes: input.slotMinutes,
+      businessHours: hours,
       toys: candidates.map((t) => {
         const slots = (slotsByToy[t.id] ?? [])
           .filter((slot) => slot.available)
+          .filter(
+            (slot) =>
+              opensAt === null ||
+              closesAt === null ||
+              (hhmmToMin(slot.startTime) >= opensAt && hhmmToMin(slot.endTime) <= closesAt)
+          )
           .map(({ startTime, endTime }) => ({ startTime, endTime }));
 
         return {

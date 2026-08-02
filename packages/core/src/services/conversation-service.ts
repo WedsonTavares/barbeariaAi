@@ -586,6 +586,42 @@ export const conversationService = {
     }),
 
   /**
+   * A pergunta de pós-festa já foi feita a esse contato nas últimas `horas`?
+   *
+   * A guarda por transição de etapa (`previousStage !== "POS_FESTA"`) não cobre
+   * tirar o card da coluna e devolver — para o sistema é entrada nova, e o
+   * cliente recebia a mesma pergunta duas vezes. Aqui a checagem é pela
+   * MENSAGEM, que é o que ele de fato vê.
+   */
+  posFestaJaPerguntado: (tenantId: string, phone: string, texto: string, horas = 24) =>
+    withTenant(tenantId, async (tx) => {
+      const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      if (!c) return false;
+      const desde = new Date(Date.now() - horas * 3_600_000);
+      const enviada = await tx.message.findFirst({
+        where: { conversationId: c.id, sender: "BOT", text: texto, createdAt: { gte: desde } },
+        select: { id: true },
+      });
+      return Boolean(enviada);
+    }),
+
+  /**
+   * Conversas paradas em Pós-festa há mais de `horas` sem nenhuma mensagem.
+   *
+   * Sem isso o contato fica preso: o card não sai da coluna e — pior — toda
+   * mensagem futura dele cai no agente de pós-festa, que só sabe coletar nota.
+   * Quem ia avaliar já avaliou; o resto volta pro atendimento normal.
+   */
+  posFestaAbandonadas: (tenantId: string, horas: number) =>
+    withTenant(tenantId, async (tx) => {
+      const limite = new Date(Date.now() - horas * 3_600_000);
+      return tx.conversation.findMany({
+        where: { tags: { has: "pos-festa" }, lastMessageAt: { lt: limite } },
+        select: { id: true, phone: true },
+      });
+    }),
+
+  /**
    * Tira UMA tag por telefone — pro fluxo que "desarma" um roteamento sem ser
    * um toggle de checkbox (ex.: a IA concluindo o pós-festa via `encerrar_pos_festa`).
    *
