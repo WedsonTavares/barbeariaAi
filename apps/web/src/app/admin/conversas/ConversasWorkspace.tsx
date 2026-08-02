@@ -12,6 +12,9 @@ import {
   MessageSquare,
   X,
   ChevronLeft,
+  Pause,
+  CalendarDays,
+  PartyPopper,
 } from "lucide-react";
 import { stageUi, initials } from "@/lib/stage";
 import {
@@ -90,6 +93,23 @@ const BOOKING_UI: Record<string, { label: string; chip: string }> = {
   CANCELED: { label: "Cancelada", chip: "bg-red-100 text-red-700" },
 };
 const stageBooking = (status: string) => BOOKING_UI[status] ?? BOOKING_UI.LEAD!;
+
+/**
+ * Ícone da etapa na LISTA da esquerda (só ali).
+ *
+ * A lista mostrava dois chips de texto por linha ("Suporte humano", "⏸ IA") e
+ * ficava poluída — ao abrir a conversa, a etapa e as tags aparecem por extenso
+ * no painel da direita, então aqui basta o símbolo. Mesmas cores do Funil.
+ * O rótulo continua existindo no `title` e para leitor de tela.
+ */
+const STAGE_ICON: Record<string, { Icon: typeof Bot; cor: string }> = {
+  IA_ATENDENDO: { Icon: Bot, cor: "text-sky-500" },
+  NOVO_LEAD: { Icon: Bot, cor: "text-sky-500" },
+  SUPORTE_HUMANO: { Icon: Pause, cor: "text-rose-500" },
+  AGENDADO: { Icon: CalendarDays, cor: "text-emerald-600" },
+  POS_FESTA: { Icon: PartyPopper, cor: "text-violet-500" },
+};
+const stageIcon = (stage: string) => STAGE_ICON[stage] ?? STAGE_ICON.IA_ATENDENDO!;
 
 /**
  * Inbox em 3 colunas: lista à esquerda, conversa no meio, detalhes do contato à
@@ -262,6 +282,7 @@ export function ConversasWorkspace({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {filtered.map((c) => {
               const s = stageUi(c.stage);
+              const ico = stageIcon(c.stage);
               const active = c.id === selected;
               return (
                 <button
@@ -283,25 +304,27 @@ export function ConversasWorkspace({
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span
-                        className={`min-w-0 flex-1 truncate text-sm ${c.unread > 0 ? "font-extrabold" : "font-semibold"}`}
+                        className={`min-w-0 truncate text-sm ${c.unread > 0 ? "font-extrabold" : "font-semibold"}`}
                       >
                         {c.contactName || c.phone}
                       </span>
-                      <span className="shrink-0 text-[10px] text-[var(--color-muted)]">
-                        {timeAgo(c.lastMessageAt)}
+                      {/* Etapa vira símbolo logo depois do nome. */}
+                      <span className="shrink-0" title={s.label}>
+                        <ico.Icon className={`size-3.5 ${ico.cor}`} aria-hidden />
+                        <span className="sr-only">{s.label}</span>
                       </span>
-                    </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-1">
-                      <span
-                        className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${s.chip}`}
-                      >
-                        {s.label}
-                      </span>
-                      {c.botPaused && (
-                        <span className="text-[9px] font-bold text-rose-600">
-                          ⏸ IA
+                      {/* A IA pode estar pausada sem o card estar em Suporte
+                          (tag "desligar-ia"). Nesse caso o ⏸ entra à parte, pra
+                          não perder o aviso que a linha antiga dava. */}
+                      {c.botPaused && c.stage !== "SUPORTE_HUMANO" && (
+                        <span className="shrink-0" title="IA pausada">
+                          <Pause className="size-3.5 text-rose-500" aria-hidden />
+                          <span className="sr-only">IA pausada</span>
                         </span>
                       )}
+                      <span className="ml-auto shrink-0 text-[10px] text-[var(--color-muted)]">
+                        {timeAgo(c.lastMessageAt)}
+                      </span>
                     </span>
                   </span>
 
