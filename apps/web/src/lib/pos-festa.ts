@@ -19,6 +19,12 @@ const DEFAULT_POST_EVENT_MESSAGE =
 export async function sendPosFestaAutoMessage(tenant: { id: string; slug: string }, phone: string) {
   const settings = await services.tenantService.getSettings(tenant.id);
   const message = settings?.postEventMessage?.trim() || DEFAULT_POST_EVENT_MESSAGE;
+
+  // Segunda trava, agora pela MENSAGEM: a guarda por transição de etapa não
+  // pega quem tira o card da coluna e devolve — para o sistema é entrada nova,
+  // e o cliente recebia a mesma pergunta de novo.
+  if (await services.conversationService.posFestaJaPerguntado(tenant.id, phone, message)) return;
+
   const instance = await services.tenantService.evolutionInstance(tenant.id, tenant.slug);
   const sent = await sendText(instance, phone, message);
   if (sent) await services.conversationService.recordOutbound(tenant.id, phone, message, "BOT");
