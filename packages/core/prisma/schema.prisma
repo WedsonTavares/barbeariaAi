@@ -156,6 +156,7 @@ model Tenant {
   notifications Notification[]
   conversations Conversation[]
   messages      Message[]
+  eventPhotos   EventPhoto[]
 }
 
 model TenantSettings {
@@ -458,4 +459,24 @@ model Message {
   createdAt      DateTime      @default(now())
 
   @@index([tenantId, conversationId, createdAt])
+}
+
+/**
+ * Galeria de eventos do site público — fotos de festas já realizadas.
+ *
+ * O binário NÃO fica aqui: a imagem vai pro Supabase Storage (bucket `eventos`)
+ * e a tabela guarda só a URL pública, igual ao que `Toy.imageUrl` já faz. Assim
+ * o banco não cresce com foto e o Storage serve direto pelo CDN.
+ */
+model EventPhoto {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  caption   String?
+  /// Ordem de exibição no site; menor aparece primeiro.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, sortOrder])
 }

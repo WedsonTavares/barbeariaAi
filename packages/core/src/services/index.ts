@@ -1,4 +1,5 @@
 export { toyService } from "./toy-service";
+export { eventPhotoService } from "./event-photo-service";
 export {
   customerService,
   CustomerDuplicateError,

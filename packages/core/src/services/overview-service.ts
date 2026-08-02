@@ -16,12 +16,28 @@ import { spClock, spDayRange } from "../time";
 const DAY_MS = 86_400_000;
 
 /** Expediente padrão quando o tenant ainda não configurou `businessHours`. */
-const DEFAULT_HOURS: BusinessHours = { start: "08:00", end: "18:00", days: [1, 2, 3, 4, 5, 6] };
+const DEFAULT_HOURS: BusinessHours = {
+  start: "08:00",
+  end: "18:00",
+  days: [1, 2, 3, 4, 5, 6],
+  setupStart: "08:00",
+  setupEnd: "18:00",
+};
 
 export interface BusinessHours {
   start: string; // "08:00"
   end: string; // "18:00"
   days: number[]; // 0 = domingo
+  /**
+   * Janela em que a equipe monta e retira. É OUTRA coisa que o expediente de
+   * atendimento: dá pra atender 24h e só montar das 8h às 20h — e o brinquedo
+   * pode ficar com o cliente fora dessa faixa.
+   *
+   * Quando o tenant não configurou, cai no expediente (`start`/`end`), que era
+   * o comportamento antes desses campos existirem.
+   */
+  setupStart: string;
+  setupEnd: string;
 }
 
 export interface OverviewDay {
@@ -60,7 +76,11 @@ export function parseBusinessHours(raw: unknown): BusinessHours {
     Array.isArray(o.days) && o.days.every((d) => typeof d === "number")
       ? (o.days as number[])
       : DEFAULT_HOURS.days;
-  return { start, end, days };
+  // Sem janela de montagem configurada, vale o expediente — é o que valia antes
+  // desses campos existirem, então tenant antigo não muda de comportamento.
+  const setupStart = typeof o.setupStart === "string" ? o.setupStart : start;
+  const setupEnd = typeof o.setupEnd === "string" ? o.setupEnd : end;
+  return { start, end, days, setupStart, setupEnd };
 }
 
 function isAfterHours(at: Date, hours: BusinessHours): boolean {

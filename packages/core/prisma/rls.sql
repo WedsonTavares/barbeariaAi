@@ -22,7 +22,7 @@ DECLARE t text;
 DECLARE tables text[] := ARRAY[
   'TenantSettings','Toy','Customer','Lead','Quote','Booking','BookingItem',
   'Payment','Expense','Maintenance','BookingReminder','Notification','AuditLog',
-  'Conversation','Message'
+  'Conversation','Message','EventPhoto'
 ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
