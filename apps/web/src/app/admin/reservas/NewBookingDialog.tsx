@@ -170,14 +170,20 @@ export function NewBookingDialog({
             </label>
           </div>
 
+          {/*
+            Bairro e endereço são obrigatórios: sem eles a equipe sai pra montar
+            sem saber onde, e o aviso de 30 minutos chega sem o "📍". A trava é
+            só do formulário — o schema segue aceitando vazio, porque reserva
+            criada pela IA nem sempre tem o endereço na primeira conversa.
+          */}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className={labelText}>Bairro <span className="font-normal">(opcional)</span></span>
-              <input name="neighborhood" className={field} />
+              <span className={labelText}>Bairro</span>
+              <input name="neighborhood" required className={field} />
             </label>
             <label className="block">
-              <span className={labelText}>Endereço <span className="font-normal">(opcional)</span></span>
-              <input name="address" className={field} />
+              <span className={labelText}>Endereço</span>
+              <input name="address" required className={field} />
             </label>
           </div>
 
