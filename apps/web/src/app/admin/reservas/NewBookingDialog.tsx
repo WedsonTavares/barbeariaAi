@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarPlus, Plus, X } from "lucide-react";
 
 import { SubmitButton } from "@/components/SubmitButton";
@@ -38,6 +38,75 @@ export function NewBookingDialog({
   const previousOverflow = useRef("");
   const scrollLocked = useRef(false);
 
+  // Data e horários: a montagem fica presa ao dia da festa e a retirada não
+  // pode ser antes dela. O backend só garante retirada > montagem — nada
+  // impedia salvar festa em 10/08 com montagem em 25/12, e aí a Agenda (que
+  // agrupa por data do evento mas mostra o horário da montagem) mentiria.
+  const [dataEvento, setDataEvento] = useState("");
+  const [montagem, setMontagem] = useState("");
+  const [retirada, setRetirada] = useState("");
+
+  // Endereço montado a partir de CEP + número + complemento. O `address` que
+  // vai pro servidor é a junção dos três (campo oculto, mais abaixo).
+  const [cep, setCep] = useState("");
+  const [rua, setRua] = useState("");
+  const [numero, setNumero] = useState("");
+  const [complemento, setComplemento] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep] = useState<string | null>(null);
+
+  const enderecoCompleto = [rua.trim(), numero.trim()].filter(Boolean).join(", ")
+    + (complemento.trim() ? ` — ${complemento.trim()}` : "");
+
+  /** Troca só a parte da DATA, preservando a hora que a pessoa já digitou. */
+  const comData = (valor: string, dia: string) => (dia ? `${dia}T${valor.split("T")[1] ?? ""}` : valor);
+
+  function escolherDataEvento(dia: string) {
+    setDataEvento(dia);
+    // Já preenche a data nos dois campos: antes era digitar a mesma data três
+    // vezes. A hora continua por conta de quem preenche.
+    setMontagem((atual) => comData(atual, dia));
+    setRetirada((atual) => comData(atual, dia));
+  }
+
+  /**
+   * Busca o endereço pelo CEP (ViaCEP). Falha não trava nada: os campos
+   * continuam editáveis à mão, que é o que já acontecia antes.
+   */
+  async function buscarCep(bruto: string) {
+    const digitos = bruto.replace(/\D/g, "");
+    if (digitos.length !== 8) return;
+    setBuscandoCep(true);
+    setErroCep(null);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digitos}/json/`);
+      const dados = (await res.json()) as { logradouro?: string; bairro?: string; erro?: boolean };
+      if (dados.erro) {
+        setErroCep("CEP não encontrado. Pode preencher à mão.");
+        return;
+      }
+      if (dados.logradouro) setRua(dados.logradouro);
+      if (dados.bairro) setBairro(dados.bairro);
+    } catch {
+      setErroCep("Não deu pra consultar o CEP agora. Preencha à mão.");
+    } finally {
+      setBuscandoCep(false);
+    }
+  }
+
+  function limparCampos() {
+    setDataEvento("");
+    setMontagem("");
+    setRetirada("");
+    setCep("");
+    setRua("");
+    setNumero("");
+    setComplemento("");
+    setBairro("");
+    setErroCep(null);
+  }
+
   function openDialog() {
     const dialog = dialogRef.current;
     if (!dialog || dialog.open) return;
@@ -58,7 +127,12 @@ export function NewBookingDialog({
       document.body.style.overflow = previousOverflow.current;
       scrollLocked.current = false;
     }
-    if (!initialOpen) dialogRef.current?.querySelector("form")?.reset();
+    if (!initialOpen) {
+      dialogRef.current?.querySelector("form")?.reset();
+      // `form.reset()` limpa o DOM, mas não o estado do React — sem isto a
+      // próxima reserva abriria com a data e o endereço da anterior.
+      limparCampos();
+    }
     window.setTimeout(() => triggerRef.current?.focus(), 0);
   }
 
@@ -179,17 +253,45 @@ export function NewBookingDialog({
 
           <label className="block">
             <span className={labelText}>Data do evento</span>
-            <input name="eventDate" type="date" required className={field} />
+            <input
+              name="eventDate"
+              type="date"
+              required
+              value={dataEvento}
+              onChange={(e) => escolherDataEvento(e.target.value)}
+              className={field}
+            />
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
               <span className={labelText}>Montagem</span>
-              <input name="setupTime" type="datetime-local" required className={field} />
+              {/* Preso ao dia da festa: montar num dia e a festa em outro é
+                  sempre engano de digitação. */}
+              <input
+                name="setupTime"
+                type="datetime-local"
+                required
+                value={montagem}
+                min={dataEvento ? `${dataEvento}T00:00` : undefined}
+                max={dataEvento ? `${dataEvento}T23:59` : undefined}
+                onChange={(e) => setMontagem(e.target.value)}
+                className={field}
+              />
             </label>
             <label className="block">
               <span className={labelText}>Retirada</span>
-              <input name="pickupTime" type="datetime-local" required className={field} />
+              {/* Só o piso: aluguel de 2 dias existe e é lançado por aqui, na
+                  mão — travar no mesmo dia tiraria essa possibilidade. */}
+              <input
+                name="pickupTime"
+                type="datetime-local"
+                required
+                value={retirada}
+                min={montagem || (dataEvento ? `${dataEvento}T00:00` : undefined)}
+                onChange={(e) => setRetirada(e.target.value)}
+                className={field}
+              />
             </label>
           </div>
 
@@ -205,21 +307,87 @@ export function NewBookingDialog({
           </div>
 
           {/*
-            Bairro e endereço são obrigatórios: sem eles a equipe sai pra montar
-            sem saber onde, e o aviso de 30 minutos chega sem o "📍". A trava é
-            só do formulário — o schema segue aceitando vazio, porque reserva
-            criada pela IA nem sempre tem o endereço na primeira conversa.
+            Endereço é obrigatório: sem ele a equipe sai pra montar sem saber
+            onde, e o aviso de 30 minutos chega sem o "📍". A trava é só do
+            formulário — o schema segue aceitando vazio, porque reserva criada
+            pela IA nem sempre tem o endereço na primeira conversa.
+
+            O CEP não é gravado (não existe coluna): serve pra buscar rua e
+            bairro e poupar digitação. Tudo continua editável à mão, então
+            ViaCEP fora do ar não impede ninguém de cadastrar.
           */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
             <label className="block">
-              <span className={labelText}>Bairro</span>
-              <input name="neighborhood" required className={field} />
+              <span className={labelText}>CEP</span>
+              <input
+                inputMode="numeric"
+                value={cep}
+                placeholder="00000-000"
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, "").slice(0, 8);
+                  setCep(v.length > 5 ? `${v.slice(0, 5)}-${v.slice(5)}` : v);
+                  if (v.length === 8) void buscarCep(v);
+                }}
+                onBlur={(e) => void buscarCep(e.target.value)}
+                className={field}
+              />
+              <span className="mt-1 block text-[11px] text-[var(--color-muted)]">
+                {buscandoCep ? "Buscando…" : erroCep ?? "Preenche rua e bairro sozinho."}
+              </span>
             </label>
             <label className="block">
-              <span className={labelText}>Endereço</span>
-              <input name="address" required className={field} />
+              <span className={labelText}>Rua</span>
+              <input
+                required
+                value={rua}
+                onChange={(e) => setRua(e.target.value)}
+                placeholder="Rua das Flores"
+                className={field}
+              />
             </label>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block">
+              <span className={labelText}>Número</span>
+              <input
+                required
+                value={numero}
+                onChange={(e) => setNumero(e.target.value)}
+                placeholder="120"
+                className={field}
+              />
+            </label>
+            <label className="block">
+              <span className={labelText}>
+                Complemento <span className="font-normal">(opcional)</span>
+              </span>
+              <input
+                value={complemento}
+                onChange={(e) => setComplemento(e.target.value)}
+                placeholder="Apto 32, fundos"
+                className={field}
+              />
+            </label>
+            <label className="block">
+              <span className={labelText}>Bairro</span>
+              <input
+                name="neighborhood"
+                required
+                value={bairro}
+                onChange={(e) => setBairro(e.target.value)}
+                className={field}
+              />
+            </label>
+          </div>
+
+          {/*
+            O que o servidor recebe como `address`: rua, número e complemento
+            juntos. Fica oculto e SEM `required` de propósito — campo escondido
+            e obrigatório trava o envio sem o navegador conseguir mostrar onde
+            está o erro. Quem garante o preenchimento são Rua e Número acima.
+          */}
+          <input type="hidden" name="address" value={enderecoCompleto} />
 
           <fieldset className="rounded-xl border border-black/10 p-3">
             <legend className="px-1 text-xs font-bold text-[var(--color-muted)]">Brinquedos</legend>
