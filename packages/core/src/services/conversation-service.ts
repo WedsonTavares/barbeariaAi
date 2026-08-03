@@ -29,6 +29,9 @@ export const STAGE_TAG: Record<ConversationStage, string | null> = {
 
 const ALL_STAGE_TAGS = Object.values(STAGE_TAG).filter((t): t is string => Boolean(t));
 
+/** Quantas mensagens por página no inbox (abertura e cada rolagem pra cima). */
+export const MENSAGENS_POR_PAGINA = 50;
+
 /** Reservas ainda por acontecer, indexadas pelos dois jeitos de achar o dono. */
 type ActiveBookings = { byCustomer: Map<string, Date>; byPhone: Map<string, Date> };
 
@@ -237,18 +240,37 @@ export const conversationService = {
     }),
 
   /**
-   * Uma conversa + suas mensagens (ordem cronológica). Zera o não-lido.
+   * Uma conversa + a ÚLTIMA página de mensagens. Zera o não-lido.
+   *
+   * Busca em `desc` e reverte: o que importa é pegar as mais RECENTES. Antes
+   * era `asc` com `take: 500`, que traz as 500 mais ANTIGAS — a conversa
+   * passava de 500 e congelava no passado, com tudo o que chegava depois
+   * invisível no painel. Estava gravado, só nunca era lido.
+   *
+   * `temMaisAntigas` diz se existe história além desta página, pra tela saber
+   * se vale continuar carregando ao rolar pra cima (ver `mensagensAntes`).
+   *
    * A etapa segue a mesma derivação da lista e do funil (ver `displayStage`).
    */
   get: (tenantId: string, id: string, now = new Date()) =>
     withTenant(tenantId, async (tx) => {
       const convo = await tx.conversation.findFirst({ where: { id } });
       if (!convo) return null;
-      const messages = await tx.message.findMany({
+
+      // take + 1: se vier um a mais, é porque há história antes desta página.
+      const recentes = await tx.message.findMany({
         where: { conversationId: id },
-        orderBy: { createdAt: "asc" },
-        take: 500,
+        orderBy: { createdAt: "desc" },
+        take: MENSAGENS_POR_PAGINA + 1,
       });
+      const temMaisAntigas = recentes.length > MENSAGENS_POR_PAGINA;
+      const messages = recentes.slice(0, MENSAGENS_POR_PAGINA).reverse();
+      // Total de verdade: a ficha do contato e o resumo falam da conversa
+      // INTEIRA, não da página carregada.
+      const totalMensagens = temMaisAntigas
+        ? await tx.message.count({ where: { conversationId: id } })
+        : messages.length;
+
       if (convo.unread > 0) await tx.conversation.update({ where: { id }, data: { unread: 0 } });
       const active = await loadActiveBookings(tx, now);
       const nomes = await customerNames(tx, [convo.customerId]);
@@ -258,6 +280,30 @@ export const conversationService = {
         stage: displayStage(convo, activeBookingAt(convo, active)),
         unread: 0,
         messages,
+        temMaisAntigas,
+        totalMensagens,
+      };
+    }),
+
+  /**
+   * Página anterior: as mensagens imediatamente ANTES de `antesDe`.
+   *
+   * Cursor por data e não por offset — com mensagem nova chegando o tempo
+   * todo, offset embaralha (o item 50 de agora não é o mesmo de daqui a
+   * pouco) e a rolagem repetiria ou pularia linhas.
+   *
+   * Não zera não-lido: rolar pra ver o passado não é "ler a conversa".
+   */
+  mensagensAntes: (tenantId: string, conversationId: string, antesDe: Date) =>
+    withTenant(tenantId, async (tx) => {
+      const anteriores = await tx.message.findMany({
+        where: { conversationId, createdAt: { lt: antesDe } },
+        orderBy: { createdAt: "desc" },
+        take: MENSAGENS_POR_PAGINA + 1,
+      });
+      return {
+        messages: anteriores.slice(0, MENSAGENS_POR_PAGINA).reverse(),
+        temMaisAntigas: anteriores.length > MENSAGENS_POR_PAGINA,
       };
     }),
 

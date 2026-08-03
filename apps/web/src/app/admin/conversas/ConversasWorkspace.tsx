@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -31,6 +31,7 @@ import {
   toggleBotAction,
   updateContactAction,
   summarizeConversationAction,
+  mensagensAntigasAction,
 } from "./actions";
 
 export type ConversaRow = {
@@ -45,6 +46,8 @@ export type ConversaRow = {
 };
 
 type Detail = Awaited<ReturnType<typeof loadConversationAction>>;
+/** Uma bolha do feed. Sai do próprio retorno da action, pra não duplicar tipo. */
+type Msg = NonNullable<Detail>["messages"][number];
 type Filtro = "todos" | "nao-lidos" | "pausadas";
 
 const BUBBLE: Record<string, string> = {
@@ -139,19 +142,55 @@ export function ConversasWorkspace({
   const [pending, start] = useTransition();
   const feedRef = useRef<HTMLDivElement>(null);
 
-  async function refresh(id = selected) {
-    if (!id) return setD(null);
-    const r = await loadConversationAction(id);
-    setD(r);
-    setLoading(false);
-  }
+  /**
+   * As mensagens vivem em estado PRÓPRIO, e não dentro de `d`.
+   *
+   * O refresh de 12s recarrega a conversa inteira; se as mensagens morassem em
+   * `d`, cada volta jogaria fora o histórico que o atendente carregou rolando
+   * pra cima. Aqui elas são acumuladas: o refresh só acrescenta o que é novo.
+   */
+  const [mensagens, setMensagens] = useState<Msg[]>([]);
+  const [temMaisAntigas, setTemMaisAntigas] = useState(false);
+  const [carregandoAntigas, setCarregandoAntigas] = useState(false);
+  // Altura do conteúdo antes de inserir páginas antigas, pra devolver a
+  // rolagem ao ponto exato depois (senão a tela salta ao carregar).
+  const alturaAntesDePrepend = useRef<number | null>(null);
+  const grudadoNoFim = useRef(true);
 
-  // Troca de conversa: limpa o rascunho pra não enviar texto no contato errado.
+  /** Junta sem duplicar e mantém a ordem cronológica. */
+  const mesclar = useCallback((atuais: Msg[], novas: Msg[]) => {
+    if (novas.length === 0) return atuais;
+    const mapa = new Map(atuais.map((m) => [m.id, m]));
+    for (const m of novas) mapa.set(m.id, m);
+    return [...mapa.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }, []);
+
+  const refresh = useCallback(
+    async (id = selected) => {
+      if (!id) return setD(null);
+      const r = await loadConversationAction(id);
+      setD(r);
+      if (r) setMensagens((atuais) => mesclar(atuais, r.messages));
+      setLoading(false);
+    },
+    [selected, mesclar]
+  );
+
+  // Troca de conversa: zera tudo o que era da anterior (inclusive o rascunho,
+  // pra não enviar texto no contato errado) e carrega a última página.
   useEffect(() => {
     setReply("");
+    setMensagens([]);
+    setTemMaisAntigas(false);
+    grudadoNoFim.current = true;
     if (!selected) return setD(null);
     setLoading(true);
-    void refresh(selected);
+    void loadConversationAction(selected).then((r) => {
+      setD(r);
+      setMensagens(r?.messages ?? []);
+      setTemMaisAntigas(Boolean(r?.temMaisAntigas));
+      setLoading(false);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
@@ -163,9 +202,45 @@ export function ConversasWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
+  /** Rolou perto do topo? Puxa a página anterior. */
+  const carregarAntigas = useCallback(async () => {
+    const primeira = mensagens[0];
+    if (!selected || !primeira || carregandoAntigas || !temMaisAntigas) return;
+    setCarregandoAntigas(true);
+    alturaAntesDePrepend.current = feedRef.current?.scrollHeight ?? null;
+    try {
+      const r = await mensagensAntigasAction(selected, primeira.createdAt);
+      if (r.ok) {
+        setMensagens((atuais) => mesclar(atuais, r.messages));
+        setTemMaisAntigas(r.temMaisAntigas);
+      }
+    } finally {
+      setCarregandoAntigas(false);
+    }
+  }, [selected, mensagens, carregandoAntigas, temMaisAntigas, mesclar]);
+
+  function aoRolar() {
+    const el = feedRef.current;
+    if (!el) return;
+    // "Grudado no fim" com folga de 80px: assim mensagem nova só puxa a tela
+    // pra baixo se o atendente já estava acompanhando o fim da conversa. Se
+    // ele está lendo o histórico, não é interrompido.
+    grudadoNoFim.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (el.scrollTop < 120) void carregarAntigas();
+  }
+
   useEffect(() => {
-    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
-  }, [d?.messages.length, d?.id]);
+    const el = feedRef.current;
+    if (!el) return;
+    // Voltando de um "carregar anteriores": devolve a rolagem ao mesmo ponto,
+    // compensando a altura que entrou acima.
+    if (alturaAntesDePrepend.current !== null) {
+      el.scrollTop = el.scrollHeight - alturaAntesDePrepend.current;
+      alturaAntesDePrepend.current = null;
+      return;
+    }
+    if (grudadoNoFim.current) el.scrollTo({ top: el.scrollHeight });
+  }, [mensagens, d?.id]);
 
   const naoLidos = useMemo(
     () => items.reduce((n, c) => n + (c.unread > 0 ? 1 : 0), 0),
@@ -417,9 +492,21 @@ export function ConversasWorkspace({
 
               <div
                 ref={feedRef}
+                onScroll={aoRolar}
                 className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4"
               >
-                {d.messages.map((m) => (
+                {/* Topo do histórico: some quando não há mais o que buscar. */}
+                {temMaisAntigas && (
+                  <button
+                    type="button"
+                    onClick={() => void carregarAntigas()}
+                    disabled={carregandoAntigas}
+                    className="mx-auto shrink-0 rounded-full border border-black/10 bg-white px-3 py-1 text-[11px] font-semibold text-[var(--color-muted)] transition hover:text-[var(--color-ink)] disabled:opacity-60"
+                  >
+                    {carregandoAntigas ? "Carregando…" : "Ver mensagens anteriores"}
+                  </button>
+                )}
+                {mensagens.map((m) => (
                   <div
                     key={m.id}
                     className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${BUBBLE[m.sender] ?? "self-start bg-white"}`}
@@ -435,7 +522,7 @@ export function ConversasWorkspace({
                     </div>
                   </div>
                 ))}
-                {d.messages.length === 0 && (
+                {mensagens.length === 0 && (
                   <p className="my-auto text-center text-[var(--color-muted)]">
                     Sem mensagens.
                   </p>
@@ -649,7 +736,7 @@ function DetalhesContato({
         <ResumoBox
           summary={d.summary}
           summaryAt={d.summaryAt}
-          total={d.messages.length}
+          total={d.totalMensagens}
           onGerar={onResumir}
         />
 
@@ -718,7 +805,7 @@ function DetalhesContato({
           </div>
           <div className="flex justify-between">
             <dt className="text-[var(--color-muted)]">Mensagens</dt>
-            <dd className="font-semibold">{d.messages.length}</dd>
+            <dd className="font-semibold">{d.totalMensagens}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-[var(--color-muted)]">Atendimento</dt>

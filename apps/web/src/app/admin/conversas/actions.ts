@@ -49,6 +49,10 @@ export async function loadConversationAction(id: string) {
       text: m.text,
       createdAt: m.createdAt.toISOString(),
     })),
+    // Há história antes desta página? A tela usa pra decidir se continua
+    // carregando quando o atendente rola pra cima.
+    temMaisAntigas: c.temMaisAntigas,
+    totalMensagens: c.totalMensagens,
   };
 }
 
@@ -65,6 +69,32 @@ export async function replyAction(id: string, phone: string, text: string) {
   if (sent) await services.conversationService.recordOutbound(tenant.id, to, msg, "AGENT");
   revalidatePath("/admin/conversas");
   return { ok: sent };
+}
+
+/**
+ * Página anterior do histórico, para quando o atendente rola pra cima.
+ *
+ * Devolve só as mensagens — nada de reserva, tag ou nota: rolar pra ver o
+ * passado não deve custar as consultas de contexto nem marcar nada como lido.
+ */
+export async function mensagensAntigasAction(id: string, antesDeIso: string) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
+
+  const antesDe = new Date(antesDeIso);
+  if (Number.isNaN(antesDe.getTime())) return { ok: false as const };
+
+  const r = await services.conversationService.mensagensAntes(tenant.id, id, antesDe);
+  return {
+    ok: true as const,
+    temMaisAntigas: r.temMaisAntigas,
+    messages: r.messages.map((m) => ({
+      id: m.id,
+      sender: m.sender as string,
+      text: m.text,
+      createdAt: m.createdAt.toISOString(),
+    })),
+  };
 }
 
 /**
