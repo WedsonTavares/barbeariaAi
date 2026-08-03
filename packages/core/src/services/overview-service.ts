@@ -116,7 +116,82 @@ function ratio(part: number, whole: number): number | null {
   return whole > 0 ? (part / whole) * 100 : null;
 }
 
+export interface ForaDaJanela {
+  /** "08:00"–"20:00": a janela usada como referência, pra tela poder mostrar. */
+  janela: { inicio: string; fim: string };
+  atual: number;
+  anterior: number;
+  changePct: number | null;
+  receita: number;
+  periodDays: number;
+}
+
 export const overviewService = {
+  /**
+   * Quanto a IA fechou FORA da janela de trabalho da equipe.
+   *
+   * Cálculo próprio e isolado: não passa pelo `summary` nem pelo
+   * `isAfterHours`, que usam o EXPEDIENTE DE ATENDIMENTO. Com atendimento 24h
+   * aquela conta não existe mais — nada nunca cai fora de 00:00–23:59 — e o
+   * card virava um zero permanente.
+   *
+   * A régua aqui é a JANELA DE MONTAGEM (`setupStart`/`setupEnd`, hoje 8h–20h):
+   * é quando a equipe de fato trabalha. Então o número responde a pergunta que
+   * interessa — quanto a IA fechou enquanto ninguém estava trabalhando.
+   *
+   * Acompanha a configuração: mudar a janela de montagem muda a régua junto,
+   * sem tocar em código.
+   */
+  foraDaJanelaDeTrabalho: (
+    tenantId: string,
+    opts: { days?: number; now?: Date } = {}
+  ): Promise<ForaDaJanela> =>
+    withTenant(tenantId, async (tx) => {
+      const days = opts.days ?? 30;
+      const now = opts.now ?? new Date();
+      const periodStart = new Date(now.getTime() - days * DAY_MS);
+      const previousStart = new Date(now.getTime() - 2 * days * DAY_MS);
+
+      const [settings, rows] = await Promise.all([
+        tx.tenantSettings.findUnique({ where: { tenantId }, select: { businessHours: true } }),
+        tx.booking.findMany({
+          where: {
+            createdAt: { gte: previousStart },
+            leadSource: "WHATSAPP",
+            status: { not: "CANCELED" },
+          },
+          select: { createdAt: true, total: true },
+        }),
+      ]);
+
+      const hours = parseBusinessHours(settings?.businessHours);
+      const abre = toMinutes(hours.setupStart, 8 * 60);
+      const fecha = toMinutes(hours.setupEnd, 20 * 60);
+
+      const foraDaJanela = (at: Date) => {
+        const { hour, minute, weekday } = spClock(at);
+        if (!hours.days.includes(weekday)) return true;
+        const minutos = hour * 60 + minute;
+        return minutos < abre || minutos >= fecha;
+      };
+
+      const noPeriodo = rows.filter((b) => b.createdAt >= periodStart && foraDaJanela(b.createdAt));
+      const noAnterior = rows.filter(
+        (b) => b.createdAt >= previousStart && b.createdAt < periodStart && foraDaJanela(b.createdAt)
+      );
+
+      return {
+        janela: { inicio: hours.setupStart, fim: hours.setupEnd },
+        atual: noPeriodo.length,
+        anterior: noAnterior.length,
+        changePct: noAnterior.length > 0
+          ? ((noPeriodo.length - noAnterior.length) / noAnterior.length) * 100
+          : null,
+        receita: noPeriodo.reduce((soma, b) => soma + Number(b.total), 0),
+        periodDays: days,
+      };
+    }),
+
   /**
    * Um retrato do negócio no período (padrão: 30 dias), com o período anterior de
    * mesmo tamanho para comparação, e a série diária dos últimos `chartDays`.

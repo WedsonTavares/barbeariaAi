@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
-import { services, isAlwaysOpen } from "@diny/core";
+import { services } from "@diny/core";
 import type { OverviewTrend } from "@diny/core";
 import { brl, fmtDateTime } from "@/lib/format";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -156,7 +156,7 @@ function Acao({
 
 export default async function VisaoGeralPage() {
   const { tenant } = await requireTenant();
-  const [o, s, m, funil] = await Promise.all([
+  const [o, s, m, funil, fora] = await Promise.all([
     services.overviewService.summary(tenant.id),
     services.financeService.dashboard(tenant.id),
     services.financeService.monthSummary(tenant.id),
@@ -164,13 +164,12 @@ export default async function VisaoGeralPage() {
     // tabela Lead, que nenhuma tela exibe: o card dizia 0 enquanto o funil
     // tinha conversas, e o número nunca batia com o destino do link.
     services.conversationService.board(tenant.id),
+    // Conta própria, contra a janela de montagem — ver o Tile "Fechados fora
+    // do horário". Fica de fora do `summary` de propósito: é outra régua.
+    services.overviewService.foraDaJanelaDeTrabalho(tenant.id),
   ]);
 
   const emNegociacao = funil.IA_ATENDENDO.length + funil.SUPORTE_HUMANO.length;
-  const expediente = `${o.businessHours.start}–${o.businessHours.end}`;
-  // Com atendimento 24h/7 nada cai "fora do expediente": mostrar 0 sugeriria
-  // que a IA não fechou nada de madrugada, quando na verdade a conta não existe.
-  const semExpediente = isAlwaysOpen(o.businessHours);
   const acoes = [
     {
       key: "conversas",
@@ -245,18 +244,23 @@ export default async function VisaoGeralPage() {
         >
           <Delta trend={o.ai.bookings} periodDays={o.periodDays} />
         </Tile>
+        {/*
+          Mede contra a JANELA DE MONTAGEM, não contra o expediente de
+          atendimento: com atendimento 24h nada nunca cai "fora" e o card
+          virava zero permanente. A régua passa a ser quando a equipe
+          trabalha (ver overviewService.foraDaJanelaDeTrabalho).
+        */}
         <Tile
-          label="Fora do expediente"
-          value={semExpediente ? "—" : o.ai.afterHours.current}
-          hint={
-            semExpediente
-              ? "Com atendimento 24h não existe “fora do expediente”. Defina um horário em Configurações para medir o que a IA fecha fora dele."
-              : `${brl(o.ai.afterHoursRevenue)} fechados pela IA fora de ${expediente}`
-          }
+          label="Fechados fora do horário"
+          value={fora.atual}
+          hint={`${brl(fora.receita)} que a IA fechou fora de ${fora.janela.inicio}–${fora.janela.fim}, quando ninguém estava trabalhando`}
           icon={Moon}
           tint="bg-violet-50 text-violet-600"
         >
-          {!semExpediente && <Delta trend={o.ai.afterHours} periodDays={o.periodDays} />}
+          <Delta
+            trend={{ current: fora.atual, previous: fora.anterior, changePct: fora.changePct }}
+            periodDays={fora.periodDays}
+          />
         </Tile>
       </div>
 
@@ -289,9 +293,9 @@ export default async function VisaoGeralPage() {
             <Stat label="Resolvidas sem humano" value={pct(o.ai.autonomyPct)} hint={`${o.ai.escalated} passaram para a equipe`} />
             <Stat label="Receita fechada pela IA" value={brl(o.ai.revenue)} />
             <Stat
-              label="Fora do expediente"
-              value={semExpediente ? "—" : `${o.ai.afterHours.current} · ${brl(o.ai.afterHoursRevenue)}`}
-              hint={semExpediente ? "Atendimento 24h" : `Expediente ${expediente}`}
+              label="Fechados fora do horário"
+              value={`${fora.atual} · ${brl(fora.receita)}`}
+              hint={`Fora de ${fora.janela.inicio}–${fora.janela.fim}`}
             />
           </div>
         </Card>
