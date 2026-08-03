@@ -33,6 +33,36 @@ export const notificationService = {
     withTenant(tenantId, (tx) =>
       tx.notification.count({ where: actionableUnread })
     ),
+
+  /**
+   * Os sinais que o painel pisca no topo, numa leitura só.
+   *
+   * São DUAS origens diferentes: agendamento novo, cancelamento e pedido de
+   * atendimento humano viram registro de Notification; mensagem comum não —
+   * ela fica no `unread` da conversa, porque o sino é reservado a evento
+   * acionável (senão cada "oi" acenderia alerta).
+   *
+   * `ultimoAvisoEm` deixa o cliente saber se apareceu algo NOVO desde a última
+   * consulta sem precisar comparar listas.
+   */
+  sinais: (tenantId: string) =>
+    withTenant(tenantId, async (tx) => {
+      const [avisos, conversas, ultimo] = await Promise.all([
+        tx.notification.count({ where: actionableUnread }),
+        tx.conversation.count({ where: { archivedAt: null, unread: { gt: 0 } } }),
+        tx.notification.findFirst({
+          where: actionableUnread,
+          orderBy: { createdAt: "desc" },
+          select: { title: true, body: true, createdAt: true },
+        }),
+      ]);
+      return {
+        avisos,
+        conversas,
+        ultimoAviso: ultimo ? { titulo: ultimo.title, corpo: ultimo.body } : null,
+        ultimoAvisoEm: ultimo ? ultimo.createdAt.toISOString() : null,
+      };
+    }),
   markRead: (tenantId: string, id: string) =>
     withTenant(tenantId, (tx) => tx.notification.update({ where: { id }, data: { read: true } })),
   markAllRead: (tenantId: string) =>
