@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AccessError, services } from "@diny/core";
 import { requireTenant } from "@/lib/tenant";
@@ -5,6 +6,19 @@ import { AdminSidebar } from "@/components/AdminSidebar";
 import { AdminTopbar } from "@/components/AdminTopbar";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Instalável como app, mas SÓ o painel: o manifest é declarado aqui e não no
+ * layout raiz, senão um cliente na vitrine receberia convite pra instalar um
+ * painel que ele não consegue abrir. O arquivo em si mora fora de /admin
+ * porque o Clerk protege esta rota e o navegador busca manifest sem
+ * credenciais (ver painel.webmanifest/route.ts).
+ */
+export const metadata: Metadata = {
+  manifest: "/painel.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Painel" },
+  icons: { apple: "/apple-touch-icon.png" },
+};
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   let tenantName = "";
