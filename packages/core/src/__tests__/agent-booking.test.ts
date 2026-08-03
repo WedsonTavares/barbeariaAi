@@ -244,6 +244,7 @@ describe("reserva criada pelo agente", () => {
       setupTime: "14:00",
       pickupTime: "18:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
       address: "Rua de Teste, 100",
     };
 
@@ -269,7 +270,11 @@ describe("reserva criada pelo agente", () => {
     });
 
     expect(state.bookings).toBe(1);
-    expect(state.reminders).toBe(7);
+    // 2 lembretes, não 7: um aviso 30min antes de montar e outro 30min antes de
+    // retirar. Antes eram sete por festa (incluindo "na hora", "15 min" e
+    // "atrasada") — sete mensagens no mesmo celular pela mesma festa viravam
+    // ruído, e alerta que vira ruído deixa de ser lido.
+    expect(state.reminders).toBe(2);
     expect(state.notifications).toBe(1);
     expect(state.conversation.stage).toBe("AGENDADO");
     expect(state.conversation.tags).toEqual(expect.arrayContaining(["cliente-vip", "agendado"]));
@@ -293,6 +298,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "09:00",
       pickupTime: "13:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     };
 
     const [a, b] = await Promise.all([
@@ -322,6 +329,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "14:00",
       pickupTime: "18:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     };
 
     const conversation = await withTenant(tenantId, (tx) =>
@@ -409,6 +418,8 @@ describe("reserva criada pelo agente", () => {
         setupTime: "15:00",
         pickupTime: "19:00",
         toys: ["Pula-pula Teste"],
+        neighborhood: "Centro",
+        address: "Rua de Teste, 100",
       })
     ).rejects.toBeInstanceOf(BookingConflictError);
   });
@@ -421,6 +432,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "10:00",
       pickupTime: "14:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     };
 
     const canceled = await bookingService.createFromAgent(tenantId, input);
@@ -450,6 +463,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "14:00",
       pickupTime: "18:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     };
 
     const existing = await bookingService.createFromAgent(tenantId, input);
@@ -510,6 +525,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "14:00",
       pickupTime: "18:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     };
 
     const existing = await bookingService.createFromAgent(tenantId, input);
@@ -546,6 +563,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "10:00",
       pickupTime: "14:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
 
     const state = await withTenant(tenantId, async (tx) => {
@@ -575,6 +594,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "10:00",
       pickupTime: "14:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
     const before = await bookingService.get(tenantId, original.bookingId);
 
@@ -614,6 +635,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "08:00",
       pickupTime: "12:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
     await bookingService.createFromAgent(tenantId, {
       phone: "5516999990112",
@@ -622,6 +645,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "14:00",
       pickupTime: "18:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
 
     await expect(
@@ -654,6 +679,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "09:00",
       pickupTime: "13:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
     const booking = await bookingService.get(tenantId, original.bookingId);
     const toyIds = booking?.items.map((item) => item.toyId) ?? [];
@@ -698,6 +725,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "09:00",
       pickupTime: "13:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
 
     await bookingService.cancelFromAgent(tenantId, {
@@ -723,6 +752,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "09:00",
       pickupTime: "13:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
     await withTenant(tenantId, (tx) =>
       tx.payment.create({
@@ -749,6 +780,8 @@ describe("reserva criada pelo agente", () => {
       setupTime: "09:00",
       pickupTime: "13:00",
       toys: ["Pula-pula Teste"],
+      neighborhood: "Centro",
+      address: "Rua de Teste, 100",
     });
 
     await expect(

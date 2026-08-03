@@ -281,8 +281,20 @@ export const agentBookingInput = z.object({
   setupTime: agentTime,
   pickupTime: agentPickupTime,
   toys: z.array(z.string().min(1).max(120)).min(1, "informe ao menos um brinquedo"),
-  neighborhood: z.string().max(120).optional(),
-  address: z.string().max(200).optional(),
+  /**
+   * Endereço e bairro são OBRIGATÓRIOS para fechar.
+   *
+   * Sem eles a festa entra na agenda e a equipe não sabe pra onde ir — e o
+   * alerta de 30 minutos antes da montagem chega sem a linha do endereço, que
+   * é justamente pra que ele serve. O formulário manual já exigia os dois;
+   * deixar a IA fechar sem endereço criava festa cega pelo caminho automático.
+   *
+   * A trava só age no MOMENTO DE AGENDAR: conversa, orçamento e consulta de
+   * disponibilidade não passam por este schema. Quem só pergunta preço nunca
+   * é cobrado por endereço.
+   */
+  neighborhood: z.string().trim().min(2, "informe o bairro").max(120),
+  address: z.string().trim().min(5, "informe o endereço").max(200),
   notes: z.string().max(500).optional(),
 });
 export type AgentBookingInput = z.infer<typeof agentBookingInput>;

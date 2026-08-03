@@ -48,6 +48,8 @@ describe("schemas das ferramentas de agenda", () => {
       setupTime: "29:70",
       pickupTime: "30:80",
       toys: ["Pula-pula Aranha"],
+      neighborhood: "Jardim Paulista",
+      address: "Rua das Flores, 120",
     });
 
     expect(parsed.success).toBe(false);
@@ -62,6 +64,8 @@ describe("schemas das ferramentas de agenda", () => {
         setupTime: "20:00",
         pickupTime: "24:00",
         toys: ["Pula-pula Aranha"],
+      neighborhood: "Jardim Paulista",
+      address: "Rua das Flores, 120",
       }).success
     ).toBe(true);
     expect(
@@ -72,6 +76,8 @@ describe("schemas das ferramentas de agenda", () => {
         setupTime: "24:00",
         pickupTime: "24:00",
         toys: ["Pula-pula Aranha"],
+      neighborhood: "Jardim Paulista",
+      address: "Rua das Flores, 120",
       }).success
     ).toBe(false);
   });
@@ -90,6 +96,8 @@ describe("schemas das ferramentas de agenda", () => {
       setupTime: "14:00",
       pickupTime: "18:00",
       toys: ["Pula-pula Aranha"],
+      neighborhood: "Jardim Paulista",
+      address: "Rua das Flores, 120",
     });
     expect(withSpaces.success).toBe(true);
     if (withSpaces.success) expect(withSpaces.data.phone).toBe("5516999999999");
@@ -111,6 +119,8 @@ describe("schemas das ferramentas de agenda", () => {
         setupTime: "14:00",
         pickupTime: "18:00",
         toys: ["Pula-pula Aranha"],
+      neighborhood: "Jardim Paulista",
+      address: "Rua das Flores, 120",
       }).success
     ).toBe(false);
   });
@@ -209,5 +219,38 @@ describe("schemas das ferramentas de agenda", () => {
     expect(parsed.phone).toBe("5516992331680");
     expect(parsed.limit).toBe(80);
     expect(agentContextInput.safeParse({ phone: "sem telefone", limit: 101 }).success).toBe(false);
+  });
+
+  it("não deixa a IA fechar festa sem endereço nem bairro", () => {
+    // Sem endereço a equipe não sabe pra onde ir, e o alerta de 30 minutos
+    // antes da montagem chega sem o destino. O formulário manual já exigia os
+    // dois; a IA podia fechar sem, criando festa cega pelo caminho automático.
+    const base = {
+      phone: "5516999999999",
+      name: "Cliente Teste",
+      date: "2026-09-24",
+      setupTime: "14:00",
+      pickupTime: "18:00",
+      toys: ["Pula-pula Aranha"],
+    };
+
+    expect(agentBookingInput.safeParse(base).success).toBe(false);
+    expect(agentBookingInput.safeParse({ ...base, address: "Rua das Flores, 120" }).success).toBe(false);
+    expect(agentBookingInput.safeParse({ ...base, neighborhood: "Centro" }).success).toBe(false);
+    // Endereço curto demais não passa por "preenchido" (ex.: um traço).
+    expect(
+      agentBookingInput.safeParse({ ...base, neighborhood: "Centro", address: "-" }).success
+    ).toBe(false);
+
+    const completo = agentBookingInput.safeParse({
+      ...base,
+      neighborhood: "  Jardim Paulista  ",
+      address: "  Rua das Flores, 120  ",
+    });
+    expect(completo.success).toBe(true);
+    if (completo.success) {
+      expect(completo.data.neighborhood).toBe("Jardim Paulista");
+      expect(completo.data.address).toBe("Rua das Flores, 120");
+    }
   });
 });
