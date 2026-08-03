@@ -342,6 +342,40 @@ export const customerService = {
     }),
 
   /**
+   * Acha o cliente pelo telefone; se não existir, cria com o nome informado.
+   *
+   * Serve o atalho "Agendar" a partir de uma conversa: o telefone já é
+   * conhecido, e quem agenda digita o nome do responsável na hora. Sem isso o
+   * fluxo obrigava a cadastrar o cliente numa tela antes de conseguir marcar
+   * a festa em outra.
+   *
+   * Nome só é ATUALIZADO quando o cadastro ainda não tem um — quem agenda pode
+   * digitar um apelido, e isso não pode apagar o nome completo já cadastrado.
+   * Usa o mesmo lock por telefone do `create`, então dois cliques simultâneos
+   * não geram cliente duplicado.
+   */
+  ensureByPhone: (tenantId: string, phoneRaw: string, nome: string) =>
+    withTenant(tenantId, async (tx) => {
+      const phone = toWhatsAppPhone(phoneRaw);
+      const phoneKey = customerPhoneKey(phone);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`customer:${tenantId}:${phoneKey}`}))`;
+
+      const candidates = await tx.customer.findMany({ select: { id: true, phone: true, name: true } });
+      const found = candidates.find((c) => customerPhoneKey(c.phone) === phoneKey);
+      if (found) {
+        const limpo = nome.trim();
+        if (limpo && !found.name.trim()) {
+          return tx.customer.update({ where: { id: found.id }, data: { name: limpo } });
+        }
+        return tx.customer.findFirstOrThrow({ where: { id: found.id } });
+      }
+
+      return tx.customer.create({
+        data: { tenantId, name: nome.trim() || phone, phone },
+      });
+    }),
+
+  /**
    * Edita somente dados cadastrais. O WhatsApp fica imutável aqui porque é a
    * chave informal que une cliente, conversa, lead e consultas do agente.
    */

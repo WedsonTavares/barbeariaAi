@@ -13,8 +13,16 @@ export async function createBooking(formData: FormData) {
 
   let dest = `${BASE}?ok=criada`;
   try {
+    // Atalho vindo de uma conversa: em vez de escolher um cliente já
+    // cadastrado, chega o telefone (da conversa) e o nome do responsável
+    // digitado na hora. Resolve o cadastro aqui e segue igual.
+    const phone = String(formData.get("phone") ?? "").trim();
+    const customerId = phone
+      ? (await services.customerService.ensureByPhone(tenant.id, phone, String(formData.get("responsavel") ?? ""))).id
+      : formData.get("customerId");
+
     const data = schemas.bookingInput.parse({
-      customerId: formData.get("customerId"),
+      customerId,
       eventDate: formData.get("eventDate"),
       setupTime: formData.get("setupTime"),
       pickupTime: formData.get("pickupTime"),
@@ -24,13 +32,23 @@ export async function createBooking(formData: FormData) {
       address: formData.get("address") || undefined,
       toyIds: formData.getAll("toyIds").map(String),
     });
-    await services.bookingService.create(tenant.id, data);
+    const booking = await services.bookingService.create(tenant.id, data);
+    // Já confirma: quem preencheu o formulário inteiro está fechando a festa,
+    // não rascunhando. Antes nascia como LEAD e só depois de abrir e clicar
+    // "Confirmar" é que os lembretes eram criados e o card ia pro Agendado —
+    // dois passos escondidos que ninguém adivinhava.
+    //
+    // Chama o `confirm` em vez de gravar CONFIRMED direto no create: ele é
+    // quem sabe criar os lembretes de montagem e retirada.
+    await services.bookingService.confirm(tenant.id, booking.id);
   } catch (e) {
     if (e instanceof services.BookingConflictError) dest = `${BASE}?erro=conflito`;
     else if (e instanceof ZodError) dest = `${BASE}?erro=validacao`;
     else throw e;
   }
   revalidatePath(BASE);
+  revalidatePath("/admin/agenda");
+  revalidatePath("/admin/funil");
   redirect(dest);
 }
 

@@ -20,15 +20,21 @@ export function NewBookingDialog({
   toys,
   initialOpen = false,
   hasError = false,
+  phone,
+  contactName,
 }: {
   customers: PickerOption[];
   toys: PickerOption[];
   initialOpen?: boolean;
   hasError?: boolean;
+  /** Vindo do atalho "Agendar" de uma conversa: telefone já conhecido. */
+  phone?: string;
+  contactName?: string;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstRef = useRef<HTMLSelectElement>(null);
+  const responsavelRef = useRef<HTMLInputElement>(null);
   const previousOverflow = useRef("");
   const scrollLocked = useRef(false);
 
@@ -39,7 +45,8 @@ export function NewBookingDialog({
     document.body.style.overflow = "hidden";
     scrollLocked.current = true;
     dialog.showModal();
-    window.setTimeout(() => firstRef.current?.focus(), 0);
+    // Foca o primeiro campo que existe no modo atual (responsável ou cliente).
+    window.setTimeout(() => (responsavelRef.current ?? firstRef.current)?.focus(), 0);
   }
 
   function closeDialog() {
@@ -133,15 +140,42 @@ export function NewBookingDialog({
             </p>
           )}
 
-          <label className="block">
-            <span className={labelText}>Cliente</span>
-            <select ref={firstRef} name="customerId" required className={field}>
-              <option value="">Selecione...</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
+          {/*
+            Dois modos. Vindo de uma conversa (`phone`), o telefone já é
+            conhecido e a única pergunta que falta é QUEM responde pela festa —
+            o pushName do WhatsApp raramente é o nome do responsável. O cadastro
+            é criado/encontrado na hora pelo telefone.
+            Sem conversa, segue a lista de clientes já cadastrados.
+          */}
+          {phone ? (
+            <>
+              <input type="hidden" name="phone" value={phone} />
+              <label className="block">
+                <span className={labelText}>Nome do responsável</span>
+                <input
+                  ref={responsavelRef}
+                  name="responsavel"
+                  required
+                  defaultValue={contactName ?? ""}
+                  placeholder="Quem responde pela festa"
+                  className={field}
+                />
+                <span className="mt-1 block text-[11px] text-[var(--color-muted)]">
+                  WhatsApp {phone} — o cadastro é criado se ainda não existir.
+                </span>
+              </label>
+            </>
+          ) : (
+            <label className="block">
+              <span className={labelText}>Cliente</span>
+              <select ref={firstRef} name="customerId" required className={field}>
+                <option value="">Selecione...</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="block">
             <span className={labelText}>Data do evento</span>

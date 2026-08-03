@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -14,6 +15,7 @@ import {
   ChevronLeft,
   Pause,
   CalendarDays,
+  CalendarPlus,
   PartyPopper,
 } from "lucide-react";
 import { stageUi, initials } from "@/lib/stage";
@@ -389,6 +391,17 @@ export function ConversasWorkspace({
                     {d.botPaused ? "Você no comando" : "IA atendendo"}
                   </div>
                 </div>
+                {/* Agendar sem sair daqui: leva o telefone e o nome, e o
+                    formulário só pergunta quem responde pela festa. Antes era
+                    copiar o telefone, cadastrar em Clientes e caçar no
+                    dropdown de Reservas. */}
+                <Link
+                  href={`/admin/reservas?tel=${encodeURIComponent(d.phone)}&nome=${encodeURIComponent(d.contactName ?? "")}`}
+                  title="Agendar festa para este contato"
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"
+                >
+                  <CalendarPlus className="size-4" /> Agendar
+                </Link>
                 <AssumirButton
                   paused={d.botPaused}
                   pending={pending}

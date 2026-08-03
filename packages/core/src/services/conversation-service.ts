@@ -1,6 +1,7 @@
 import { withTenant, type Tx } from "../db/withTenant";
 import type { MessageSender, ConversationStage } from "@prisma/client";
 import { customerPhoneKey } from "../phone";
+import { cleanContactName } from "../text";
 
 /** Tags que pausam o bot (a IA não responde quando o contato tem uma dessas). */
 export const BOT_SILENCING_TAGS = ["desligar-ia", "atendimento-humano"];
@@ -58,6 +59,28 @@ async function loadActiveBookings(tx: Tx, now: Date): Promise<ActiveBookings> {
     if (!byPhone.has(phone)) byPhone.set(phone, at);
   }
   return { byCustomer, byPhone };
+}
+
+/**
+ * Nome do CADASTRO manda quando a conversa já tem cliente ligado.
+ *
+ * O `contactName` da conversa é o pushName do WhatsApp — o cliente escolhe e
+ * muda quando quiser. O nome do `Customer` foi digitado pela equipe (ou veio
+ * junto com uma reserva), então é o confiável. Sem isso, um contato com festa
+ * fechada continuava aparecendo como "Bella" no funil enquanto o cadastro
+ * dizia "Isabella Martins".
+ *
+ * Busca em separado porque `Conversation.customerId` é campo solto, sem
+ * relação no Prisma — evitar a migration custa uma query a mais, só.
+ */
+async function customerNames(tx: Tx, ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unicos.length === 0) return new Map();
+  const clientes = await tx.customer.findMany({
+    where: { id: { in: unicos } },
+    select: { id: true, name: true },
+  });
+  return new Map(clientes.map((c) => [c.id, c.name]));
 }
 
 /** Data da próxima festa desta conversa (pelo vínculo ou pelo telefone), se houver. */
@@ -162,18 +185,24 @@ export async function recordMessage(
     });
     if (dup) return existing;
   }
+  // O `pushName` vem do próprio cliente: chega ".", só emoji, enfeite em volta.
+  // Limpa antes de guardar (ver cleanContactName).
+  const nome = cleanContactName(input.contactName);
   const convo = await tx.conversation.upsert({
     where: { tenantId_phone: { tenantId, phone: input.phone } },
     create: {
       tenantId,
       phone: input.phone,
-      contactName: input.contactName,
+      contactName: nome,
       lastMessageAt: now,
       unread: input.sender === "CONTACT" ? 1 : 0,
     },
     update: {
       lastMessageAt: now,
-      ...(input.contactName ? { contactName: input.contactName } : {}),
+      // SÓ preenche quando está vazio. Antes sobrescrevia a cada mensagem, então
+      // corrigir o nome no painel não durava nada: bastava o cliente responder e
+      // o pushName voltava por cima.
+      ...(nome && !existing?.contactName ? { contactName: nome } : {}),
       // Contato arquivado que volta a falar reaparece no inbox. Arquivar esconde,
       // não bloqueia — senão uma mensagem nova ficaria invisível para a equipe.
       ...(input.sender === "CONTACT" ? { unread: { increment: 1 }, archivedAt: null } : {}),
@@ -199,7 +228,12 @@ export const conversationService = {
         take: 100,
       });
       const active = rows.length ? await loadActiveBookings(tx, now) : NO_ACTIVE_BOOKINGS;
-      return rows.map((row) => ({ ...row, stage: displayStage(row, activeBookingAt(row, active)) }));
+      const nomes = await customerNames(tx, rows.map((r) => r.customerId));
+      return rows.map((row) => ({
+        ...row,
+        contactName: (row.customerId && nomes.get(row.customerId)) || row.contactName,
+        stage: displayStage(row, activeBookingAt(row, active)),
+      }));
     }),
 
   /**
@@ -217,8 +251,10 @@ export const conversationService = {
       });
       if (convo.unread > 0) await tx.conversation.update({ where: { id }, data: { unread: 0 } });
       const active = await loadActiveBookings(tx, now);
+      const nomes = await customerNames(tx, [convo.customerId]);
       return {
         ...convo,
+        contactName: (convo.customerId && nomes.get(convo.customerId)) || convo.contactName,
         stage: displayStage(convo, activeBookingAt(convo, active)),
         unread: 0,
         messages,
@@ -514,8 +550,11 @@ export const conversationService = {
           activeBookingByPhone.set(phone, at);
         }
       }
+      const nomes = await customerNames(tx, rows.map((r) => r.customerId));
       const cards = rows.map(({ customerId, ...row }) => {
         const phone = customerPhoneKey(row.phone);
+        // Nome do cadastro manda sobre o pushName (ver customerNames).
+        const contactName = (customerId && nomes.get(customerId)) || row.contactName;
         const activeBookingAt =
           (customerId ? activeBookingByCustomer.get(customerId) : undefined) ??
           activeBookingByPhone.get(phone) ??
@@ -527,6 +566,7 @@ export const conversationService = {
             : row.stage;
         return {
           ...row,
+          contactName,
           stage,
           activeBookingAt,
         };

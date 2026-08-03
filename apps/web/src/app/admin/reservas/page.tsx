@@ -30,7 +30,7 @@ const spDay = (d: Date) => new Date(d.getTime() - OFFSET_MS).toISOString().slice
 export default async function ReservasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; ok?: string; nova?: string }>;
+  searchParams: Promise<{ erro?: string; ok?: string; nova?: string; tel?: string; nome?: string }>;
 }) {
   const { tenant } = await requireTenant();
   const sp = await searchParams;
@@ -48,8 +48,10 @@ export default async function ReservasPage({
     daySort: spDay(b.eventDate),
   }));
 
-  // Abre o modal já na chegada: atalho da Agenda (?nova=1) ou volta de erro.
-  const openNew = sp.nova === "1" || sp.erro === "validacao" || sp.erro === "conflito";
+  // Abre o modal já na chegada: atalho da Agenda (?nova=1), atalho "Agendar"
+  // de uma conversa (?tel=...) ou volta de erro.
+  const telefone = (sp.tel ?? "").replace(/\D/g, "");
+  const openNew = sp.nova === "1" || Boolean(telefone) || sp.erro === "validacao" || sp.erro === "conflito";
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 sm:space-y-5">
@@ -70,6 +72,8 @@ export default async function ReservasPage({
           toys={toys.filter((t) => t.status !== "RETIRED").map((t) => ({ id: t.id, name: t.name }))}
           initialOpen={openNew}
           hasError={sp.erro === "validacao" || sp.erro === "conflito"}
+          phone={telefone || undefined}
+          contactName={sp.nome}
         />
       </header>
 

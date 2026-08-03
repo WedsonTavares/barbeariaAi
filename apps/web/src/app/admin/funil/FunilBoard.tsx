@@ -2,7 +2,7 @@
 import { useEffect, useState, useTransition, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, CalendarDays, ChevronLeft, ChevronRight, Plus, X, RotateCw } from "lucide-react";
+import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, Plus, X, RotateCw } from "lucide-react";
 import { TAG_CATALOG, STAGE_ONLY_TAGS, normalizeTag } from "@/lib/tags";
 import { moveCardAction, toggleTagFromFunilAction } from "./actions";
 
@@ -358,6 +358,19 @@ export function FunilBoard({ initial }: { initial: Board }) {
                             </span>
                           )}
                         </button>
+                        {/* Agendar direto do card: leva telefone e nome, e o
+                            formulário só pergunta quem responde pela festa.
+                            Some pra quem já tem festa marcada. */}
+                        {!c.activeBookingAt && (
+                          <Link
+                            href={`/admin/reservas?tel=${encodeURIComponent(c.phone)}&nome=${encodeURIComponent(c.contactName ?? "")}`}
+                            draggable={false}
+                            title="Agendar festa para este contato"
+                            className="hover:text-emerald-700"
+                          >
+                            <CalendarPlus className="size-4" />
+                          </Link>
+                        )}
                         {c.notes && (
                           <Link
                             href={`/admin/conversas?c=${c.id}`}
