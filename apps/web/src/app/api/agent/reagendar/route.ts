@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services, schemas, ZodError } from "@diny/core";
+import { services, schemas, ZodError } from "@barbearia-ai/core";
 
 /**
- * Reagenda uma reserva já identificada por /api/agent/meus-agendamentos.
- * Não altera preço, pagamento, brinquedos, cliente, CRM, tags ou notas.
+ * Reagenda um atendimento já identificado por /api/agent/meus-agendamentos.
+ * Não altera preço, pagamento, cliente, CRM, tags ou notas.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-diny-secret") !== secret) {
+  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
   let input;
   try {
-    input = schemas.agentBookingRescheduleInput.parse(await req.json());
+    input = schemas.agentAppointmentRescheduleInput.parse(await req.json());
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
@@ -29,7 +29,12 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await services.bookingService.rescheduleFromAgent(tenant.id, input);
+    const result = await services.appointmentService.rescheduleFromAgent(tenant.id, input);
+    if (!result.alreadyUpdated) {
+      await services.calendarService.syncAppointment(tenant.id, result.appointmentId).catch((error) => {
+        console.error("[google-calendar] sync ao reagendar falhou", error);
+      });
+    }
     return NextResponse.json({
       ok: true,
       ...result,
@@ -40,12 +45,12 @@ export async function POST(req: Request) {
         ? null
         : {
             eventId: result.calendarEventId,
-            start: result.setupISO,
-            end: result.pickupISO,
+            start: result.startISO,
+            end: result.endISO,
           },
     });
   } catch (error) {
-    if (error instanceof services.BookingConflictError) {
+    if (error instanceof services.AppointmentConflictError) {
       return NextResponse.json(
         {
           ok: false,
@@ -55,13 +60,13 @@ export async function POST(req: Request) {
         { status: 409 }
       );
     }
-    if (error instanceof services.BookingAgentError) {
+    if (error instanceof services.AppointmentAgentError) {
       return NextResponse.json(
         { ok: false, reason: "nao_encontrado", message: error.message },
         { status: 404 }
       );
     }
-    if (error instanceof services.BookingStateError) {
+    if (error instanceof services.AppointmentStateError) {
       return NextResponse.json(
         { ok: false, reason: "estado", message: error.message },
         { status: 409 }

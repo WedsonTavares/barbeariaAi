@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { requireRole, services, schemas, ZodError } from "@diny/core";
+import { requireRole, services, schemas, ZodError } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 
 const BASE = "/admin/clientes";
@@ -146,7 +146,7 @@ export async function removeCustomer(formData: FormData) {
     if (!result.removed) {
       const errors = {
         NOT_FOUND: "nao_encontrado",
-        BOOKINGS: "cliente_com_reservas",
+        APPOINTMENTS: "cliente_com_agendamentos",
         HISTORY: "cliente_com_historico",
         DATA: "cliente_com_dados",
       } as const;

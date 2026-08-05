@@ -1,7 +1,7 @@
 /**
  * Envio de imagem pro Supabase Storage, via REST e sem SDK.
  *
- * Compartilhado entre a foto do brinquedo e a galeria de eventos — os dois
+ * Compartilhado entre fotos de catálogo e galeria — os dois
  * validam do mesmo jeito e sobem do mesmo jeito, então a regra vive num lugar
  * só. O binário nunca entra no banco: fica no bucket e o Postgres guarda a URL.
  *

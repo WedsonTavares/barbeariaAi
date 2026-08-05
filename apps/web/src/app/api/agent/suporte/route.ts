@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services, schemas, ZodError } from "@diny/core";
+import { services, schemas, ZodError } from "@barbearia-ai/core";
 import { sendText } from "@/lib/evolution";
 
 /** Mensagem de transbordo — alinhada com a do system prompt do agente. */
 const AVISO_TRANSBORDO =
-  "Vou chamar aqui uma pessoa da equipe pra continuar com você e deixar tudo certinho pra sua festa 🎉";
+  "Vou chamar aqui uma pessoa da equipe pra continuar com você e deixar tudo certinho no seu atendimento.";
 
 /**
  * Ferramenta pro agente de IA (n8n): escala pra atendimento humano. Marca a
@@ -20,7 +20,7 @@ const AVISO_TRANSBORDO =
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-diny-secret") !== secret) {
+  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

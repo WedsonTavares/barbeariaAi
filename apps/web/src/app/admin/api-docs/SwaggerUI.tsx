@@ -68,7 +68,7 @@ export function SwaggerUI() {
           url: "/openapi.yaml",
           domNode: container.current,
           docExpansion: "list",
-          // Mantém o x-diny-secret enquanto a aba estiver aberta, em vez de
+          // Mantém o x-barbearia-ai-secret enquanto a aba estiver aberta, em vez de
           // pedir a cada requisição.
           persistAuthorization: true,
           tryItOutEnabled: true,

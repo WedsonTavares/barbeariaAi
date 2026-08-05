@@ -15,20 +15,29 @@ async function tenantSeed(slug: string, name: string, clerkOrgId: string) {
         tenantId: tenant.id,
         whatsappMain: "5516993294815",
         city: "Ribeirão Preto",
-        headline: `${name} — diversão sem dor de cabeça`,
-        subheadline: "Brinquedos entregues, montados e higienizados.",
-        ctaText: "Reservar no WhatsApp",
+        headline: `${name} — agenda inteligente no WhatsApp`,
+        subheadline: "Cortes, barba e serviços com atendimento assistido por IA.",
+        ctaText: "Agendar no WhatsApp",
       },
     });
-    // Conta explicitamente por tenantId (não confia na RLS: o dono/owner pode ter BYPASSRLS).
-    const count = await tx.toy.count({ where: { tenantId: tenant.id } });
-    if (count === 0) {
-      await tx.toy.createMany({
+    const services = await tx.service.count({ where: { tenantId: tenant.id } });
+    if (services === 0) {
+      await tx.service.createMany({
         data: [
-          { tenantId: tenant.id, name: "Pula-pula Aranha", category: "INFLAVEL", purchasePrice: 3500, defaultRentPrice: 150 },
-          { tenantId: tenant.id, name: "Piscina de Bolinhas", category: "PISCINA_BOLINHAS", purchasePrice: 1800, defaultRentPrice: 130 },
-          { tenantId: tenant.id, name: "Cama Elástica Pro", category: "CAMA_ELASTICA", purchasePrice: 2600, defaultRentPrice: 180 },
+          { tenantId: tenant.id, name: "Corte masculino", category: "HAIR", durationMinutes: 40, defaultPrice: 45 },
+          { tenantId: tenant.id, name: "Barba", category: "BEARD", durationMinutes: 30, defaultPrice: 35 },
+          { tenantId: tenant.id, name: "Corte + barba", category: "BEARD", durationMinutes: 70, defaultPrice: 75 },
         ],
+      });
+    }
+    const professionals = await tx.professional.count({ where: { tenantId: tenant.id } });
+    if (professionals === 0) {
+      const joao = await tx.professional.create({
+        data: { tenantId: tenant.id, name: "João", color: "#2563EB" },
+      });
+      const catalog = await tx.service.findMany({ where: { tenantId: tenant.id } });
+      await tx.professionalService.createMany({
+        data: catalog.map((service) => ({ tenantId: tenant.id, professionalId: joao.id, serviceId: service.id })),
       });
     }
   });
@@ -36,8 +45,7 @@ async function tenantSeed(slug: string, name: string, clerkOrgId: string) {
 }
 
 async function main() {
-  await tenantSeed("dinyplay", "Diny Play", "org_demo_dinyplay");
-  await tenantSeed("irma", "Festas da Irmã", "org_demo_irma");
+  await tenantSeed("barbearia", "Barbearia AI", "org_demo_barbearia");
 }
 
 main().then(() => prisma.$disconnect());

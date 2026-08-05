@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 
-import { requireRole, services } from "@diny/core";
+import { requireRole, services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 
 export async function markAllNotificationsRead() {

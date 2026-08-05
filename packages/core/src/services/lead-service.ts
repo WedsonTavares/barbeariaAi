@@ -29,7 +29,7 @@ export const leadService = {
               name: data.name,
               message: data.summary ?? existing.message,
               desiredDate: desiredDate ?? existing.desiredDate,
-              desiredToy: data.desiredToy ?? existing.desiredToy,
+              desiredService: data.desiredService ?? existing.desiredService,
               neighborhood: data.neighborhood ?? existing.neighborhood,
             },
           })
@@ -41,7 +41,7 @@ export const leadService = {
               source: "WHATSAPP",
               message: data.summary,
               desiredDate,
-              desiredToy: data.desiredToy,
+              desiredService: data.desiredService,
               neighborhood: data.neighborhood,
             },
           });
@@ -49,7 +49,7 @@ export const leadService = {
         await pushNotification(tx, tenantId, {
           type: "NEW_LEAD",
           title: "Novo lead pelo agente de IA (WhatsApp)",
-          body: `${data.name} · ${data.phone}${data.desiredToy ? ` · ${data.desiredToy}` : ""}`,
+          body: `${data.name} · ${data.phone}${data.desiredService ? ` · ${data.desiredService}` : ""}`,
         });
       }
       return lead;

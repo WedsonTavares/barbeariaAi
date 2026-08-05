@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { brl, fmtDate, fmtDateTime, waUrl } from "@/lib/format";
-import { BOOKING_STATUS, PAYMENT_STATUS, label } from "@/lib/labels";
+import { APPOINTMENT_STATUS, PAYMENT_STATUS, label } from "@/lib/labels";
 import { stageUi } from "@/lib/stage";
 import { STAGE_ONLY_TAGS } from "@/lib/tags";
 
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 
 const SENDER: Record<string, string> = { CONTACT: "Cliente:", BOT: "🤖 IA:", AGENT: "🧑 Equipe:" };
 
-/** Etapas em que a reserva ainda está por acontecer (mesma régua do funil). */
-const RESERVA_ATIVA = ["CONFIRMED", "IN_DELIVERY", "MOUNTED"];
+/** Etapas em que o atendimento ainda está por acontecer ou em execução. */
+const AGENDAMENTO_ATIVO = ["REQUESTED", "CONFIRMED", "ARRIVED", "IN_SERVICE"];
 
 export default async function FichaClientePage({ params }: { params: Promise<{ id: string }> }) {
   const { tenant } = await requireTenant();
@@ -27,27 +27,30 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
     );
   }
 
-  const bookings = customer.bookings;
-  const ativos = bookings.filter((b) => b.status !== "CANCELED");
-  const totalContratado = ativos.reduce((s, b) => s + Number(b.total), 0);
-  const totalPago = ativos.reduce((s, b) => s + b.payments.reduce((p, x) => p + Number(x.amount), 0), 0);
+  const appointments = customer.appointments;
+  const ativos = appointments.filter((appointment) => appointment.status !== "CANCELED");
+  const totalContratado = ativos.reduce((sum, appointment) => sum + Number(appointment.total), 0);
+  const totalPago = ativos.reduce(
+    (sum, appointment) => sum + appointment.payments.reduce((paid, payment) => paid + Number(payment.amount), 0),
+    0
+  );
   const emAberto = Math.max(0, totalContratado - totalPago);
 
-  // Desfecho é DERIVADO do que já está no banco (reserva + etapa), não um campo
+  // Desfecho é DERIVADO do que já está no banco (agendamento + etapa), não um campo
   // que alguém precisa lembrar de preencher — assim nunca fica desatualizado.
   const conversa = customer.conversation;
   const agora = new Date();
   const proxima = ativos
-    .filter((b) => RESERVA_ATIVA.includes(b.status) && (b.pickupTime ?? b.eventDate) >= agora)
-    .sort((a, b) => (a.setupTime ?? a.eventDate).getTime() - (b.setupTime ?? b.eventDate).getTime())[0];
-  const ultima = ativos.find((b) => b.status === "FINISHED" || b.status === "PICKED_UP");
+    .filter((appointment) => AGENDAMENTO_ATIVO.includes(appointment.status) && appointment.endAt >= agora)
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime())[0];
+  const ultima = ativos.find((appointment) => appointment.status === "COMPLETED" || appointment.status === "NO_SHOW");
   const desfecho = proxima
-    ? `Festa marcada para ${fmtDateTime(proxima.setupTime ?? proxima.eventDate)} — ${brl(proxima.total)} (${label(PAYMENT_STATUS, proxima.paymentStatus)}).`
+    ? `Agendamento marcado para ${fmtDateTime(proxima.startAt)} — ${brl(proxima.total)} (${label(PAYMENT_STATUS, proxima.paymentStatus)}).`
     : ultima
-      ? `Última festa em ${fmtDate(ultima.eventDate)}. Sem nova data marcada.`
+      ? `Último atendimento em ${fmtDate(ultima.startAt)}. Sem nova data marcada.`
       : conversa?.stage === "SUPORTE_HUMANO"
-        ? "Em atendimento humano — ainda sem festa marcada."
-        : "Conversou, mas ainda não fechou festa.";
+        ? "Em atendimento humano — ainda sem agendamento marcado."
+        : "Conversou, mas ainda não fechou agendamento.";
 
   return (
     <div className="max-w-3xl">
@@ -67,7 +70,7 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-black/5 bg-white p-4">
-          <div className="text-xs text-[var(--color-muted)]">Festas</div>
+          <div className="text-xs text-[var(--color-muted)]">Agendamentos</div>
           <div className="text-xl font-extrabold">{ativos.length}</div>
         </div>
         <div className="rounded-2xl border border-black/5 bg-white p-4">
@@ -149,32 +152,37 @@ export default async function FichaClientePage({ params }: { params: Promise<{ i
         </div>
       )}
 
-      <h2 className="mt-8 text-lg font-bold">Histórico de festas</h2>
+      <h2 className="mt-8 text-lg font-bold">Histórico de atendimentos</h2>
       <div className="mt-3 space-y-3">
-        {bookings.map((b) => {
-          const pago = b.payments.reduce((s, p) => s + Number(p.amount), 0);
-          const editable = b.status !== "CANCELED" && b.status !== "FINISHED";
+        {appointments.map((appointment) => {
+          const pago = appointment.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+          const editable = appointment.status !== "CANCELED" && appointment.status !== "COMPLETED";
           return (
-            <div key={b.id} className="rounded-2xl border border-black/5 bg-white p-4">
+            <div key={appointment.id} className="rounded-2xl border border-black/5 bg-white p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-bold">{fmtDate(b.eventDate)}</span>
-                <span className="text-sm font-extrabold">{brl(b.total)}</span>
+                <span className="font-bold">{fmtDateTime(appointment.startAt)}</span>
+                <span className="text-sm font-extrabold">{brl(appointment.total)}</span>
               </div>
               <div className="mt-1 text-sm text-[var(--color-muted)]">
-                {b.items.map((i) => i.toy.name).join(", ") || "—"}
+                {appointment.services.map((item) => item.serviceNameSnapshot).join(", ") || "—"}
+                {appointment.professional?.name ? ` · ${appointment.professional.name}` : ""}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 font-semibold">{label(BOOKING_STATUS, b.status)}</span>
-                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 font-semibold">{label(PAYMENT_STATUS, b.paymentStatus)}</span>
+                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 font-semibold">
+                  {label(APPOINTMENT_STATUS, appointment.status)}
+                </span>
+                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 font-semibold">
+                  {label(PAYMENT_STATUS, appointment.paymentStatus)}
+                </span>
                 <span className="text-[var(--color-muted)]">Pago: {brl(pago)}</span>
                 {editable && (
-                  <Link href={`/admin/reservas/${b.id}`} className="rounded-full border border-black/10 px-3 py-1 font-semibold hover:bg-[var(--color-surface)]">Abrir</Link>
+                  <Link href="/admin/agenda" className="rounded-full border border-black/10 px-3 py-1 font-semibold hover:bg-[var(--color-surface)]">Abrir agenda</Link>
                 )}
               </div>
             </div>
           );
         })}
-        {bookings.length === 0 && <p className="text-[var(--color-muted)]">Nenhuma festa registrada ainda.</p>}
+        {appointments.length === 0 && <p className="text-[var(--color-muted)]">Nenhum atendimento registrado ainda.</p>}
       </div>
     </div>
   );

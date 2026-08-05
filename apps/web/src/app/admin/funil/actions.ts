@@ -1,20 +1,20 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { requireRole, services, type ConversationStage } from "@diny/core";
+import { requireRole, services, type ConversationStage } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { normalizeTag, STAGE_ONLY_TAGS } from "@/lib/tags";
-import { sendPosFestaAutoMessage } from "@/lib/pos-festa";
+import { sendPosAtendimentoAutoMessage } from "@/lib/pos-atendimento";
 
 /**
  * Arrastar o card muda a etapa. As tags acompanham (ver STAGE_TAG no core):
  * mover pra "Suporte humano" pausa a IA; sair de lá religa. A etapa nunca vem
  * confiável do cliente — validamos contra a lista permitida.
  *
- * Entrar em PÓS_FESTA dispara a mensagem automática (ver `sendPosFestaAutoMessage`).
- * Só na TRANSIÇÃO (`previousStage !== "POS_FESTA"`) — arrastar de novo pra mesma
+ * Entrar em POS_ATENDIMENTO dispara a mensagem automática.
+ * Só na TRANSIÇÃO (`previousStage !== "POS_ATENDIMENTO"`) — arrastar de novo pra mesma
  * coluna, ou um refresh que reenvie a mesma ação, não deve reenviar a mensagem.
  * A resposta do cliente cai no WhatsApp normal; quem direciona pro workflow
- * de pós-festa no n8n é a tag "pos-festa" que o `setStage` já aplicou.
+ * de pós-atendimento no n8n é a tag "pos-atendimento" que o `setStage` já aplicou.
  */
 export async function moveCardAction(id: string, stage: string) {
   const { tenant, ctx } = await requireTenant();
@@ -23,8 +23,8 @@ export async function moveCardAction(id: string, stage: string) {
 
   const updated = await services.conversationService.setStage(tenant.id, id, stage as ConversationStage);
 
-  if (stage === "POS_FESTA" && updated.previousStage !== "POS_FESTA") {
-    await sendPosFestaAutoMessage(tenant, updated.phone);
+  if (stage === "POS_ATENDIMENTO" && updated.previousStage !== "POS_ATENDIMENTO") {
+    await sendPosAtendimentoAutoMessage(tenant, updated.phone);
   }
 
   revalidatePath("/admin/funil");
@@ -34,7 +34,7 @@ export async function moveCardAction(id: string, stage: string) {
 /**
  * Liga/desliga uma tag sem substituir as demais nem marcar a conversa como lida.
  *
- * "pos-festa" tem o MESMO efeito de arrastar o card: o core já move a etapa
+ * "pos-atendimento" tem o MESMO efeito de arrastar o card: o core já move a etapa
  * (ver `toggleTag`), e aqui — no mesmo espírito do `moveCardAction` acima —
  * disparamos a mesma mensagem automática, só na transição de verdade.
  */
@@ -48,8 +48,8 @@ export async function toggleTagFromFunilAction(id: string, tag: string, on: bool
 
   const changed = await services.conversationService.toggleTag(tenant.id, id, normalized, on);
 
-  if (normalized === "pos-festa" && on && changed.previousStage !== "POS_FESTA") {
-    await sendPosFestaAutoMessage(tenant, changed.phone);
+  if (normalized === "pos-atendimento" && on && changed.previousStage !== "POS_ATENDIMENTO") {
+    await sendPosAtendimentoAutoMessage(tenant, changed.phone);
   }
 
   revalidatePath("/admin/funil");

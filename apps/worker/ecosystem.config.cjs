@@ -40,7 +40,7 @@ const interpreter = process.env.WORKER_NODE_BIN || nodeDoNvm() || "node";
 module.exports = {
   apps: [
     {
-      name: "diny-worker",
+      name: "barbearia-ai-worker",
       cwd: __dirname,
       script: "src/index.ts",
       interpreter,

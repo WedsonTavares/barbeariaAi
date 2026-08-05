@@ -2,10 +2,10 @@ const MINUTES_PER_DAY = 24 * 60;
 
 export const AVAILABILITY_SLOT_MINUTES = 30;
 
-export interface OccupiedToyInterval {
-  toyId: string;
-  setupTime: Date;
-  pickupTime: Date;
+export interface OccupiedResourceInterval {
+  resourceId: string;
+  startAt: Date;
+  endAt: Date;
 }
 
 export interface AvailabilitySlot {
@@ -22,16 +22,17 @@ function timeLabel(totalMinutes: number): string {
 }
 
 /**
- * Gera uma grade [início, fim) para cada brinquedo. Intervalos adjacentes não
- * conflitam: uma reserva que termina às 14:00 libera o slot iniciado às 14:00.
+ * Gera uma grade [início, fim) para cada recurso/profissional. Intervalos
+ * adjacentes não conflitam: um atendimento que termina às 14:00 libera o slot
+ * iniciado às 14:00.
  *
  * `now` derruba os slots que já começaram: sem isso, uma consulta feita hoje às
  * 19h devolveria 08:00 como livre e a IA ofereceria um horário impossível.
  */
 export function buildDailyAvailabilitySlots(
   dayStart: Date,
-  toyIds: string[],
-  occupied: OccupiedToyInterval[],
+  resourceIds: string[],
+  occupied: OccupiedResourceInterval[],
   slotMinutes = AVAILABILITY_SLOT_MINUTES,
   now?: Date
 ): Record<string, AvailabilitySlot[]> {
@@ -45,25 +46,25 @@ export function buildDailyAvailabilitySlots(
 
   const slotMs = slotMinutes * 60_000;
   const slotCount = MINUTES_PER_DAY / slotMinutes;
-  const occupiedByToy = new Map<string, OccupiedToyInterval[]>();
+  const occupiedByResource = new Map<string, OccupiedResourceInterval[]>();
 
   for (const interval of occupied) {
-    const current = occupiedByToy.get(interval.toyId) ?? [];
+    const current = occupiedByResource.get(interval.resourceId) ?? [];
     current.push(interval);
-    occupiedByToy.set(interval.toyId, current);
+    occupiedByResource.set(interval.resourceId, current);
   }
 
   return Object.fromEntries(
-    toyIds.map((toyId) => {
-      const toyIntervals = occupiedByToy.get(toyId) ?? [];
+    resourceIds.map((resourceId) => {
+      const resourceIntervals = occupiedByResource.get(resourceId) ?? [];
       const slots = Array.from({ length: slotCount }, (_, index) => {
         const startMinutes = index * slotMinutes;
         const endMinutes = startMinutes + slotMinutes;
         const start = new Date(dayStart.getTime() + index * slotMs);
         const end = new Date(start.getTime() + slotMs);
         const alreadyStarted = now ? start.getTime() < now.getTime() : false;
-        const hasConflict = toyIntervals.some(
-          (interval) => interval.setupTime < end && interval.pickupTime > start
+        const hasConflict = resourceIntervals.some(
+          (interval) => interval.startAt < end && interval.endAt > start
         );
 
         return {
@@ -73,7 +74,7 @@ export function buildDailyAvailabilitySlots(
         };
       });
 
-      return [toyId, slots];
+      return [resourceId, slots];
     })
   );
 }

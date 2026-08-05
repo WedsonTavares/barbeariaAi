@@ -1,217 +1,31 @@
 openapi: 3.1.0
-
 info:
-  title: Diny SaaS — API do agente
-  version: "1.0.0"
-  description: |
-    Rotas que o agente de IA (n8n) e o Evolution API chamam.
-
-    **Tenant pelo host.** Toda rota resolve a empresa pelo subdomínio
-    (`{slug}.{ROOT_DOMAIN}`) ou por domínio personalizado. Nenhuma aceita
-    `tenantId` no corpo. A única exceção é `/api/agent/tenant`, que resolve pela
-    instância do Evolution e por isso pode ser chamada no domínio raiz.
-
-    **Autenticação.** Um único segredo (`AGENT_API_SECRET`) protege tudo. A
-    maioria das rotas espera o header `x-diny-secret`; as de WhatsApp e a de
-    status usam `?token=` na URL porque quem chama é o Evolution, que não
-    permite header customizado.
-
-    **Fusos e formatos.** Datas em `AAAA-MM-DD` e horas em `HH:mm`, sempre no
-    fuso `America/Sao_Paulo`. A retirada aceita `24:00` (fim do dia).
-
+  title: Barbearia AI - API do agente
+  version: 0.2.0
+  description: Ferramentas HTTP usadas pelo agente de IA para consultar serviços, criar leads e operar agendamentos.
 servers:
-  # Primeiro de propósito: aberto pelo painel, o "Try it out" bate no mesmo host
-  # em que você está logado — ou seja, no tenant certo, sem CORS e sem risco de
-  # testar contra a empresa errada.
-  - url: /
-    description: O tenant desta aba (mesma origem do painel)
-  - url: https://{slug}.{rootDomain}
-    description: Um tenant específico
+  - url: https://{tenantHost}
     variables:
-      slug:
-        default: dinyplay
-      rootDomain:
-        default: dinyfestas.com.br
-
-tags:
-  - name: Roteamento
-    description: Descobrir de quem é a mensagem e se o bot pode falar
-  - name: Agenda
-    description: Disponibilidade, agendar, reagendar, cancelar
-  - name: CRM
-    description: Contexto, leads, notas, escalonamento
-  - name: Pós-festa
-    description: Avaliação depois do evento
-  - name: WhatsApp
-    description: Entrada e saída de mensagens
-
+      tenantHost:
+        default: barbearia-ai.exemplo.com
 security:
-  - agentSecret: []
-
+  - AgentSecret: []
 components:
   securitySchemes:
-    agentSecret:
+    AgentSecret:
       type: apiKey
       in: header
-      name: x-diny-secret
-    agentToken:
-      type: apiKey
-      in: query
-      name: token
-
-  schemas:
-    Phone:
-      type: string
-      description: Aceita formatado; é normalizado para dígitos no servidor.
-      examples: ["5516992331680", "+55 (16) 99233-1680"]
-
-    DateBR:
-      type: string
-      pattern: '^\d{4}-\d{2}-\d{2}$'
-      examples: ["2026-09-24"]
-
-    Time:
-      type: string
-      pattern: '^([01]\d|2[0-3]):[0-5]\d$'
-      examples: ["14:00"]
-
-    PickupTime:
-      type: string
-      description: Como Time, mas aceita `24:00` para retirada no fim do dia.
-      pattern: '^(?:([01]\d|2[0-3]):[0-5]\d|24:00)$'
-
-    Erro:
-      type: object
-      properties:
-        ok: { type: boolean, const: false }
-        reason:
-          type: string
-          enum: [dados, conflito, nao_encontrado, estado, financeiro, interno, erro_api]
-        message: { type: string, description: Texto que a IA pode repassar ao cliente. }
-
-  responses:
-    NaoAutorizado:
-      description: Segredo ausente ou errado.
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              error: { type: string, const: unauthorized }
-    TenantNaoEncontrado:
-      description: O host não corresponde a nenhum tenant ativo.
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              error: { type: string, const: tenant not found }
-
+      name: x-barbearia-ai-secret
 paths:
-  # ─────────────────────────────── Roteamento ───────────────────────────────
-  /api/agent/tenant:
-    get:
-      tags: [Roteamento]
-      summary: De qual empresa é esta instância do WhatsApp
-      description: |
-        Primeira chamada do workflow. Com um único n8n atendendo várias empresas,
-        é a instância — física, de um dono só — que decide o tenant. Falha fechada:
-        instância desconhecida devolve 404 em vez de cair num tenant padrão.
-
-        Não depende do host, então pode ser chamada no domínio raiz.
-      security:
-        - agentSecret: []
-        - agentToken: []
-      parameters:
-        - name: instance
-          in: query
-          required: true
-          schema: { type: string }
-          example: diny-festas
-      responses:
-        "200":
-          description: Dono da instância e para qual host falar.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  tenantId: { type: string, format: uuid }
-                  slug: { type: string, example: dinyplay }
-                  name: { type: string, example: Diny Festas }
-                  instance: { type: string, example: diny-festas }
-                  host: { type: string, example: dinyplay.dinyfestas.com.br }
-                  apiBase: { type: string, example: "https://dinyplay.dinyfestas.com.br" }
-        "400": { description: "`instance` não informado." }
-        "401": { $ref: "#/components/responses/NaoAutorizado" }
-        "404": { description: Instância não pertence a nenhum tenant ativo. }
-
-  /api/agent/status:
-    get:
-      tags: [Roteamento]
-      summary: O bot pode responder este contato?
-      description: |
-        Filtro inicial do workflow. Usa as tags nativas do painel: com
-        `desligar-ia` ou `atendimento-humano`, ou com o bot pausado, `canReply`
-        vem `false` e o fluxo para ali — sem gastar IA.
-      security:
-        - agentToken: []
-      parameters:
-        - name: phone
-          in: query
-          required: true
-          schema: { $ref: "#/components/schemas/Phone" }
-      responses:
-        "200":
-          description: Estado da conversa.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  canReply: { type: boolean }
-                  botPaused: { type: boolean }
-                  tags: { type: array, items: { type: string } }
-                  silencedBy:
-                    type: array
-                    items: { type: string }
-                    example: [desligar-ia, atendimento-humano]
-                  conversationId: { type: [string, "null"], format: uuid }
-                  tenantId: { type: string, format: uuid }
-                  tenantSlug: { type: string }
-        "401": { $ref: "#/components/responses/NaoAutorizado" }
+  /api/agent/info:
     post:
-      tags: [Roteamento]
-      summary: O bot pode responder este contato? (corpo em vez de query)
-      security:
-        - agentToken: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
+      summary: Informações da empresa
       responses:
-        "200": { description: Igual ao GET. }
-
-  # ───────────────────────────────── Agenda ─────────────────────────────────
+        "200":
+          description: Dados de atendimento, agenda, catálogo e profissionais.
   /api/agent/disponibilidade:
     post:
-      tags: [Agenda]
-      summary: O que está livre nesse dia
-      description: |
-        Três modos, mutuamente exclusivos:
-
-        - **dia inteiro** — só `date`;
-        - **intervalo exato** — `date` + `setupTime` + `pickupTime` (o par é obrigatório junto);
-        - **grade de slots** — `date` + `slotMinutes: 30`, o modo novo.
-
-        Na grade, cada brinquedo devolve só os slots livres, já sem os que
-        passaram quando a consulta é do dia corrente. Combinar os slots em
-        períodos (4h, 7h…) é responsabilidade do n8n — a API não sabe de preço
-        nem de pacote.
+      summary: Consultar disponibilidade
       requestBody:
         required: true
         content:
@@ -220,134 +34,43 @@ paths:
               type: object
               required: [date]
               properties:
-                date: { $ref: "#/components/schemas/DateBR" }
-                setupTime: { $ref: "#/components/schemas/Time" }
-                pickupTime: { $ref: "#/components/schemas/PickupTime" }
-                slotMinutes:
-                  type: integer
-                  const: 30
-                  description: Ativa a grade. Não pode vir junto com setupTime/pickupTime.
-                toyName: { type: string, maxLength: 120 }
-                category:
-                  type: string
-                  description: Categoria do catálogo (ex. CAMA_ELASTICA).
-            examples:
-              grade:
-                summary: Grade de 30 minutos
-                value: { date: "2026-09-24", toyName: "pula-pula", slotMinutes: 30 }
-              intervalo:
-                summary: Intervalo exato
-                value: { date: "2026-09-24", setupTime: "14:00", pickupTime: "18:00" }
+                date: { type: string, format: date }
+                startTime: { type: string, example: "14:00" }
+                endTime: { type: string, example: "14:45" }
+                slotMinutes: { type: integer, enum: [30] }
+                serviceName: { type: string, example: Corte }
+                professionalName: { type: string, example: Wedson }
       responses:
         "200":
-          description: Disponibilidade no formato do modo pedido.
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - title: Grade de slots
-                    type: object
-                    properties:
-                      date: { type: string }
-                      scope: { type: string, const: slots }
-                      slotMinutes: { type: integer, example: 30 }
-                      toys:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            name: { type: string }
-                            category: { type: string }
-                            slots:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  startTime: { type: string, example: "08:00" }
-                                  endTime: { type: string, example: "08:30" }
-                  - title: Dia ou intervalo
-                    type: object
-                    properties:
-                      date: { type: string }
-                      scope: { type: string, enum: [day, interval] }
-                      setupTime: { type: [string, "null"] }
-                      pickupTime: { type: [string, "null"] }
-                      toys:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            name: { type: string }
-                            category: { type: string }
-                            price: { type: number }
-                            available: { type: boolean }
-        "400": { description: Dados inválidos (detalhes em `details`). }
-        "401": { $ref: "#/components/responses/NaoAutorizado" }
-
+          description: Slots ou profissionais disponíveis.
   /api/agent/agendar:
     post:
-      tags: [Agenda]
-      summary: Fechar a reserva
-      description: |
-        Fecha de verdade: status `CONFIRMED`, segura o brinquedo e gera os
-        lembretes. O conflito é rejeitado aqui mesmo que a IA tenha errado a
-        disponibilidade — o banco é a autoridade, com lock por brinquedo.
-
-        Nunca processa pagamento: o `paymentStatus` fica `PENDING` e a equipe é
-        notificada. Chamar duas vezes com os mesmos dados não duplica a reserva
-        (devolve `alreadyExists: true`).
+      summary: Criar agendamento
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [phone, name, date, setupTime, pickupTime, toys]
+              required: [phone, name, date, startTime, serviceNames]
               properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                name: { type: string, minLength: 2, maxLength: 120 }
-                date: { $ref: "#/components/schemas/DateBR" }
-                setupTime: { $ref: "#/components/schemas/Time" }
-                pickupTime: { $ref: "#/components/schemas/PickupTime" }
-                toys:
+                phone: { type: string, example: "5516999999999" }
+                name: { type: string, example: "João" }
+                date: { type: string, format: date }
+                startTime: { type: string, example: "14:00" }
+                serviceNames:
                   type: array
-                  minItems: 1
                   items: { type: string }
-                  description: Nomes exatos vindos da disponibilidade.
-                neighborhood: { type: string, maxLength: 120 }
-                address: { type: string, maxLength: 200 }
-                notes: { type: string, maxLength: 500 }
+                professionalName: { type: string }
+                notes: { type: string }
       responses:
         "200":
-          description: Reserva confirmada.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean, const: true }
-                  bookingId: { type: string, format: uuid }
-                  total: { type: number }
-                  toys: { type: array, items: { type: string } }
-                  setupISO: { type: string, format: date-time }
-                  pickupISO: { type: string, format: date-time }
-                  customerName: { type: string }
-                  alreadyExists: { type: boolean }
-                  message: { type: string }
-                  calendar:
-                    type: [object, "null"]
-                    description: Resumo pronto para o n8n espelhar no Google Calendar.
-        "409": { description: "Brinquedo já reservado no intervalo (`reason: conflito`)." }
-        "422": { description: "Dado que a IA precisa corrigir (`reason: dados`)." }
-        "500": { description: Falha técnica; escalar para humano. }
-
+          description: Agendamento criado ou chamada idempotente reconhecida.
+        "409":
+          description: Horário indisponível.
   /api/agent/meus-agendamentos:
     post:
-      tags: [Agenda]
-      summary: Festas ativas deste telefone
-      description: |
-        Autoridade para "quando é minha festa?". Devolve o `bookingId`, que é
-        obrigatório para reagendar e cancelar.
+      summary: Listar agendamentos ativos por telefone
       requestBody:
         required: true
         content:
@@ -356,478 +79,55 @@ paths:
               type: object
               required: [phone]
               properties:
-                phone: { $ref: "#/components/schemas/Phone" }
+                phone: { type: string }
       responses:
         "200":
-          description: Reservas não canceladas e ainda não retiradas, a mais próxima primeiro.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  count: { type: integer }
-                  bookings:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        bookingId: { type: string, format: uuid }
-                        date: { type: string, example: "2026-09-24" }
-                        setupTime: { type: [string, "null"], format: date-time }
-                        pickupTime: { type: [string, "null"], format: date-time }
-                        setupTimeLabel: { type: [string, "null"], example: "14:00" }
-                        pickupTimeLabel: { type: [string, "null"], example: "18:00" }
-                        status: { type: string }
-                        toys: { type: array, items: { type: string } }
-                        address: { type: [string, "null"] }
-                        neighborhood: { type: [string, "null"] }
-                        total: { type: number }
-
+          description: Lista de agendamentos ativos.
   /api/agent/reagendar:
     post:
-      tags: [Agenda]
-      summary: Mudar data e horário de uma reserva
-      description: |
-        Muda só o horário. Não altera preço, pagamento, brinquedo, cliente, CRM,
-        tags nem notas. O `bookingId` precisa pertencer ao telefone informado, e
-        o novo intervalo é revalidado sob o mesmo lock usado na criação.
-
-        Idempotente: reenviar o mesmo horário devolve `alreadyUpdated: true` sem
-        tocar no banco.
+      summary: Reagendar atendimento
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [bookingId, phone, date, setupTime, pickupTime]
+              required: [appointmentId, phone, date, startTime]
               properties:
-                bookingId: { type: string, format: uuid }
-                phone: { $ref: "#/components/schemas/Phone" }
-                date: { $ref: "#/components/schemas/DateBR" }
-                setupTime: { $ref: "#/components/schemas/Time" }
-                pickupTime: { $ref: "#/components/schemas/PickupTime" }
+                appointmentId: { type: string, format: uuid }
+                phone: { type: string }
+                date: { type: string, format: date }
+                startTime: { type: string, example: "15:00" }
+                professionalName: { type: string }
       responses:
         "200":
-          description: Reagendada (ou já estava nesse horário).
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean, const: true }
-                  bookingId: { type: string, format: uuid }
-                  date: { type: string }
-                  setupTime: { type: string }
-                  pickupTime: { type: string }
-                  setupISO: { type: string, format: date-time }
-                  pickupISO: { type: string, format: date-time }
-                  toys: { type: array, items: { type: string } }
-                  alreadyUpdated: { type: boolean }
-                  message: { type: string }
-        "400": { description: "Dados inválidos (`reason: dados`)." }
-        "404": { description: "Reserva não encontrada para este telefone (`reason: nao_encontrado`)." }
-        "409":
-          description: |
-            `reason: conflito` — o horário ficou ocupado;
-            `reason: estado` — a reserva não pode mais ser alterada automaticamente.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Erro" }
-
+          description: Agendamento remarcado.
   /api/agent/cancelar:
     post:
-      tags: [Agenda]
-      summary: Cancelar de verdade
-      description: |
-        Cancela, libera o horário e notifica a equipe. Idempotente; preserva todo
-        o histórico (cliente, conversa, tags e registros financeiros ficam).
-
-        **Recusa quando há pagamento registrado** (`409`, `reason: financeiro`):
-        devolução de sinal é decisão humana. Nesse caso o fluxo deve cair em
-        `/api/agent/cancelamento`.
-
-        `confirmed: true` é obrigatório para impedir que uma chamada incompleta
-        execute algo destrutivo.
+      summary: Cancelar atendimento confirmado pelo cliente
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [bookingId, phone, confirmed]
+              required: [appointmentId, phone, confirmed]
               properties:
-                bookingId: { type: string, format: uuid }
-                phone: { $ref: "#/components/schemas/Phone" }
+                appointmentId: { type: string, format: uuid }
+                phone: { type: string }
                 confirmed: { type: boolean, const: true }
       responses:
         "200":
-          description: Cancelada (ou já estava cancelada).
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean, const: true }
-                  bookingId: { type: string, format: uuid }
-                  canceled: { type: boolean, const: true }
-                  alreadyCanceled: { type: boolean }
-                  message: { type: string }
-        "400": { description: Dados inválidos. }
-        "404": { description: Reserva não encontrada para este telefone. }
-        "409":
-          description: |
-            `reason: financeiro` — já existe pagamento, precisa da equipe;
-            `reason: estado` — não pode mais ser cancelada automaticamente.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Erro" }
-
+          description: Agendamento cancelado.
   /api/agent/cancelamento:
     post:
-      tags: [Agenda]
-      summary: Registrar um PEDIDO de cancelamento (não cancela)
-      description: |
-        Não cancela nada, de propósito. Escala para a equipe: pausa o bot, grava
-        o contexto na conversa e notifica. Devolve as festas ativas do telefone
-        para a IA confirmar qual é, sem inventar.
-
-        A resposta traz `canceled: false` explicitamente — a IA não deve dizer
-        que a festa foi cancelada.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                name: { type: string, maxLength: 120 }
-                date: { $ref: "#/components/schemas/DateBR" }
-                reason: { type: string, maxLength: 300 }
+      summary: Registrar pedido de cancelamento para equipe
       responses:
         "200":
-          description: Pedido anotado e equipe avisada.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean, const: true }
-                  reason: { type: string, const: pedido_registrado }
-                  canceled: { type: boolean, const: false }
-                  festasAtivas: { type: array, items: { type: object } }
-                  message: { type: string }
-
-  # ────────────────────────────────── CRM ───────────────────────────────────
-  /api/agent/contexto:
-    post:
-      tags: [CRM]
-      summary: Histórico da conversa para compactar
-      description: |
-        Somente leitura: não altera tags, notas, etapa, `botPaused`, não-lidos nem
-        mensagens. Serve para o n8n montar um contexto resumido antes de chamar o
-        modelo, em vez de mandar a conversa inteira.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                limit:
-                  type: integer
-                  minimum: 1
-                  maximum: 100
-                  default: 80
-      responses:
-        "200":
-          description: Conversa e mensagens em ordem cronológica.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  found: { type: boolean }
-                  phone: { type: string }
-                  contactName: { type: [string, "null"] }
-                  tags: { type: array, items: { type: string } }
-                  silenced: { type: boolean }
-                  botPaused: { type: boolean }
-                  stage: { type: string }
-                  notes: { type: [string, "null"] }
-                  lastMessageAt: { type: [string, "null"], format: date-time }
-                  historyTruncated: { type: boolean }
-                  messages:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        sender: { type: string, enum: [CONTACT, BOT, AGENT] }
-                        text: { type: string, maxLength: 2000 }
-                        createdAt: { type: string, format: date-time }
-
-  /api/agent/info:
-    post:
-      tags: [CRM]
-      summary: Dados da empresa e catálogo
-      description: Sem corpo. Usado pela IA para tirar dúvidas sem inventar.
-      responses:
-        "200":
-          description: Configurações públicas do tenant.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  empresa: { type: string }
-                  cidade: { type: [string, "null"] }
-                  enderecoBase: { type: [string, "null"] }
-                  raioAtendimentoKm: { type: [number, "null"] }
-                  taxaEntrega: { type: [number, "null"] }
-                  politicaSinal: { type: [string, "null"] }
-                  horarios: { type: [string, "null"] }
-                  whatsapp: { type: [string, "null"] }
-                  instagram: { type: [string, "null"] }
-                  locacaoMinima:
-                    type: object
-                    properties:
-                      horas: { type: integer }
-                      valor: { type: number }
-                  catalogo:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        nome: { type: string }
-                        categoria: { type: string }
-                        preco: { type: number }
-                        status: { type: string }
-
+          description: Pedido anotado e atendimento humano acionado.
   /api/agent/lead:
     post:
-      tags: [CRM]
-      summary: Registrar interesse
-      description: Cria ou atualiza um Lead. Nunca cria reserva nem processa pagamento.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone, name]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                name: { type: string, minLength: 2, maxLength: 120 }
-                desiredDate: { $ref: "#/components/schemas/DateBR" }
-                desiredToy: { type: string, maxLength: 120 }
-                neighborhood: { type: string, maxLength: 120 }
-                summary: { type: string, maxLength: 500 }
+      summary: Registrar lead
       responses:
         "200":
           description: Lead registrado.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  leadId: { type: string, format: uuid }
-                  message: { type: string }
-
-  /api/agent/suporte:
-    post:
-      tags: [CRM]
-      summary: Escalar para atendimento humano
-      description: |
-        Marca a conversa com `atendimento-humano` (pausa o bot) e notifica. A
-        próxima mensagem do cliente já não passa mais pela IA.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                name: { type: string, maxLength: 120 }
-                reason: { type: string, maxLength: 300 }
-      responses:
-        "200": { description: Equipe avisada. }
-
-  /api/agent/nota:
-    post:
-      tags: [CRM]
-      summary: Gravar resumo do atendimento
-      description: Só escreve a nota — não muda tags, etapa nem o estado do bot.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone, note]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                note: { type: string, description: "Aceita também a chave `nota`." }
-      responses:
-        "200": { description: Resumo salvo. }
-        "400": { description: "`phone` e `note` são obrigatórios." }
-        "404": { description: Conversa não encontrada. }
-
-  # ─────────────────────────────── Pós-festa ────────────────────────────────
-  /api/agent/pos-festa/positiva:
-    post:
-      tags: [Pós-festa]
-      summary: Avaliação boa
-      description: |
-        Existe separada da negativa (em vez de um endpoint com nota numérica)
-        porque pedir para a IA preencher um `score` via `$fromAI` se mostrou
-        frágil: o modelo às vezes deixa vazio e quebra o JSON. Deixar a IA
-        escolher QUAL ferramenta chamar é uma decisão categórica, bem mais
-        confiável. `score` e `comment` são só anotação para relatório.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                score: { type: integer, minimum: 0, maximum: 10 }
-                comment: { type: string, maxLength: 500 }
-      responses:
-        "200":
-          description: Link de avaliação para a IA repassar.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean }
-                  reviewLink: { type: [string, "null"] }
-                  message: { type: string }
-
-  /api/agent/pos-festa/negativa:
-    post:
-      tags: [Pós-festa]
-      summary: Avaliação ruim
-      description: |
-        NUNCA oferece o link de review para quem ficou insatisfeito. Escala para
-        a equipe e notifica — alguém precisa ligar para essa pessoa, não pedir
-        cinco estrelas dela.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                score: { type: integer, minimum: 0, maximum: 10 }
-                comment: { type: string, maxLength: 500 }
-      responses:
-        "200": { description: Registrado e equipe avisada. }
-
-  /api/agent/pos-festa/concluir:
-    post:
-      tags: [Pós-festa]
-      summary: Encerrar o atendimento de pós-festa
-      description: |
-        Passo separado, chamado DEPOIS de agradecer: só então a conversa está de
-        fato encerrada. Remove a tag `pos-festa` e a próxima mensagem volta ao
-        atendimento normal. Idempotente.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-      responses:
-        "200": { description: Atendimento encerrado. }
-
-  # ──────────────────────────────── WhatsApp ────────────────────────────────
-  /api/whatsapp/inbound:
-    post:
-      tags: [WhatsApp]
-      summary: Webhook do Evolution (modo nativo)
-      description: |
-        Grava a mensagem no inbox e aciona o cérebro. Se `N8N_AGENT_WEBHOOK_URL`
-        estiver definido, repassa para o n8n; senão usa o bot nativo.
-        Ignora mensagens próprias (`fromMe`), grupos e mensagens vazias.
-      security:
-        - agentToken: []
-      requestBody:
-        description: Payload do Evolution (`MESSAGES_UPSERT`).
-        content:
-          application/json:
-            schema: { type: object }
-      responses:
-        "200": { description: "`{ ok: true }` ou `{ ignored: true }`." }
-
-  /api/whatsapp/log-inbound:
-    post:
-      tags: [WhatsApp]
-      summary: Espelhar mensagem recebida no inbox
-      description: |
-        Usado pelo n8n quando ele é o cérebro. Só armazena e notifica — não
-        aciona bot nenhum.
-      security:
-        - agentToken: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone, text]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                text: { type: string }
-                name: { type: string }
-      responses:
-        "200": { description: Mensagem gravada. }
-        "400": { description: "`phone` e `text` são obrigatórios." }
-
-  /api/whatsapp/send:
-    post:
-      tags: [WhatsApp]
-      summary: Enviar a resposta do bot
-      description: |
-        Envia pelo Evolution e grava no inbox como "🤖 IA", para a resposta do
-        workflow também aparecer em `/admin/conversas`. Respeita o handoff: se um
-        atendente assumiu, devolve `skipped` e não envia.
-      security:
-        - agentToken: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [phone, text]
-              properties:
-                phone: { $ref: "#/components/schemas/Phone" }
-                text: { type: string }
-      responses:
-        "200":
-          description: Enviado, ou pulado por handoff.
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - type: object
-                    properties: { ok: { type: boolean } }
-                  - type: object
-                    properties: { skipped: { type: string } }

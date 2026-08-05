@@ -1,4 +1,4 @@
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { sendText } from "./evolution";
 
 /**
@@ -11,7 +11,7 @@ import { sendText } from "./evolution";
  * poluir o funil com o número da própria equipe.
  *
  * Nunca lança: um aviso que falha não pode derrubar a operação que o gerou
- * (cancelar uma reserva tem que cancelar, com ou sem WhatsApp).
+ * (cancelar um agendamento tem que cancelar, com ou sem WhatsApp).
  */
 export async function avisarEquipe(
   tenant: { id: string; slug: string },

@@ -14,7 +14,7 @@ export type Card = {
   botPaused: boolean;
   unread: number;
   lastMessageAt: string;
-  activeBookingAt: string | null;
+  activeAppointmentAt: string | null;
   notes?: string | null;
 };
 export type Board = Record<string, Card[]>;
@@ -23,8 +23,8 @@ export type Board = Record<string, Card[]>;
 const COLUMNS = [
   { key: "IA_ATENDENDO",   label: "IA Atendendo",     head: "bg-sky-100 text-sky-900",         hint: "Dinha conduzindo" },
   { key: "SUPORTE_HUMANO", label: "Precisa de Suporte", head: "bg-rose-100 text-rose-900",     hint: "IA pausada" },
-  { key: "AGENDADO",       label: "Agendado",         head: "bg-emerald-100 text-emerald-900", hint: "Festa fechada" },
-  { key: "POS_FESTA",      label: "Pós-festa",        head: "bg-violet-100 text-violet-900",   hint: "Acompanhamento" },
+  { key: "AGENDADO",       label: "Agendado",         head: "bg-emerald-100 text-emerald-900", hint: "Atendimento marcado" },
+  { key: "POS_ATENDIMENTO",      label: "Pós-atendimento",        head: "bg-violet-100 text-violet-900",   hint: "Acompanhamento" },
 ] as const;
 
 
@@ -38,13 +38,13 @@ const fmtActivity = (iso: string) => {
   return `há ${Math.floor(hours / 24)}d`;
 };
 
-const bookingDate = new Intl.DateTimeFormat("pt-BR", {
+const appointmentDate = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "America/Sao_Paulo",
   day: "2-digit",
   month: "short",
 });
 
-const bookingTime = new Intl.DateTimeFormat("pt-BR", {
+const appointmentTime = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "America/Sao_Paulo",
   hour: "2-digit",
   minute: "2-digit",
@@ -71,12 +71,12 @@ const agendaDayKey = (iso: string) => {
   return `${value("year")}-${value("month")}-${value("day")}`;
 };
 
-const fmtBooking = (iso: string) => {
+const fmtAppointment = (iso: string) => {
   const value = new Date(iso);
-  const dateParts = bookingDate.formatToParts(value);
+  const dateParts = appointmentDate.formatToParts(value);
   const day = dateParts.find((part) => part.type === "day")?.value ?? "";
   const month = (dateParts.find((part) => part.type === "month")?.value ?? "").replace(".", "");
-  const timeParts = bookingTime.formatToParts(value);
+  const timeParts = appointmentTime.formatToParts(value);
   const hour = timeParts.find((part) => part.type === "hour")?.value ?? "";
   const minute = timeParts.find((part) => part.type === "minute")?.value ?? "";
   return `${day} ${month} · ${minute === "00" ? `${hour}h` : `${hour}:${minute}`}`;
@@ -129,8 +129,8 @@ export function FunilBoard({ initial }: { initial: Board }) {
     if (!id) return;
     const found = findCard(id);
     if (!found || found.from === toStage) return;
-    // AGENDADO espelha uma reserva ativa: não entra nem sai por arraste.
-    if (found.card.activeBookingAt || toStage === "AGENDADO") return;
+    // AGENDADO espelha um agendamento ativo: não entra nem sai por arraste.
+    if (found.card.activeAppointmentAt || toStage === "AGENDADO") return;
 
     prev.current = board;
     setBoard((b) => ({
@@ -152,9 +152,9 @@ export function FunilBoard({ initial }: { initial: Board }) {
       const [fromStage, cards] = found;
       const card = cards.find((item) => item.id === id)!;
       const updated = { ...card, tags: changed.tags, botPaused: changed.botPaused };
-      // Assumir/devolver muda apenas quem responde; uma reserva ativa continua
+      // Assumir/devolver muda apenas quem responde; um agendamento ativo continua
       // visualmente na coluna AGENDADO.
-      const targetStage = card.activeBookingAt
+      const targetStage = card.activeAppointmentAt
         ? "AGENDADO"
         : changed.stage === "AGENDADO"
           ? (changed.tags.includes("atendimento-humano") ? "SUPORTE_HUMANO" : "IA_ATENDENDO")
@@ -245,7 +245,7 @@ export function FunilBoard({ initial }: { initial: Board }) {
               onDrop={() => drop(col.key)}
               // w-64 e não w-72: com 288px as quatro colunas somavam 1188px e
               // não cabiam nos 1168px úteis de uma tela 1440 — a coluna
-              // Pós-festa ficava cortada na borda. Com 256px cabem inteiras a
+              // Pós-atendimento ficava cortada na borda. Com 256px cabem inteiras a
               // partir de ~1366px, e abaixo disso o quadro rola na horizontal,
               // que é o comportamento normal de kanban.
               className="flex w-64 shrink-0 flex-col"
@@ -279,11 +279,11 @@ export function FunilBoard({ initial }: { initial: Board }) {
                   return (
                     <article
                       key={c.id}
-                      draggable={!c.activeBookingAt}
+                      draggable={!c.activeAppointmentAt}
                       onDragStart={() => setDragging(c.id)}
                       onDragEnd={() => { setDragging(null); setOver(null); }}
                       className={`rounded-lg border border-black/10 bg-white p-3 shadow-sm transition ${
-                        c.activeBookingAt ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+                        c.activeAppointmentAt ? "cursor-default" : "cursor-grab active:cursor-grabbing"
                       } ${
                         dragging === c.id ? "opacity-40" : "hover:shadow-md"
                       }`}
@@ -358,14 +358,13 @@ export function FunilBoard({ initial }: { initial: Board }) {
                             </span>
                           )}
                         </button>
-                        {/* Agendar direto do card: leva telefone e nome, e o
-                            formulário só pergunta quem responde pela festa.
-                            Some pra quem já tem festa marcada. */}
-                        {!c.activeBookingAt && (
+                        {/* Agendar direto do card: leva telefone e nome.
+                            Some pra quem já tem atendimento marcado. */}
+                        {!c.activeAppointmentAt && (
                           <Link
-                            href={`/admin/reservas?tel=${encodeURIComponent(c.phone)}&nome=${encodeURIComponent(c.contactName ?? "")}`}
+                            href={`/admin/agendamentos?tel=${encodeURIComponent(c.phone)}&nome=${encodeURIComponent(c.contactName ?? "")}`}
                             draggable={false}
-                            title="Agendar festa para este contato"
+                            title="Agendar atendimento para este contato"
                             className="hover:text-emerald-700"
                           >
                             <CalendarPlus className="size-4" />
@@ -381,15 +380,15 @@ export function FunilBoard({ initial }: { initial: Board }) {
                             <FileText className="size-4" />
                           </Link>
                         )}
-                        {c.activeBookingAt && (
+                        {c.activeAppointmentAt && (
                           <Link
-                            href={`/admin/agenda?data=${agendaDayKey(c.activeBookingAt)}`}
+                            href={`/admin/agenda?data=${agendaDayKey(c.activeAppointmentAt)}`}
                             draggable={false}
                             className="flex items-center gap-0.5 whitespace-nowrap text-[10px] font-semibold text-emerald-700 hover:underline"
-                            title={`Abrir na agenda: ${fullDateTime.format(new Date(c.activeBookingAt))}`}
-                            aria-label={`Abrir reserva de ${fullDateTime.format(new Date(c.activeBookingAt))} na agenda`}
+                            title={`Abrir na agenda: ${fullDateTime.format(new Date(c.activeAppointmentAt))}`}
+                            aria-label={`Abrir agendamento de ${fullDateTime.format(new Date(c.activeAppointmentAt))} na agenda`}
                           >
-                            <span>{fmtBooking(c.activeBookingAt)}</span>
+                            <span>{fmtAppointment(c.activeAppointmentAt)}</span>
                             <CalendarDays className="size-3" />
                           </Link>
                         )}
@@ -521,13 +520,13 @@ function CardTagsDialog({
         </div>
 
         {/*
-          Dizia que Pós-festa só era controlado ao arrastar — mas ele está aí em
+          Dizia que Pós-atendimento só era controlado ao arrastar — mas ele está aí em
           cima como checkbox, e marcar tem exatamente o mesmo efeito (inclusive
           a mensagem automática). Só Agendado é que não se marca à mão: ele
-          espelha uma reserva ativa.
+          espelha um agendamento ativo.
         */}
         <p className="mt-2 text-[10px] text-[var(--color-muted)]">
-          Agendado não se marca à mão: ele acompanha a reserva ativa do contato.
+          Agendado não se marca à mão: ele acompanha o agendamento ativo do contato.
         </p>
       </div>
     </div>

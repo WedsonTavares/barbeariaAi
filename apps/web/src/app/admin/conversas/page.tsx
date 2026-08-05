@@ -1,5 +1,5 @@
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ConversasWorkspace, type ConversaRow } from "./ConversasWorkspace";
 

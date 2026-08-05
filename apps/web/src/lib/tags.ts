@@ -1,22 +1,21 @@
 /**
  * Catálogo de tags marcáveis por checkbox nas Conversas e no Funil.
  *
- * `pos-festa` funciona igual a `atendimento-humano`: marcar/desmarcar na mão
- * tem o MESMO efeito de arrastar o card pra coluna Pós-festa no Funil — inclusive
+ * `pos-atendimento` funciona igual a `atendimento-humano`: marcar/desmarcar na mão
+ * tem o MESMO efeito de arrastar o card pra coluna Pós-atendimento no Funil — inclusive
  * dispara a mesma mensagem automática (ver toggleTag no core + os dois lugares
- * que chamam `sendPosFestaAutoMessage`). Os dois modos coexistem de propósito.
+ * que chamam `sendPosAtendimentoAutoMessage`). Os dois modos coexistem de propósito.
  *
- * `agendado` continua de fora: espelha uma RESERVA ativa (não uma escolha do
- * atendente), então não faz sentido virar checkbox — marcar não criaria reserva
- * nenhuma, só deixaria o card mentindo.
+ * `agendado` continua de fora: espelha um agendamento ativo (não uma escolha do
+ * atendente), então não faz sentido virar checkbox — marcar não criaria agendamento
+ * nenhum, só deixaria o card mentindo.
  */
 export const TAG_CATALOG: { tag: string; label: string; hint?: string }[] = [
   { tag: "atendimento-humano", label: "Atendimento humano", hint: "pausa a IA" },
   { tag: "desligar-ia", label: "Desligar IA", hint: "pausa a IA" },
-  { tag: "pos-festa", label: "Pós-festa", hint: "envia mensagem" },
+  { tag: "pos-atendimento", label: "Pós-atendimento", hint: "envia mensagem" },
   { tag: "cliente-vip", label: "Cliente VIP" },
   { tag: "orcamento-enviado", label: "Orçamento enviado" },
-  { tag: "aguardando-sinal", label: "Aguardando sinal" },
   { tag: "nao-responde", label: "Não responde" },
 ];
 

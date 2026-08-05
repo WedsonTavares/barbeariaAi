@@ -1,7 +1,6 @@
 import {
   ArrowDownRight,
   ArrowUpRight,
-  CheckCircle2,
   CircleDollarSign,
   Clock3,
   Minus,
@@ -10,9 +9,9 @@ import {
 } from "lucide-react";
 
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { brl } from "@/lib/format";
-import { TOY_STATUS, label } from "@/lib/labels";
+import { SERVICE_STATUS, label } from "@/lib/labels";
 import { ExpenseDialog } from "./ExpenseDialog";
 import { MonthBalanceChart, RevenueHistoryChart } from "./FinanceCharts";
 
@@ -22,18 +21,14 @@ type RankingItem = {
   id: string;
   name: string;
   status: string;
-  rentals: number;
+  appointments: number;
   revenue: number;
-  purchasePrice: number;
-  remaining: number;
-  paidOff: boolean;
 };
 
 const STATUS_CHIP: Record<string, string> = {
-  AVAILABLE: "bg-emerald-50 text-emerald-700",
-  RENTED: "bg-blue-50 text-blue-700",
-  MAINTENANCE: "bg-amber-50 text-amber-700",
-  RETIRED: "bg-slate-100 text-slate-600",
+  ACTIVE: "bg-emerald-50 text-emerald-700",
+  INACTIVE: "bg-amber-50 text-amber-700",
+  ARCHIVED: "bg-slate-100 text-slate-600",
 };
 
 function MetricCard({
@@ -69,45 +64,6 @@ function MetricCard({
   );
 }
 
-function paybackPercentage(item: RankingItem) {
-  if (item.purchasePrice <= 0) return 0;
-  return Math.min(100, Math.max(0, (item.revenue / item.purchasePrice) * 100));
-}
-
-function Payback({ item }: { item: RankingItem }) {
-  if (item.paidOff) {
-    return (
-      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-        <CheckCircle2 className="size-3.5" aria-hidden />
-        Já se pagou
-      </div>
-    );
-  }
-
-  if (item.purchasePrice <= 0) {
-    return <span className="text-xs text-[var(--color-muted)]">Investimento não informado</span>;
-  }
-
-  const percentage = paybackPercentage(item);
-  return (
-    <div className="min-w-[130px]">
-      <div
-        className="h-1.5 overflow-hidden rounded-full bg-slate-100"
-        role="img"
-        aria-label={`${percentage.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% do investimento recuperado`}
-      >
-        <div className="h-full rounded-full bg-violet-500" style={{ width: `${percentage}%` }} />
-      </div>
-      <div className="mt-1 flex items-center justify-between gap-2 text-[10px]">
-        <span className="font-bold text-violet-700">
-          {percentage.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%
-        </span>
-        <span className="whitespace-nowrap text-[var(--color-muted)]">faltam {brl(item.remaining)}</span>
-      </div>
-    </div>
-  );
-}
-
 function MobileRankingCard({ item, position }: { item: RankingItem; position: number }) {
   return (
     <article className="rounded-xl border border-black/5 p-3.5">
@@ -119,7 +75,7 @@ function MobileRankingCard({ item, position }: { item: RankingItem; position: nu
           <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="min-w-0 truncate font-bold">{item.name}</h3>
             <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_CHIP[item.status] ?? "bg-slate-100 text-slate-600"}`}>
-              {label(TOY_STATUS, item.status)}
+              {label(SERVICE_STATUS, item.status)}
             </span>
           </div>
         </div>
@@ -127,22 +83,14 @@ function MobileRankingCard({ item, position }: { item: RankingItem; position: nu
 
       <dl className="mt-3 grid grid-cols-2 rounded-lg bg-[var(--color-surface)]">
         <div className="min-w-0 px-2 py-2">
-          <dt className="text-[10px] text-[var(--color-muted)]">Locações</dt>
-          <dd className="mt-0.5 font-extrabold tabular-nums">{item.rentals}</dd>
+          <dt className="text-[10px] text-[var(--color-muted)]">Atendimentos</dt>
+          <dd className="mt-0.5 font-extrabold tabular-nums">{item.appointments}</dd>
         </div>
         <div className="min-w-0 border-l border-black/5 px-2 py-2">
           <dt className="text-[10px] text-[var(--color-muted)]">Receita</dt>
           <dd className="mt-0.5 text-xs font-extrabold tabular-nums">{brl(item.revenue)}</dd>
         </div>
-        <div className="col-span-2 flex items-center justify-between gap-3 border-t border-black/5 px-2 py-2">
-          <dt className="text-[10px] text-[var(--color-muted)]">Investimento</dt>
-          <dd className="text-xs font-semibold tabular-nums">{brl(item.purchasePrice)}</dd>
-        </div>
       </dl>
-
-      <div className="mt-3">
-        <Payback item={item} />
-      </div>
     </article>
   );
 }
@@ -202,7 +150,7 @@ export default async function FinanceiroPage({
     {
       title: "A receber",
       value: brl(month.aReceber),
-      hint: "saldo das reservas do mês",
+      hint: "saldo dos agendamentos do mês",
       icon: Clock3,
       tint: "bg-amber-50 text-amber-600",
     },
@@ -218,7 +166,7 @@ export default async function FinanceiroPage({
             </span>
             <div>
               <h1 className="text-2xl font-extrabold">Financeiro</h1>
-              <p className="text-sm text-[var(--color-muted)]">Caixa, custos e retorno dos brinquedos.</p>
+              <p className="text-sm text-[var(--color-muted)]">Caixa, custos e receita por serviço.</p>
             </div>
           </div>
         </div>
@@ -243,15 +191,15 @@ export default async function FinanceiroPage({
           revenue={month.faturamentoBruto}
           costs={month.custos}
           profit={month.lucroEstimado}
-          bookings={month.reservasNoMes}
+          appointments={month.appointmentsNoMes}
         />
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-2 border-b border-black/5 px-4 py-3.5 sm:px-5">
           <div>
-            <h2 className="font-bold">Ranking e retorno dos brinquedos</h2>
-            <p className="mt-0.5 text-xs text-[var(--color-muted)]">Locações, receita gerada e recuperação do investimento</p>
+            <h2 className="font-bold">Ranking de serviços</h2>
+            <p className="mt-0.5 text-xs text-[var(--color-muted)]">Atendimentos, receita gerada e status do catálogo</p>
           </div>
           <span className="rounded-full bg-[var(--color-surface)] px-2.5 py-1 text-[10px] font-bold text-[var(--color-muted)]">
             {report.ranking.length} item{report.ranking.length === 1 ? "" : "s"}
@@ -274,11 +222,10 @@ export default async function FinanceiroPage({
                       <span className="sr-only">Posição</span>
                       <span aria-hidden>#</span>
                     </th>
-                    <th className="px-3 py-2.5">Brinquedo</th>
-                    <th className="px-3 py-2.5 text-center">Locações</th>
+                    <th className="px-3 py-2.5">Serviço</th>
+                    <th className="px-3 py-2.5 text-center">Atendimentos</th>
                     <th className="px-3 py-2.5">Receita</th>
-                    <th className="px-3 py-2.5">Investimento</th>
-                    <th className="min-w-[190px] px-4 py-2.5">Retorno</th>
+                    <th className="px-4 py-2.5">Ticket médio</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,14 +235,13 @@ export default async function FinanceiroPage({
                       <td className="px-3 py-3">
                         <div className="font-bold">{item.name}</div>
                         <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_CHIP[item.status] ?? "bg-slate-100 text-slate-600"}`}>
-                          {label(TOY_STATUS, item.status)}
+                          {label(SERVICE_STATUS, item.status)}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center font-extrabold tabular-nums">{item.rentals}</td>
+                      <td className="px-3 py-3 text-center font-extrabold tabular-nums">{item.appointments}</td>
                       <td className="px-3 py-3 font-extrabold tabular-nums">{brl(item.revenue)}</td>
-                      <td className="px-3 py-3 tabular-nums text-[var(--color-muted)]">{brl(item.purchasePrice)}</td>
-                      <td className="px-4 py-3">
-                        <Payback item={item} />
+                      <td className="px-4 py-3 font-semibold tabular-nums text-[var(--color-muted)]">
+                        {brl(item.appointments > 0 ? item.revenue / item.appointments : 0)}
                       </td>
                     </tr>
                   ))}
@@ -313,7 +259,7 @@ export default async function FinanceiroPage({
         )}
 
         <p className="border-t border-black/5 px-4 py-3 text-[10px] leading-relaxed text-[var(--color-muted)] sm:px-5">
-          A receita do brinquedo soma os valores dos itens em reservas não canceladas. O retorno compara esse valor com o investimento cadastrado.
+          A receita por serviço soma os itens de agendamentos não cancelados.
         </p>
       </section>
     </div>

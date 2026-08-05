@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
-import type { OverviewTrend } from "@diny/core";
+import { services } from "@barbearia-ai/core";
+import type { OverviewTrend } from "@barbearia-ai/core";
 import { brl, fmtDateTime } from "@/lib/format";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { MovimentoChart } from "./MovimentoChart";
@@ -15,7 +15,7 @@ import {
   TrendingDown,
   TrendingUp,
   UserPlus,
-  Wrench,
+  Scissors,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -180,11 +180,11 @@ export default async function VisaoGeralPage() {
       tint: "bg-rose-50 text-rose-600",
     },
     {
-      key: "sinais",
+      key: "pagamentos",
       icon: CalendarCheck,
-      label: "Reservas com sinal pendente",
-      count: s.sinaisPendentes,
-      href: "/admin/reservas",
+      label: "Agendamentos com pagamento pendente",
+      count: s.pagamentosPendentes,
+      href: "/admin/agenda",
       tint: "bg-amber-50 text-amber-600",
     },
     {
@@ -196,11 +196,11 @@ export default async function VisaoGeralPage() {
       tint: "bg-sky-50 text-sky-600",
     },
     {
-      key: "manutencao",
-      icon: Wrench,
-      label: "Brinquedos em manutenção",
-      count: s.emManutencao,
-      href: "/admin/brinquedos",
+      key: "profissionais",
+      icon: Scissors,
+      label: "Cadastre profissionais para atender",
+      count: s.profissionaisAtivos === 0 ? 1 : 0,
+      href: "/admin/profissionais",
       tint: "bg-violet-50 text-violet-600",
     },
   ].filter((a) => a.count > 0);
@@ -232,17 +232,17 @@ export default async function VisaoGeralPage() {
         >
           <Delta trend={o.contacts} periodDays={o.periodDays} />
         </Tile>
-        <Tile label="Agendamentos" value={o.bookings.current} icon={CalendarCheck} tint="bg-blue-50 text-blue-600">
-          <Delta trend={o.bookings} periodDays={o.periodDays} />
+        <Tile label="Agendamentos" value={o.appointments.current} icon={CalendarCheck} tint="bg-blue-50 text-blue-600">
+          <Delta trend={o.appointments} periodDays={o.periodDays} />
         </Tile>
         <Tile
           label="Fechados pela IA"
-          value={o.ai.bookings.current}
+          value={o.ai.appointments.current}
           hint={`${pct(o.ai.sharePct)} dos agendamentos · ${brl(o.ai.revenue)}`}
           icon={Bot}
           tint="bg-emerald-50 text-emerald-600"
         >
-          <Delta trend={o.ai.bookings} periodDays={o.periodDays} />
+          <Delta trend={o.ai.appointments} periodDays={o.periodDays} />
         </Tile>
         {/*
           Mede contra a JANELA DE MONTAGEM, não contra o expediente de
@@ -272,7 +272,7 @@ export default async function VisaoGeralPage() {
         <Card title="Efetividade da IA" subtitle={`Nos últimos ${o.periodDays} dias`} href="/admin/conversas" linkLabel="Conversas">
           <div>
             <div className="flex items-baseline justify-between">
-              <span className="text-sm text-[var(--color-muted)]">Conversas que viraram festa</span>
+              <span className="text-sm text-[var(--color-muted)]">Conversas que viraram agendamento</span>
               <span className="text-xl font-extrabold tabular-nums">{pct(o.ai.conversionPct, 1)}</span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-surface)]">
@@ -283,7 +283,7 @@ export default async function VisaoGeralPage() {
               />
             </div>
             <p className="mt-1.5 text-xs text-[var(--color-muted)]">
-              {o.ai.bookings.current} reserva{o.ai.bookings.current === 1 ? "" : "s"} em {o.ai.attended} conversa
+              {o.ai.appointments.current} agendamento{o.ai.appointments.current === 1 ? "" : "s"} em {o.ai.attended} conversa
               {o.ai.attended === 1 ? "" : "s"} atendidas
             </p>
           </div>
@@ -302,28 +302,29 @@ export default async function VisaoGeralPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Próximas 48 horas" subtitle="Retiradas confirmadas" href="/admin/agenda" linkLabel="Agenda">
-          {s.proximasRetiradas.length === 0 ? (
+        <Card title="Próximas 48 horas" subtitle="Atendimentos confirmados" href="/admin/agenda" linkLabel="Agenda">
+          {s.proximosAtendimentos.length === 0 ? (
             <p className="text-sm text-[var(--color-muted)]">Nada nas próximas 48h.</p>
           ) : (
             <ul className="space-y-2">
-              {s.proximasRetiradas.map((b) => (
-                <li key={b.id}>
+              {s.proximosAtendimentos.map((appointment) => (
+                <li key={appointment.id}>
                   <Link
-                    href={`/admin/reservas/${b.id}`}
+                    href="/admin/agenda"
                     className="flex items-center justify-between gap-3 rounded-xl border border-black/5 p-3 hover:bg-[var(--color-surface)]"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold">{b.customer.name}</span>
-                      {b.neighborhood && (
-                        <span className="block truncate text-xs text-[var(--color-muted)]">{b.neighborhood}</span>
-                      )}
+                      <span className="block truncate font-semibold">{appointment.customer.name}</span>
+                      <span className="block truncate text-xs text-[var(--color-muted)]">
+                        {appointment.professional?.name ?? "Sem profissional"} ·{" "}
+                        {appointment.services.map((item) => item.serviceNameSnapshot).join(", ") || "Serviço"}
+                      </span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="block text-sm font-semibold tabular-nums">
-                        {b.pickupTime && fmtDateTime(b.pickupTime)}
+                        {fmtDateTime(appointment.startAt)}
                       </span>
-                      <span className="block text-xs text-[var(--color-muted)]">{brl(b.total)}</span>
+                      <span className="block text-xs text-[var(--color-muted)]">{brl(appointment.total)}</span>
                     </span>
                   </Link>
                 </li>

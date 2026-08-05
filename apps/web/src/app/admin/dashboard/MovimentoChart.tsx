@@ -1,4 +1,4 @@
-import type { OverviewDay } from "@diny/core";
+import type { OverviewDay } from "@barbearia-ai/core";
 
 /**
  * Leads × agendamentos por dia. Colunas agrupadas, 2 séries categóricas
@@ -9,12 +9,12 @@ import type { OverviewDay } from "@diny/core";
 
 const SERIES = [
   { key: "contacts", label: "Novos contatos", color: "#d97706" },
-  { key: "bookings", label: "Agendamentos", color: "#2563eb" },
+  { key: "appointments", label: "Agendamentos", color: "#2563eb" },
 ] as const;
 
 export function MovimentoChart({ days }: { days: OverviewDay[] }) {
-  const max = Math.max(1, ...days.map((d) => Math.max(d.contacts, d.bookings)));
-  const vazio = days.every((d) => d.contacts === 0 && d.bookings === 0);
+  const max = Math.max(1, ...days.map((d) => Math.max(d.contacts, d.appointments)));
+  const vazio = days.every((d) => d.contacts === 0 && d.appointments === 0);
 
   return (
     <div>
@@ -48,7 +48,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                   key={d.key}
                   tabIndex={0}
                   className="group relative flex h-full flex-1 items-end justify-center gap-[2px] rounded-t outline-none focus-visible:bg-black/[0.03]"
-                  aria-label={`${d.label}: ${d.contacts} novos contatos, ${d.bookings} agendamentos`}
+                  aria-label={`${d.label}: ${d.contacts} novos contatos, ${d.appointments} agendamentos`}
                 >
                   {SERIES.map((s) => {
                     const v = d[s.key];
@@ -65,8 +65,8 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                     );
                   })}
                   <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--color-ink)] px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block group-focus-visible:block">
-                    {d.label} · {d.contacts} contato{d.contacts === 1 ? "" : "s"} · {d.bookings} agend.
-                    {d.aiBookings > 0 && ` (${d.aiBookings} 🤖)`}
+                    {d.label} · {d.contacts} contato{d.contacts === 1 ? "" : "s"} · {d.appointments} agend.
+                    {d.aiAppointments > 0 && ` (${d.aiAppointments} IA)`}
                   </div>
                 </div>
               ))}
@@ -102,8 +102,8 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                 <tr key={d.key} className="border-t border-black/5">
                   <td className="py-1">{d.label}</td>
                   <td className="py-1 text-right tabular-nums">{d.contacts}</td>
-                  <td className="py-1 text-right tabular-nums">{d.bookings}</td>
-                  <td className="py-1 text-right tabular-nums">{d.aiBookings}</td>
+                  <td className="py-1 text-right tabular-nums">{d.appointments}</td>
+                  <td className="py-1 text-right tabular-nums">{d.aiAppointments}</td>
                 </tr>
               ))}
             </tbody>

@@ -4,7 +4,7 @@ import type { ButtonHTMLAttributes } from "react";
 
 /**
  * Botão de submit que se desabilita durante o envio — evita cliques repetidos
- * criando registros duplicados (ex.: cliente 9x, brinquedo 3x) quando a
+ * criando registros duplicados (ex.: cliente 9x, serviço 3x) quando a
  * resposta demora um pouco. Uso: substitui <button> dentro de um <form action={...}>.
  */
 export function SubmitButton({ children, className, pendingText, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { pendingText?: string }) {

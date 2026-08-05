@@ -1,4 +1,5 @@
-// Diny SaaS — Fase 1. Tudo isolado por tenantId; RLS aplicado via prisma/rls.sql.
+// Barbearia AI — plataforma multi-tenant para agenda de serviços.
+// Tudo isolado por tenantId; RLS aplicado via prisma/rls.sql.
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -22,22 +23,6 @@ enum SiteMode {
   CUSTOM_DOMAIN
 }
 
-enum ToyCategory {
-  CAMA_ELASTICA
-  PISCINA_BOLINHAS
-  INFLAVEL
-  ESCORREGADOR
-  MESA_CADEIRA
-  OUTRO
-}
-
-enum ToyStatus {
-  AVAILABLE
-  RENTED
-  MAINTENANCE
-  RETIRED
-}
-
 enum LeadSource {
   INSTAGRAM
   FACEBOOK
@@ -58,54 +43,115 @@ enum LeadStatus {
   LOST
 }
 
-enum BookingStatus {
-  LEAD
-  QUOTE_SENT
-  WAITING_DEPOSIT
+enum ServiceCategory {
+  HAIR
+  BEARD
+  NAILS
+  BROWS
+  AESTHETICS
+  TATTOO
+  MASSAGE
+  OTHER
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ProfessionalStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum LocationMode {
+  SALON
+  CUSTOMER_ADDRESS
+  ONLINE
+}
+
+enum AppointmentStatus {
+  REQUESTED
   CONFIRMED
-  IN_DELIVERY
-  MOUNTED
-  PICKED_UP
-  FINISHED
+  ARRIVED
+  IN_SERVICE
+  COMPLETED
+  NO_SHOW
   CANCELED
+}
+
+enum CommissionType {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+enum CommissionStatus {
+  PENDING
+  SETTLED
+  CANCELED
+}
+
+enum CalendarProvider {
+  GOOGLE
+}
+
+enum CalendarConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
+enum Weekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum WaitlistStatus {
+  ACTIVE
+  CONTACTED
+  BOOKED
+  CANCELED
+  EXPIRED
 }
 
 enum PaymentStatus {
   PENDING
-  DEPOSIT_PAID
+  PARTIAL
   PAID
   OVERDUE
   REFUNDED
 }
 
 enum PaymentKind {
-  DEPOSIT
-  BALANCE
+  APPOINTMENT
+  PRODUCT
   REFUND
 }
 
 enum ExpenseCategory {
-  FUEL
-  HELPER
-  MAINTENANCE
-  CLEANING
+  COMMISSION
+  PRODUCTS
+  RENT
+  UTILITIES
+  MARKETING
+  SALARY
   OTHER
 }
 
-enum MaintenanceStatus {
-  OPEN
-  IN_PROGRESS
-  DONE
-}
-
-enum ReminderType {
-  DELIVERY_30M
-  DELIVERY_NOW
-  PICKUP_1H
-  PICKUP_30M
-  PICKUP_15M
-  PICKUP_NOW
-  PICKUP_DELAYED
+enum AppointmentReminderType {
+  APPOINTMENT_24H
+  APPOINTMENT_2H
+  APPOINTMENT_30M
+  FOLLOW_UP_24H
 }
 
 enum ReminderStatus {
@@ -117,18 +163,14 @@ enum ReminderStatus {
 enum NotificationType {
   NEW_WHATSAPP_MESSAGE
   NEW_LEAD
-  BOOKING_DELIVERY_SOON
-  BOOKING_DELIVERY_NOW
-  BOOKING_ENDING_SOON
-  BOOKING_PICKUP_NOW
-  BOOKING_PICKUP_DELAYED
-  BOOKING_RESCHEDULED
-  /// Cliente pediu para desmarcar pelo WhatsApp. A IA só registra — quem cancela é a equipe.
-  BOOKING_CANCEL_REQUESTED
-  /// Avaliação pós-festa abaixo do corte (nota < 8): escalado pra equipe em vez do link público.
-  POST_EVENT_LOW_RATING
+  APPOINTMENT_CREATED
+  APPOINTMENT_STARTING_SOON
+  APPOINTMENT_RESCHEDULED
+  APPOINTMENT_CANCEL_REQUESTED
+  APPOINTMENT_NO_SHOW
+  /// Avaliação pós-atendimento abaixo do corte: escalado pra equipe em vez do link público.
+  POST_SERVICE_LOW_RATING
   PAYMENT_PENDING
-  MAINTENANCE_ALERT
   GOOGLE_CALENDAR_SYNC_FAILED
   INTEGRATION_ERROR
 }
@@ -143,20 +185,28 @@ model Tenant {
   createdAt    DateTime @default(now())
 
   settings      TenantSettings?
-  toys          Toy[]
   customers     Customer[]
   leads         Lead[]
   quotes        Quote[]
-  bookings      Booking[]
-  bookingItems  BookingItem[]
+  services      Service[]
+  professionals Professional[]
+  professionalServices ProfessionalService[]
+  resources     Resource[]
+  workingSchedules WorkingSchedule[]
+  timeOffs      TimeOff[]
+  appointments  Appointment[]
+  appointmentServices AppointmentService[]
+  calendarConnections CalendarConnection[]
+  calendarSubscriptions CalendarSubscription[]
+  commissions   Commission[]
+  waitlistEntries WaitlistEntry[]
   payments      Payment[]
   expenses      Expense[]
-  maintenances  Maintenance[]
-  reminders     BookingReminder[]
+  reminders     AppointmentReminder[]
   notifications Notification[]
   conversations Conversation[]
   messages      Message[]
-  eventPhotos   EventPhoto[]
+  portfolioPhotos PortfolioPhoto[]
 }
 
 model TenantSettings {
@@ -175,15 +225,13 @@ model TenantSettings {
   city           String?
   baseAddress    String?
   serviceRadiusKm Int?
-  deliveryFee    Decimal? @db.Decimal(10, 2)
-  depositPolicy  String?
   businessHours  Json?
   instagram      String?
   facebook       String?
   googleMaps     String?
-  /// Mensagem automática ao mover o card pra "Pós-festa" (pergunta a nota da experiência).
-  postEventMessage String?
-  /// Link de avaliação (Google/Instagram) oferecido quando a nota do pós-festa é boa.
+  /// Mensagem automática ao mover o card pra "Pós-atendimento" (pergunta a nota da experiência).
+  postServiceMessage String?
+  /// Link de avaliação (Google/Instagram) oferecido quando a nota do pós-atendimento é boa.
   reviewLink       String?
   logoUrl        String?
   faviconUrl     String?
@@ -194,29 +242,9 @@ model TenantSettings {
   subheadline    String?
   ctaText        String?
   siteMode       SiteMode @default(SITE_BUILDER)
-  // Regra de precificação usada pelo agente de IA ao responder sobre valores.
-  minRentalHours Int      @default(4)
-  minRentalPrice Decimal  @db.Decimal(10, 2) @default(150)
-}
-
-model Toy {
-  id               String      @id @default(uuid())
-  tenantId         String
-  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name             String
-  category         ToyCategory
-  description      String?
-  purchasePrice    Decimal     @db.Decimal(10, 2)
-  defaultRentPrice Decimal     @db.Decimal(10, 2)
-  purchaseDate     DateTime?
-  status           ToyStatus   @default(AVAILABLE)
-  imageUrl         String?
-  createdAt        DateTime    @default(now())
-  bookingItems     BookingItem[]
-  maintenances     Maintenance[]
-
-  @@index([tenantId])
-  @@index([tenantId, status])
+  defaultSlotMinutes Int  @default(30)
+  minAppointmentLeadMinutes Int @default(60)
+  cancellationPolicy String?
 }
 
 model Customer {
@@ -230,9 +258,10 @@ model Customer {
   neighborhood String?
   imageConsent Boolean  @default(false)
   createdAt    DateTime @default(now())
-  /// Arquivado = sai do painel sem apagar nada. Reservas/conversas continuam intactas.
+  /// Arquivado = sai do painel sem apagar nada. Agendamentos/conversas continuam intactos.
   archivedAt   DateTime?
-  bookings     Booking[]
+  appointments Appointment[]
+  waitlistEntries WaitlistEntry[]
 
   @@index([tenantId])
   @@index([tenantId, phone])
@@ -249,11 +278,9 @@ model Lead {
   message       String?
   desiredDate   DateTime?
   neighborhood  String?
-  childrenCount Int?
-  ageRange      String?
-  desiredToy    String?
+  desiredService String?
   status        LeadStatus @default(NEW)
-  bookingId     String?
+  appointmentId String?
   createdAt     DateTime   @default(now())
   /// Arquivado = sai do painel sem apagar nada (ver Customer.archivedAt).
   archivedAt    DateTime?
@@ -261,6 +288,266 @@ model Lead {
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, archivedAt])
+}
+
+model Service {
+  id                  String          @id @default(uuid())
+  tenantId            String
+  tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name                String
+  category            ServiceCategory @default(OTHER)
+  description         String?
+  durationMinutes     Int
+  bufferBeforeMinutes Int             @default(0)
+  bufferAfterMinutes  Int             @default(0)
+  defaultPrice        Decimal         @db.Decimal(10, 2)
+  status              ServiceStatus   @default(ACTIVE)
+  locationMode        LocationMode    @default(SALON)
+  imageUrl            String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  professionals   ProfessionalService[]
+  appointments    AppointmentService[]
+  waitlistEntries WaitlistEntry[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model Professional {
+  id                    String             @id @default(uuid())
+  tenantId              String
+  tenant                Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name                  String
+  phone                 String?
+  email                 String?
+  bio                   String?
+  avatarUrl             String?
+  color                 String             @default("#2563EB")
+  status                ProfessionalStatus @default(ACTIVE)
+  defaultCalendarId     String?
+  defaultCommissionType CommissionType     @default(NONE)
+  defaultCommissionValue Decimal?          @db.Decimal(10, 2)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  services            ProfessionalService[]
+  workingSchedules    WorkingSchedule[]
+  timeOffs            TimeOff[]
+  appointments        Appointment[]
+  appointmentServices AppointmentService[]
+  calendarConnections CalendarConnection[]
+  commissions         Commission[]
+  waitlistEntries     WaitlistEntry[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model ProfessionalService {
+  id              String         @id @default(uuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professionalId  String
+  professional    Professional   @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  serviceId       String
+  service         Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  durationMinutes Int?
+  price           Decimal?       @db.Decimal(10, 2)
+  commissionType  CommissionType @default(NONE)
+  commissionValue Decimal?       @db.Decimal(10, 2)
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+
+  @@unique([tenantId, professionalId, serviceId])
+  @@index([tenantId])
+  @@index([tenantId, serviceId])
+}
+
+model Resource {
+  id           String        @id @default(uuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  type         String?
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  appointments Appointment[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+}
+
+model WorkingSchedule {
+  id             String       @id @default(uuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  dayOfWeek      Weekday
+  startTime      String
+  endTime        String
+  breaks         Json?
+  active         Boolean      @default(true)
+
+  @@index([tenantId])
+  @@index([tenantId, professionalId, dayOfWeek])
+}
+
+model TimeOff {
+  id             String       @id @default(uuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  startAt        DateTime
+  endAt          DateTime
+  reason         String?
+  createdAt      DateTime     @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, professionalId, startAt])
+}
+
+model Appointment {
+  id                    String            @id @default(uuid())
+  tenantId              String
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId            String
+  customer              Customer          @relation(fields: [customerId], references: [id])
+  professionalId        String?
+  professional          Professional?     @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  resourceId            String?
+  resource              Resource?         @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  startAt               DateTime
+  endAt                 DateTime
+  status                AppointmentStatus @default(REQUESTED)
+  total                 Decimal           @db.Decimal(10, 2) @default(0)
+  paymentStatus         PaymentStatus     @default(PENDING)
+  leadSource            LeadSource?
+  notes                 String?
+  googleCalendarEventId String?
+  googleCalendarHtmlLink String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  services    AppointmentService[]
+  payments    Payment[]
+  expenses    Expense[]
+  reminders   AppointmentReminder[]
+  commissions Commission[]
+
+  @@index([tenantId])
+  @@index([tenantId, startAt])
+  @@index([tenantId, professionalId, startAt])
+  @@index([tenantId, status])
+}
+
+model AppointmentService {
+  id                    String          @id @default(uuid())
+  tenantId              String
+  tenant                Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointmentId         String
+  appointment           Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  serviceId             String
+  service               Service         @relation(fields: [serviceId], references: [id])
+  professionalId        String?
+  professional          Professional?   @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  serviceNameSnapshot   String
+  durationMinutes       Int
+  price                 Decimal         @db.Decimal(10, 2)
+  commissionType        CommissionType  @default(NONE)
+  commissionValue       Decimal?        @db.Decimal(10, 2)
+
+  commissions Commission[]
+
+  @@index([tenantId])
+  @@index([tenantId, appointmentId])
+  @@index([tenantId, serviceId])
+}
+
+model CalendarConnection {
+  id                    String                   @id @default(uuid())
+  tenantId              String
+  tenant                Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professionalId        String?
+  professional          Professional?            @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  provider              CalendarProvider         @default(GOOGLE)
+  googleAccountEmail    String?
+  calendarId            String?
+  accessTokenEncrypted  String?
+  refreshTokenEncrypted String?
+  scope                 String?
+  status                CalendarConnectionStatus @default(ACTIVE)
+  expiresAt             DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  subscriptions CalendarSubscription[]
+
+  @@index([tenantId])
+  @@index([tenantId, professionalId])
+}
+
+model CalendarSubscription {
+  id           String             @id @default(uuid())
+  tenantId     String
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection   CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  channelId    String             @unique
+  resourceId   String?
+  syncToken    String?
+  expiresAt    DateTime
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, active, expiresAt])
+}
+
+model Commission {
+  id                   String              @id @default(uuid())
+  tenantId             String
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointmentId        String
+  appointment          Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointmentServiceId String?
+  appointmentService   AppointmentService? @relation(fields: [appointmentServiceId], references: [id], onDelete: SetNull)
+  professionalId       String
+  professional         Professional        @relation(fields: [professionalId], references: [id])
+  amount               Decimal             @db.Decimal(10, 2)
+  status               CommissionStatus    @default(PENDING)
+  settledAt            DateTime?
+  createdAt            DateTime            @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, professionalId, status])
+  @@index([tenantId, appointmentId])
+}
+
+model WaitlistEntry {
+  id             String         @id @default(uuid())
+  tenantId       String
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId      String?
+  service        Service?       @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  professionalId String?
+  professional   Professional?  @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  desiredDate    DateTime?
+  earliestAt     DateTime?
+  latestAt       DateTime?
+  notes          String?
+  status         WaitlistStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, status, desiredDate])
 }
 
 model Quote {
@@ -277,107 +564,51 @@ model Quote {
   @@index([tenantId])
 }
 
-model Booking {
-  id                    String        @id @default(uuid())
-  tenantId              String
-  tenant                Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerId            String
-  customer              Customer      @relation(fields: [customerId], references: [id])
-  eventDate             DateTime
-  setupTime             DateTime?
-  pickupTime            DateTime?
-  address               String?
-  neighborhood          String?
-  total                 Decimal       @db.Decimal(10, 2)
-  depositAmount         Decimal       @db.Decimal(10, 2) @default(0)
-  status                BookingStatus @default(LEAD)
-  paymentStatus         PaymentStatus @default(PENDING)
-  leadSource            LeadSource?
-  notes                 String?
-  googleCalendarEventId String?
-  createdAt             DateTime      @default(now())
-
-  items     BookingItem[]
-  payments  Payment[]
-  expenses  Expense[]
-  reminders BookingReminder[]
-
-  @@index([tenantId])
-  @@index([tenantId, eventDate])
-  @@index([tenantId, status])
-}
-
-model BookingItem {
-  id        String  @id @default(uuid())
-  tenantId  String
-  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  bookingId String
-  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  toyId     String
-  toy       Toy     @relation(fields: [toyId], references: [id])
-  price     Decimal @db.Decimal(10, 2)
-
-  @@index([tenantId])
-  @@index([tenantId, toyId])
-}
-
 model Payment {
-  id        String      @id @default(uuid())
-  tenantId  String
-  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  bookingId String
-  booking   Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  amount    Decimal     @db.Decimal(10, 2)
-  kind      PaymentKind @default(DEPOSIT)
-  method    String?
-  paidAt    DateTime?
+  id            String      @id @default(uuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  amount        Decimal     @db.Decimal(10, 2)
+  kind          PaymentKind @default(APPOINTMENT)
+  method        String?
+  paidAt        DateTime?
 
   @@index([tenantId])
+  @@index([tenantId, appointmentId])
 }
 
 model Expense {
-  id          String          @id @default(uuid())
-  tenantId    String
-  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  bookingId   String?
-  booking     Booking?        @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  category    ExpenseCategory
-  amount      Decimal         @db.Decimal(10, 2)
-  description String?
-  date        DateTime        @default(now())
+  id            String           @id @default(uuid())
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointmentId String?
+  appointment   Appointment?     @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  category      ExpenseCategory
+  amount        Decimal          @db.Decimal(10, 2)
+  description   String?
+  date          DateTime         @default(now())
 
   @@index([tenantId])
   @@index([tenantId, category])
+  @@index([tenantId, appointmentId])
 }
 
-model Maintenance {
-  id          String            @id @default(uuid())
-  tenantId    String
-  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  toyId       String
-  toy         Toy               @relation(fields: [toyId], references: [id], onDelete: Cascade)
-  type        String?
-  cost        Decimal           @db.Decimal(10, 2) @default(0)
-  description String?
-  date        DateTime          @default(now())
-  status      MaintenanceStatus @default(OPEN)
-
-  @@index([tenantId])
-}
-
-model BookingReminder {
-  id        String         @id @default(uuid())
-  tenantId  String
-  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  bookingId String
-  booking   Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  type      ReminderType
-  fireAt    DateTime
-  status    ReminderStatus @default(SCHEDULED)
-  sentAt    DateTime?
+model AppointmentReminder {
+  id            String                  @id @default(uuid())
+  tenantId      String
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointmentId String
+  appointment   Appointment             @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  type          AppointmentReminderType
+  fireAt        DateTime
+  status        ReminderStatus          @default(SCHEDULED)
+  sentAt        DateTime?
 
   @@index([tenantId])
   @@index([status, fireAt])
+  @@index([tenantId, appointmentId])
 }
 
 model Notification {
@@ -387,11 +618,12 @@ model Notification {
   type      NotificationType
   title     String
   body      String?
-  bookingId String?
+  appointmentId String?
   read      Boolean          @default(false)
   createdAt DateTime         @default(now())
 
   @@index([tenantId, read])
+  @@index([tenantId, appointmentId])
 }
 
 model AuditLog {
@@ -418,8 +650,8 @@ enum ConversationStage {
   NOVO_LEAD      // legado: não é mais usado (toda conversa nova já nasce em IA_ATENDENDO)
   IA_ATENDENDO   // a Dinha está conduzindo — primeira coluna do funil
   SUPORTE_HUMANO // equipe assumiu (bot pausado)
-  AGENDADO       // festa fechada
-  POS_FESTA      // acompanhamento pós-evento
+  AGENDADO       // atendimento marcado
+  POS_ATENDIMENTO      // acompanhamento pós-evento
 }
 
 /** Uma conversa de WhatsApp por telefone (inbox nativo do SaaS). Isolada por tenant (RLS). */
@@ -437,7 +669,7 @@ model Conversation {
   notesAt       DateTime?
   /// Resumo da conversa INTEIRA, gerado sob demanda (botão) ou ao a IA escalar
   /// pra humano. Campo separado do `notes` de propósito: `notes` é a última
-  /// nota de evento e é sobrescrita a cada reserva/lead/escalonamento — se
+  /// nota de evento e é sobrescrita a cada agendamento/lead/escalonamento — se
   /// dividissem o mesmo campo, um apagaria o outro.
   summary       String?
   summaryAt     DateTime?
@@ -468,13 +700,12 @@ model Message {
 }
 
 /**
- * Galeria de eventos do site público — fotos de festas já realizadas.
+ * Portfólio do site público — fotos de cortes, barbas e procedimentos.
  *
- * O binário NÃO fica aqui: a imagem vai pro Supabase Storage (bucket `eventos`)
- * e a tabela guarda só a URL pública, igual ao que `Toy.imageUrl` já faz. Assim
- * o banco não cresce com foto e o Storage serve direto pelo CDN.
+ * O binário NÃO fica aqui: a imagem vai pro Supabase Storage e a tabela guarda
+ * só a URL pública, para o banco não crescer com foto.
  */
-model EventPhoto {
+model PortfolioPhoto {
   id        String   @id @default(uuid())
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

@@ -1,5 +1,5 @@
 {
-  "name": "@diny/web",
+  "name": "@barbearia-ai/web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.9.0",
-    "@diny/core": "workspace:*",
+    "@barbearia-ai/core": "workspace:*",
     "@vercel/analytics": "^2.0.1",
     "lucide-react": "^0.468.0",
     "next": "^16.0.0",

@@ -1,9 +1,12 @@
 import { Queue, Worker } from "bullmq";
 import { connection } from "./redis";
 import { processDueReminders } from "./reminder-worker";
-import { expirePosFesta } from "./pos-festa-worker";
+import { expirePostService } from "./pos-atendimento-worker";
+import { renewGoogleCalendarSubscriptions } from "./calendar-worker";
 
 const SCHEDULER = "scheduler";
+const CALENDAR_RENEW_INTERVAL_MS = 60 * 60 * 1000;
+let lastCalendarRenewalAt = 0;
 
 // Fila + "tick" repetível (a cada 60s). A comunicação web->worker é pelo banco.
 // (O agente de IA agora roda inteiramente no n8n — ver docs/N8N-AGENTE-IA.md — não é
@@ -28,13 +31,17 @@ const worker = new Worker(
       await processDueReminders();
       // Roda no mesmo tick: é uma varredura barata e a janela é de horas, não
       // de minutos — não justifica uma fila própria.
-      await expirePosFesta();
+      await expirePostService();
+      if (Date.now() - lastCalendarRenewalAt >= CALENDAR_RENEW_INTERVAL_MS) {
+        lastCalendarRenewalAt = Date.now();
+        await renewGoogleCalendarSubscriptions();
+      }
     }
   },
   { connection }
 );
 
-worker.on("ready", () => console.log("⚙️  worker pronto — tick a cada 60s"));
+worker.on("ready", () => console.log("worker pronto - tick a cada 60s"));
 worker.on("failed", (job, err) => console.error("[worker] falhou", job?.id, err));
 
 const shutdown = async () => {

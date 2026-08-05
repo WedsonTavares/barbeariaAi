@@ -1,24 +1,25 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 
 /**
  * Ferramenta pro agente de IA (n8n): informações da empresa pra tirar dúvidas —
- * horário, endereço/cidade, taxa de entrega, política de sinal, contatos, locação
- * mínima e catálogo resumido. Só leitura. Tenant pelo host. Protegido por AGENT_API_SECRET.
+ * horário, endereço/cidade, política de cancelamento, contatos e catálogo.
+ * Só leitura. Tenant pelo host. Protegido por AGENT_API_SECRET.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-diny-secret") !== secret) {
+  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const tenant = await resolveTenant();
   if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
 
-  const [settings, toys] = await Promise.all([
+  const [settings, catalog, professionals] = await Promise.all([
     services.tenantService.getSettings(tenant.id),
-    services.toyService.list(tenant.id),
+    services.serviceCatalogService.active(tenant.id),
+    services.professionalService.active(tenant.id),
   ]);
 
   return NextResponse.json({
@@ -26,14 +27,24 @@ export async function POST(req: Request) {
     cidade: settings?.city ?? null,
     enderecoBase: settings?.baseAddress ?? null,
     raioAtendimentoKm: settings?.serviceRadiusKm ?? null,
-    taxaEntrega: settings?.deliveryFee != null ? Number(settings.deliveryFee) : null,
-    politicaSinal: settings?.depositPolicy ?? null,
+    politicaCancelamento: settings?.cancellationPolicy ?? null,
     horarios: settings?.businessHours ?? null,
     whatsapp: settings?.whatsappMain ?? null,
     instagram: settings?.instagram ?? null,
-    locacaoMinima: { horas: settings?.minRentalHours ?? 4, valor: Number(settings?.minRentalPrice ?? 150) },
-    catalogo: toys
-      .filter((t) => t.status !== "RETIRED")
-      .map((t) => ({ nome: t.name, categoria: t.category, preco: Number(t.defaultRentPrice), status: t.status })),
+    agenda: {
+      intervaloPadraoMinutos: settings?.defaultSlotMinutes ?? 30,
+      antecedenciaMinimaMinutos: settings?.minAppointmentLeadMinutes ?? 60,
+    },
+    catalogo: catalog.map((service) => ({
+      nome: service.name,
+      categoria: service.category,
+      duracaoMinutos: service.durationMinutes,
+      preco: Number(service.defaultPrice),
+      local: service.locationMode,
+    })),
+    profissionais: professionals.map((professional) => ({
+      nome: professional.name,
+      telefone: professional.phone,
+    })),
   });
 }

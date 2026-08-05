@@ -3,8 +3,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Diny Locação de Brinquedos",
-  description: "Plataforma multi-tenant de locação de brinquedos de festa.",
+  title: "Barbearia AI",
+  description: "Plataforma multi-tenant de agenda, atendimento e financeiro para barbearias.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

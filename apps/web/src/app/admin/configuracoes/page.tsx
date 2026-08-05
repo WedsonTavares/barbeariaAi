@@ -1,10 +1,11 @@
-import { Building2, MessageCircle } from "lucide-react";
+import { Building2, CalendarDays, MessageCircle } from "lucide-react";
 
 import { requireTenant } from "@/lib/tenant";
-import { services, parseBusinessHours } from "@diny/core";
+import { services, parseBusinessHours } from "@barbearia-ai/core";
 import { getConnectionState, evolutionConfigured } from "@/lib/evolution";
 import { WhatsappConnect } from "./WhatsappConnect";
 import { SettingsSection, Field, TextArea, ColorField } from "./SettingsSection";
+import { disconnectGoogleCalendarAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,14 +22,17 @@ const DIAS = [
 export default async function ConfiguracoesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; erro?: string; msg?: string }>;
+  searchParams: Promise<{ ok?: string; erro?: string; msg?: string; calendar?: string }>;
 }) {
   const sp = await searchParams;
   const { tenant } = await requireTenant();
-  const [settings, instance] = await Promise.all([
+  const [settings, instance, calendarConnections] = await Promise.all([
     services.tenantService.getSettings(tenant.id),
     services.tenantService.evolutionInstance(tenant.id, tenant.slug),
+    services.calendarService.listGoogleConnections(tenant.id),
   ]);
+  const googleConfig = services.calendarService.googleConfigStatus();
+  const googleReady = googleConfig.clientId && googleConfig.clientSecret && googleConfig.redirectUri && googleConfig.tokenKey;
   const configured = evolutionConfigured();
   const state = configured ? await getConnectionState(instance) : "unknown";
   // Mesma leitura que a API de disponibilidade usa — evita a tela mostrar um
@@ -59,6 +63,16 @@ export default async function ConfiguracoesPage({
           Não salvou{sp.erro ? ` — campo “${sp.erro}”` : ""}: {sp.msg || "confira os dados."}
         </p>
       )}
+      {sp.calendar === "connected" && (
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
+          Google Calendar conectado.
+        </p>
+      )}
+      {sp.calendar && sp.calendar !== "connected" && (
+        <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800">
+          Google Calendar não conectado: verifique as variáveis de ambiente e tente novamente.
+        </p>
+      )}
 
       {/* ─────────── Empresa ─────────── */}
       <SettingsSection
@@ -66,7 +80,7 @@ export default async function ConfiguracoesPage({
         title="Empresa"
         description="Aparece no site, nas mensagens da IA e nos seus documentos."
       >
-        <Field name="name" label="Nome da empresa" defaultValue={tenant.name} placeholder="Diny Play" />
+        <Field name="name" label="Nome da empresa" defaultValue={tenant.name} placeholder="Barbearia Central" />
         <Field name="email" label="E-mail" type="email" defaultValue={settings?.email} placeholder="contato@suaempresa.com.br" />
         <Field name="legalName" label="Razão social" defaultValue={settings?.legalName} placeholder="Nome jurídico completo" />
         <Field name="cnpj" label="CNPJ" defaultValue={settings?.cnpj} placeholder="00.000.000/0000-00" />
@@ -89,7 +103,7 @@ export default async function ConfiguracoesPage({
           label="Logo (URL)"
           hint="Aparece no topo, no destaque e no rodapé do site. Sem logo, entra um ícone genérico."
           defaultValue={settings?.logoUrl}
-          placeholder="/dinyfestas.png"
+          placeholder="/logo.png"
         />
       </SettingsSection>
 
@@ -97,7 +111,7 @@ export default async function ConfiguracoesPage({
       <SettingsSection
         id="atendimento"
         title="Área de atendimento"
-        description="A IA usa isto para dizer se você entrega no bairro do cliente e quanto custa."
+        description="A IA usa isto para responder onde a empresa atende."
       >
         <Field name="city" label="Cidade" defaultValue={settings?.city} placeholder="Ribeirão Preto" />
         <Field
@@ -111,19 +125,10 @@ export default async function ConfiguracoesPage({
         <Field
           name="baseAddress"
           label="Endereço base"
-          hint="De onde saem as entregas. Não aparece no site."
+          hint="Endereço principal do atendimento. Não aparece no site se você não divulgar."
           wide
           defaultValue={settings?.baseAddress}
           placeholder="Rua Exemplo, 123 — Bairro"
-        />
-        <Field
-          name="deliveryFee"
-          label="Taxa de entrega (R$)"
-          type="number"
-          step="0.01"
-          min="0"
-          defaultValue={settings?.deliveryFee != null ? Number(settings.deliveryFee) : null}
-          placeholder="0,00"
         />
 
         <div className="sm:col-span-2">
@@ -163,68 +168,67 @@ export default async function ConfiguracoesPage({
             ))}
           </div>
           <span className="mt-1 block text-[11px] text-[var(--color-muted)]">
-            Quando vocês atendem. Fora disso o painel marca o contato como fora do expediente.
+            Quando a equipe responde. Fora disso o painel marca o contato como fora do expediente.
           </span>
         </div>
 
         <div className="sm:col-span-2">
           <span className="mb-1.5 block text-xs font-bold text-[var(--color-muted)]">
-            Janela de montagem e retirada
+            Janela de agenda
           </span>
           <div className="flex flex-wrap items-center gap-2">
             <input
-              name="setupWindowStart"
+              name="serviceWindowStart"
               type="time"
-              defaultValue={hours.setupStart}
-              aria-label="Monta a partir das"
+              defaultValue={hours.serviceStart}
+              aria-label="Agenda a partir das"
               className="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400"
             />
             <span className="text-sm text-[var(--color-muted)]">até</span>
             <input
-              name="setupWindowEnd"
+              name="serviceWindowEnd"
               type="time"
-              defaultValue={hours.setupEnd}
-              aria-label="Retira até as"
+              defaultValue={hours.serviceEnd}
+              aria-label="Agenda até as"
               className="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-400"
             />
           </div>
           <span className="mt-1 block text-[11px] text-[var(--color-muted)]">
-            A IA só oferece horários dentro dessa faixa. É diferente do expediente: você pode
-            atender 24h e só montar das 8h às 20h.
+            A IA só oferece horários dentro dessa faixa. É diferente do expediente de resposta.
           </span>
         </div>
       </SettingsSection>
 
-      {/* ─────────── Regras de locação ─────────── */}
+      {/* ─────────── Regras de agenda ─────────── */}
       <SettingsSection
-        id="locacao"
-        title="Regras de locação"
-        description="A IA respeita estes valores ao montar um orçamento ou fechar uma reserva."
+        id="agenda"
+        title="Regras de agenda"
+        description="A IA respeita estes valores ao consultar horários e fechar agendamentos."
       >
         <Field
-          name="minRentalHours"
-          label="Locação mínima (horas)"
+          name="defaultSlotMinutes"
+          label="Intervalo padrão (min)"
           type="number"
-          min="1"
-          max="24"
-          defaultValue={settings?.minRentalHours}
-          placeholder="4"
+          min="5"
+          max="240"
+          defaultValue={settings?.defaultSlotMinutes}
+          placeholder="30"
         />
         <Field
-          name="minRentalPrice"
-          label="Valor mínimo (R$)"
+          name="minAppointmentLeadMinutes"
+          label="Antecedência mínima (min)"
           type="number"
-          step="0.01"
           min="0"
-          defaultValue={settings?.minRentalPrice != null ? Number(settings.minRentalPrice) : null}
-          placeholder="150,00"
+          max="10080"
+          defaultValue={settings?.minAppointmentLeadMinutes}
+          placeholder="60"
         />
         <TextArea
-          name="depositPolicy"
-          label="Política de sinal e cancelamento"
+          name="cancellationPolicy"
+          label="Política de cancelamento"
           hint="Em linguagem simples: a IA repete isto para o cliente."
-          defaultValue={settings?.depositPolicy}
-          placeholder="Sinal de 30% para confirmar a data. Cancelamento com até 48h devolve o sinal."
+          defaultValue={settings?.cancellationPolicy}
+          placeholder="Cancelamentos com até 24h de antecedência podem ser remarcados."
         />
       </SettingsSection>
 
@@ -235,26 +239,26 @@ export default async function ConfiguracoesPage({
         description="Textos e cores da sua página de divulgação."
       >
         <Field name="headline" label="Título principal" wide defaultValue={settings?.headline} placeholder="Diversão sem dor de cabeça" />
-        <Field name="subheadline" label="Subtítulo" wide defaultValue={settings?.subheadline} placeholder="Brinquedos entregues, montados e higienizados." />
-        <Field name="ctaText" label="Texto do botão" defaultValue={settings?.ctaText} placeholder="Reservar no WhatsApp" />
+        <Field name="subheadline" label="Subtítulo" wide defaultValue={settings?.subheadline} placeholder="Agende cabelo, barba e estética pelo WhatsApp." />
+        <Field name="ctaText" label="Texto do botão" defaultValue={settings?.ctaText} placeholder="Agendar no WhatsApp" />
         <div className="hidden sm:block" />
         <ColorField name="colorPrimary" label="Cor principal" defaultValue={settings?.colorPrimary ?? "#2563EB"} />
         <ColorField name="colorSecondary" label="Cor secundária" defaultValue={settings?.colorSecondary ?? "#FBBF24"} />
         <ColorField name="colorAccent" label="Cor de destaque" defaultValue={settings?.colorAccent ?? "#7C3AED"} />
       </SettingsSection>
 
-      {/* ─────────── Pós-festa ─────────── */}
+      {/* ─────────── Pós-atendimento ─────────── */}
       <SettingsSection
-        id="pos-festa"
-        title="Pós-festa"
-        description="Ao mover uma conversa pra coluna 'Pós-festa' no Funil, esta mensagem é enviada automaticamente."
+        id="pos-atendimento"
+        title="Pós-atendimento"
+        description="Ao mover uma conversa pra coluna 'Pós-atendimento' no Funil, esta mensagem é enviada automaticamente."
       >
         <TextArea
-          name="postEventMessage"
+          name="postServiceMessage"
           label="Mensagem automática"
           hint="Pergunte a nota de 0 a 10. Se deixar em branco, usamos um texto padrão."
-          defaultValue={settings?.postEventMessage}
-          placeholder="Oi! Como foi a festa? De 0 a 10, qual nota você daria pra experiência?"
+          defaultValue={settings?.postServiceMessage}
+          placeholder="Oi! Como foi seu atendimento? De 0 a 10, qual nota você daria pra experiência?"
         />
         <Field
           name="reviewLink"
@@ -276,6 +280,68 @@ export default async function ConfiguracoesPage({
         <Field name="facebook" label="Facebook" defaultValue={settings?.facebook} placeholder="https://facebook.com/suaempresa" />
         <Field name="googleMaps" label="Google Maps" wide defaultValue={settings?.googleMaps} placeholder="Link do seu perfil no Google Maps" />
       </SettingsSection>
+
+      {/* ─────────── Google Calendar ─────────── */}
+      <section id="google-calendar" className="scroll-mt-20 rounded-2xl border border-black/5 bg-white shadow-sm">
+        <div className="border-b border-black/5 px-4 py-3 sm:px-5">
+          <h2 className="flex items-center gap-2 font-extrabold">
+            <CalendarDays className="size-4 text-[var(--color-primary)]" aria-hidden />
+            Google Calendar
+          </h2>
+          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+            Conecte a agenda do Google para sincronizar horários e preparar push notifications.
+          </p>
+        </div>
+        <div className="space-y-4 p-4 sm:p-5">
+          <div className="flex flex-col gap-3 rounded-xl bg-[var(--color-surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-bold">{googleReady ? "OAuth configurado" : "OAuth pendente"}</div>
+              <p className="text-xs text-[var(--color-muted)]">
+                {googleReady
+                  ? "A conta pode ser conectada por aqui."
+                  : "Defina GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALENDAR_REDIRECT_URI e CALENDAR_TOKEN_ENCRYPTION_KEY."}
+              </p>
+            </div>
+            <a
+              href="/admin/configuracoes/google-calendar/connect"
+              aria-disabled={!googleReady}
+              className={`rounded-full px-4 py-2 text-sm font-bold ${
+                googleReady ? "bg-[var(--color-primary)] text-white" : "pointer-events-none bg-slate-200 text-slate-500"
+              }`}
+            >
+              Conectar Google
+            </a>
+          </div>
+
+          {calendarConnections.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-black/10 p-3 text-sm text-[var(--color-muted)]">
+              Nenhuma conta conectada.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {calendarConnections.map((connection) => (
+                <div key={connection.id} className="flex flex-col gap-2 rounded-xl border border-black/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold">{connection.googleAccountEmail ?? "Conta Google"}</div>
+                    <div className="text-xs text-[var(--color-muted)]">
+                      Calendário {connection.calendarId ?? "primary"} · {connection.status}
+                    </div>
+                  </div>
+                  <form action={disconnectGoogleCalendarAction}>
+                    <input type="hidden" name="id" value={connection.id} />
+                    <button className="rounded-full border border-black/10 px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface)]">
+                      Desconectar
+                    </button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-[var(--color-muted)]">
+            Para sincronização ao vivo em produção, configure também GOOGLE_CALENDAR_WEBHOOK_URL apontando para /api/calendar/google/webhook.
+          </p>
+        </div>
+      </section>
 
       {/* ─────────── WhatsApp ─────────── */}
       <section id="whatsapp" className="scroll-mt-20 rounded-2xl border border-black/5 bg-white shadow-sm">

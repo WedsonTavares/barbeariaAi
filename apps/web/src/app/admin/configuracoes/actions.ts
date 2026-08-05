@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { requireRole, services, schemas, ZodError } from "@diny/core";
+import { requireRole, services, schemas, ZodError } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { getQrCode, getConnectionState, logoutInstance, ensureInstance } from "@/lib/evolution";
 
@@ -30,6 +30,14 @@ export async function disconnectAction() {
   return logoutInstance(await tenantInstance());
 }
 
+export async function disconnectGoogleCalendarAction(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  const id = schemas.idInput.parse(formData.get("id"));
+  await services.calendarService.disconnect(tenant.id, id);
+  revalidatePath(BASE);
+}
+
 /** Dias da semana marcados no formulário (0 = domingo). */
 function readDays(formData: FormData) {
   return formData
@@ -51,21 +59,21 @@ export async function saveSettings(formData: FormData) {
   const raw: Record<string, unknown> = {};
   for (const [key, value] of formData.entries()) {
     if (key === "secao" || key === "name" || key === "days") continue;
-    if (key.startsWith("businessHours") || key.startsWith("setupWindow")) continue;
+    if (key.startsWith("businessHours") || key.startsWith("serviceWindow")) continue;
     if (typeof value === "string") raw[key] = value;
   }
   // O expediente chega como campos soltos (start/end + checkboxes) e vira JSON.
   // A janela de montagem viaja no mesmo JSON: `businessHours` é Json livre, e
   // guardar junto evita uma migration só pra dois horários.
   if (formData.has("businessHoursStart")) {
-    const setupStart = formData.get("setupWindowStart");
-    const setupEnd = formData.get("setupWindowEnd");
+    const serviceStart = formData.get("serviceWindowStart");
+    const serviceEnd = formData.get("serviceWindowEnd");
     raw.businessHours = {
       start: formData.get("businessHoursStart"),
       end: formData.get("businessHoursEnd"),
       days: readDays(formData),
-      ...(typeof setupStart === "string" && setupStart ? { setupStart } : {}),
-      ...(typeof setupEnd === "string" && setupEnd ? { setupEnd } : {}),
+      ...(typeof serviceStart === "string" && serviceStart ? { serviceStart } : {}),
+      ...(typeof serviceEnd === "string" && serviceEnd ? { serviceEnd } : {}),
     };
   }
 

@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services, schemas, ZodError } from "@diny/core";
+import { services, schemas, ZodError } from "@barbearia-ai/core";
 
 /**
  * Ferramenta pro agente de IA (n8n): registra o interesse do cliente como Lead pra
- * equipe confirmar — NUNCA cria reserva, NUNCA processa pagamento (isso é sempre humano).
+ * equipe confirmar — NUNCA cria agendamento, NUNCA processa pagamento.
  * Tenant vem do host (subdomínio). Sem AGENT_API_SECRET, toda chamada é rejeitada.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-diny-secret") !== secret) {
+  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   // Grava o contexto sozinho — não depende da IA lembrar de chamar a tool "notas".
   const partes = [
     input.desiredDate && `data desejada ${input.desiredDate}`,
-    input.desiredToy && `interesse em ${input.desiredToy}`,
+    input.desiredService && `interesse em ${input.desiredService}`,
     input.neighborhood && `bairro ${input.neighborhood}`,
     input.summary,
   ].filter(Boolean);

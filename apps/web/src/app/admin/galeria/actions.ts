@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { requireRole, services, schemas, ZodError } from "@diny/core";
+import { requireRole, services, schemas, ZodError } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { validarFoto, subirParaStorage, apagarDoStorage } from "@/lib/foto-upload";
 

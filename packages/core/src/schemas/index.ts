@@ -12,22 +12,53 @@ const spDate = z.preprocess(
   z.date()
 );
 
-export const toyCategory = z.enum([
-  "CAMA_ELASTICA", "PISCINA_BOLINHAS", "INFLAVEL", "ESCORREGADOR", "MESA_CADEIRA", "OUTRO",
-]);
-
 export const leadSource = z.enum([
   "INSTAGRAM", "FACEBOOK", "GOOGLE", "INDICATION", "WHATSAPP", "WEBSITE", "PAID_ADS", "PARTNER", "OTHER",
 ]);
 
-export const toyInput = z.object({
-  name: z.string().min(2, "Informe o nome"),
-  category: toyCategory,
-  description: z.string().optional(),
-  purchasePrice: z.coerce.number().nonnegative(),
-  defaultRentPrice: z.coerce.number().nonnegative(),
+export const serviceCategory = z.enum([
+  "HAIR", "BEARD", "NAILS", "BROWS", "AESTHETICS", "TATTOO", "MASSAGE", "OTHER",
+]);
+export const serviceStatus = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]);
+export const professionalStatus = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]);
+export const locationMode = z.enum(["SALON", "CUSTOMER_ADDRESS", "ONLINE"]);
+export const commissionType = z.enum(["NONE", "FIXED", "PERCENTAGE"]);
+export const appointmentStatus = z.enum(["REQUESTED", "CONFIRMED", "ARRIVED", "IN_SERVICE", "COMPLETED", "NO_SHOW", "CANCELED"]);
+
+export const serviceInput = z.object({
+  name: z.string().trim().min(2, "Informe o nome"),
+  category: serviceCategory.default("OTHER"),
+  description: z.string().max(1000).optional(),
+  durationMinutes: z.coerce.number().int().positive("Informe a duração"),
+  bufferBeforeMinutes: z.coerce.number().int().nonnegative().default(0),
+  bufferAfterMinutes: z.coerce.number().int().nonnegative().default(0),
+  defaultPrice: z.coerce.number().nonnegative(),
+  locationMode: locationMode.default("SALON"),
 });
-export type ToyInput = z.infer<typeof toyInput>;
+export type ServiceInput = z.infer<typeof serviceInput>;
+
+export const professionalInput = z.object({
+  name: z.string().trim().min(2, "Informe o nome"),
+  phone: z.string().max(30).optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  bio: z.string().max(1000).optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default("#2563EB"),
+  defaultCalendarId: z.string().max(300).optional(),
+  defaultCommissionType: commissionType.default("NONE"),
+  defaultCommissionValue: z.coerce.number().nonnegative().optional(),
+});
+export type ProfessionalInput = z.infer<typeof professionalInput>;
+
+export const professionalServiceInput = z.object({
+  professionalId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  durationMinutes: z.coerce.number().int().positive().optional(),
+  price: z.coerce.number().nonnegative().optional(),
+  commissionType: commissionType.default("NONE"),
+  commissionValue: z.coerce.number().nonnegative().optional(),
+  active: z.coerce.boolean().default(true),
+});
+export type ProfessionalServiceInput = z.infer<typeof professionalServiceInput>;
 
 export const customerInput = z.object({
   name: z.string().trim().min(2),
@@ -52,44 +83,40 @@ export type CustomerInput = z.infer<typeof customerInput>;
 export const customerUpdateInput = customerInput.omit({ phone: true });
 export type CustomerUpdateInput = z.infer<typeof customerUpdateInput>;
 
-export const bookingInput = z
+export const appointmentInput = z
   .object({
     customerId: z.string().uuid(),
-    eventDate: spDate,
-    setupTime: spDateTime,
-    pickupTime: spDateTime,
-    address: z.string().optional(),
-    neighborhood: z.string().optional(),
+    professionalId: z.string().uuid().optional(),
+    resourceId: z.string().uuid().optional(),
+    startAt: spDateTime,
+    endAt: spDateTime,
     total: z.coerce.number().nonnegative(),
-    depositAmount: z.coerce.number().nonnegative().default(0),
-    toyIds: z.array(z.string().uuid()).min(1, "Selecione ao menos um brinquedo"),
+    serviceIds: z.array(z.string().uuid()).min(1, "Selecione ao menos um serviço"),
     leadSource: leadSource.optional(),
     notes: z.string().optional(),
   })
-  .refine((d) => d.pickupTime > d.setupTime, {
-    message: "A retirada deve ser depois da montagem",
-    path: ["pickupTime"],
+  .refine((d) => d.endAt > d.startAt, {
+    message: "O fim deve ser depois do início",
+    path: ["endAt"],
   });
-export type BookingInput = z.infer<typeof bookingInput>;
+export type AppointmentInput = z.infer<typeof appointmentInput>;
 
-/** Edição de reserva: mesmos campos do create, sem trocar o cliente. */
-export const bookingUpdateInput = z
+/** Edição de agendamento: mesmos campos do create, sem trocar o cliente. */
+export const appointmentUpdateInput = z
   .object({
-    eventDate: spDate,
-    setupTime: spDateTime,
-    pickupTime: spDateTime,
-    address: z.string().optional(),
-    neighborhood: z.string().optional(),
+    professionalId: z.string().uuid().optional(),
+    resourceId: z.string().uuid().optional(),
+    startAt: spDateTime,
+    endAt: spDateTime,
     total: z.coerce.number().nonnegative(),
-    depositAmount: z.coerce.number().nonnegative().default(0),
-    toyIds: z.array(z.string().uuid()).min(1, "Selecione ao menos um brinquedo"),
+    serviceIds: z.array(z.string().uuid()).min(1, "Selecione ao menos um serviço"),
     notes: z.string().optional(),
   })
-  .refine((d) => d.pickupTime > d.setupTime, {
-    message: "A retirada deve ser depois da montagem",
-    path: ["pickupTime"],
+  .refine((d) => d.endAt > d.startAt, {
+    message: "O fim deve ser depois do início",
+    path: ["endAt"],
   });
-export type BookingUpdateInput = z.infer<typeof bookingUpdateInput>;
+export type AppointmentUpdateInput = z.infer<typeof appointmentUpdateInput>;
 
 export const leadInput = z.object({
   name: z.string().min(2),
@@ -98,24 +125,21 @@ export const leadInput = z.object({
   message: z.string().optional(),
   desiredDate: spDate.optional(),
   neighborhood: z.string().optional(),
-  childrenCount: z.coerce.number().int().optional(),
-  ageRange: z.string().optional(),
-  desiredToy: z.string().optional(),
+  desiredService: z.string().optional(),
 });
 export type LeadInput = z.infer<typeof leadInput>;
 
-export const expenseCategory = z.enum(["FUEL", "HELPER", "MAINTENANCE", "CLEANING", "OTHER"]);
-export const toyStatus = z.enum(["AVAILABLE", "RENTED", "MAINTENANCE", "RETIRED"]);
+export const expenseCategory = z.enum(["COMMISSION", "PRODUCTS", "RENT", "UTILITIES", "MARKETING", "SALARY", "OTHER"]);
 
 export const paymentInput = z.object({
-  bookingId: z.string().uuid(),
+  appointmentId: z.string().uuid(),
   amount: z.coerce.number().positive("Informe um valor maior que zero"),
   method: z.string().max(40).optional(),
 });
 export type PaymentInput = z.infer<typeof paymentInput>;
 
 export const expenseInput = z.object({
-  bookingId: z.string().uuid().optional(),
+  appointmentId: z.string().uuid().optional(),
   category: expenseCategory,
   amount: z.coerce.number().positive("Informe um valor maior que zero"),
   description: z.string().max(300).optional(),
@@ -154,16 +178,9 @@ const agentPhone = z
   .refine((value) => value.length >= 8 && value.length <= 20, "telefone inválido");
 
 const agentTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:mm");
-const agentPickupTime = z
-  .string()
-  .regex(/^(?:([01]\d|2[0-3]):[0-5]\d|24:00)$/, "use HH:mm (24:00 somente para retirada)");
 const optionalAgentTime = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
   agentTime.optional()
-);
-const optionalAgentPickupTime = z.preprocess(
-  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-  agentPickupTime.optional()
 );
 const availabilitySlotMinutes = z.preprocess(
   (value) => {
@@ -174,35 +191,35 @@ const availabilitySlotMinutes = z.preprocess(
 );
 
 /**
- * Ferramenta "disponibilidade": aceita o dia inteiro (compatibilidade) ou,
- * preferencialmente, o intervalo exato que o cliente escolheu.
+ * Ferramenta "disponibilidade": aceita o dia inteiro ou o intervalo exato que o
+ * cliente escolheu. Serviço/profissional entram por nome porque vêm da conversa.
  */
 export const agentAvailabilityInput = z
   .object({
     date: agentDateText.transform(parseLocalDate),
-    setupTime: optionalAgentTime,
-    pickupTime: optionalAgentPickupTime,
+    startTime: optionalAgentTime,
+    endTime: optionalAgentTime,
     slotMinutes: availabilitySlotMinutes,
-    toyName: z.string().max(120).optional(),
-    category: toyCategory.optional(),
+    serviceName: z.string().max(120).optional(),
+    professionalName: z.string().max(120).optional(),
   })
   .superRefine((data, ctx) => {
-    const hasSetup = Boolean(data.setupTime);
-    const hasPickup = Boolean(data.pickupTime);
-    if (hasSetup !== hasPickup) {
+    const hasStart = Boolean(data.startTime);
+    const hasEnd = Boolean(data.endTime);
+    if (hasStart !== hasEnd) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: hasSetup ? ["pickupTime"] : ["setupTime"],
-        message: "informe montagem e retirada juntas",
+        path: hasStart ? ["endTime"] : ["startTime"],
+        message: "informe início e fim juntos",
       });
-    } else if (data.setupTime && data.pickupTime && data.pickupTime <= data.setupTime) {
+    } else if (data.startTime && data.endTime && data.endTime <= data.startTime) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["pickupTime"],
-        message: "a retirada deve ser depois da montagem",
+        path: ["endTime"],
+        message: "o fim deve ser depois do início",
       });
     }
-    if (data.slotMinutes && (hasSetup || hasPickup)) {
+    if (data.slotMinutes && (hasStart || hasEnd)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["slotMinutes"],
@@ -217,7 +234,7 @@ export const agentLeadInput = z.object({
   phone: z.string().min(8).max(20).transform(phoneDigits),
   name: z.string().min(2).max(120),
   desiredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD").optional(),
-  desiredToy: z.string().max(120).optional(),
+  desiredService: z.string().max(120).optional(),
   neighborhood: z.string().max(120).optional(),
   summary: z.string().max(500).optional(),
 });
@@ -241,94 +258,74 @@ export type AgentContextInput = z.infer<typeof agentContextInput>;
 /**
  * Ferramenta "solicitar cancelamento": o cliente pede pra desmarcar pelo WhatsApp.
  *
- * A IA NÃO cancela — só registra o pedido e chama a equipe. Cancelar mexe em sinal
- * já pago e em política de devolução; é decisão de gente, não de modelo. Sem isto,
- * o pedido morria na conversa e a data continuava ocupada na agenda.
+ * A IA NÃO cancela por esta ferramenta — só registra o pedido e chama a equipe.
+ * O cancelamento efetivo usa uma ferramenta separada com confirmação explícita.
  */
 export const agentCancelRequestInput = z.object({
   phone: z.string().min(8).max(20).transform(phoneDigits),
   name: z.string().max(120).optional(),
-  /** Data da festa que ele quer desmarcar, se disse qual (AAAA-MM-DD). */
+  /** Data do atendimento que ele quer desmarcar, se disse qual (AAAA-MM-DD). */
   date: agentDateText.optional(),
   reason: z.string().max(300).optional(),
 });
 export type AgentCancelRequestInput = z.infer<typeof agentCancelRequestInput>;
 
 /**
- * Ferramenta "avaliação pós-festa". Quem decide bom/ruim é QUAL FERRAMENTA a IA
+ * Ferramenta "avaliação pós-atendimento". Quem decide bom/ruim é QUAL FERRAMENTA a IA
  * chamou (positiva/negativa), não um número comparado no backend — pedir pra IA
  * preencher um `score` numérico via $fromAI se mostrou frágil (o modelo às vezes
  * deixa vazio, quebra o JSON do corpo). `score` fica opcional, só como anotação
  * pra relatório.
  */
-export const agentPostEventInput = z.object({
+export const agentPostServiceInput = z.object({
   phone: z.string().min(8).max(20).transform(phoneDigits),
   score: z.number().int().min(0).max(10).optional(),
   comment: z.string().max(500).optional(),
 });
-export type AgentPostEventInput = z.infer<typeof agentPostEventInput>;
+export type AgentPostServiceInput = z.infer<typeof agentPostServiceInput>;
 
 /**
- * Ferramenta "agendar": a IA fecha a reserva de verdade no nosso banco.
- * A checagem de conflito do banco (autoridade) rejeita reserva dupla mesmo que a IA
- * tenha errado a disponibilidade. Brinquedos vêm por NOME (o que a IA obteve da
- * ferramenta disponibilidade); resolvidos p/ id no service. Horas em HH:mm no fuso de SP.
+ * Ferramenta "agendar": a IA fecha o agendamento de verdade no nosso banco.
+ * Serviços e profissional vêm por nome; o service resolve para IDs e calcula
+ * duração/preço a partir do catálogo.
  */
-export const agentBookingInput = z.object({
+export const agentAppointmentInput = z.object({
   phone: z.string().min(8).max(20).transform(phoneDigits),
   name: z.string().min(2).max(120),
   date: agentDateText,
-  setupTime: agentTime,
-  pickupTime: agentPickupTime,
-  toys: z.array(z.string().min(1).max(120)).min(1, "informe ao menos um brinquedo"),
-  /**
-   * Endereço e bairro são OBRIGATÓRIOS para fechar.
-   *
-   * Sem eles a festa entra na agenda e a equipe não sabe pra onde ir — e o
-   * alerta de 30 minutos antes da montagem chega sem a linha do endereço, que
-   * é justamente pra que ele serve. O formulário manual já exigia os dois;
-   * deixar a IA fechar sem endereço criava festa cega pelo caminho automático.
-   *
-   * A trava só age no MOMENTO DE AGENDAR: conversa, orçamento e consulta de
-   * disponibilidade não passam por este schema. Quem só pergunta preço nunca
-   * é cobrado por endereço.
-   */
-  neighborhood: z.string().trim().min(2, "informe o bairro").max(120),
-  address: z.string().trim().min(5, "informe o endereço").max(200),
+  startTime: agentTime,
+  serviceNames: z.array(z.string().min(1).max(120)).min(1, "informe ao menos um serviço"),
+  professionalName: z.string().max(120).optional(),
   notes: z.string().max(500).optional(),
 });
-export type AgentBookingInput = z.infer<typeof agentBookingInput>;
+export type AgentAppointmentInput = z.infer<typeof agentAppointmentInput>;
 
 /**
- * Reagenda uma reserva identificada pela consulta "meus agendamentos".
- * O telefone impede que um bookingId de outro cliente seja alterado.
+ * Reagenda um atendimento identificado pela consulta "meus agendamentos".
+ * O telefone impede que um appointmentId de outro cliente seja alterado.
  */
-export const agentBookingRescheduleInput = z
+export const agentAppointmentRescheduleInput = z
   .object({
-    bookingId: z.string().uuid(),
+    appointmentId: z.string().uuid(),
     phone: agentPhone,
     date: agentDateText,
-    setupTime: agentTime,
-    pickupTime: agentPickupTime,
+    startTime: agentTime,
+    professionalName: z.string().max(120).optional(),
   })
-  .refine((data) => data.pickupTime > data.setupTime, {
-    message: "a retirada deve ser depois da montagem",
-    path: ["pickupTime"],
-  });
-export type AgentBookingRescheduleInput = z.infer<typeof agentBookingRescheduleInput>;
+export type AgentAppointmentRescheduleInput = z.infer<typeof agentAppointmentRescheduleInput>;
 
 /**
- * Cancela uma reserva específica. `confirmed: true` é obrigatório para impedir
+ * Cancela um agendamento específico. `confirmed: true` é obrigatório para impedir
  * que uma chamada incompleta ou de consulta execute uma alteração destrutiva.
  */
-export const agentBookingCancelInput = z.object({
-  bookingId: z.string().uuid(),
+export const agentAppointmentCancelInput = z.object({
+  appointmentId: z.string().uuid(),
   phone: agentPhone,
   confirmed: z.literal(true),
 });
-export type AgentBookingCancelInput = z.infer<typeof agentBookingCancelInput>;
+export type AgentAppointmentCancelInput = z.infer<typeof agentAppointmentCancelInput>;
 
-/** Ferramenta "meus agendamentos": a IA consulta as festas já marcadas desse telefone. */
+/** Ferramenta "meus agendamentos": a IA consulta atendimentos marcados desse telefone. */
 export const agentLookupInput = z.object({
   phone: z.string().min(8).max(20).transform(phoneDigits),
 });
@@ -386,16 +383,15 @@ const hhmm = z.string().trim().regex(/^\d{1,2}:\d{2}$/, "Use o formato HH:mm");
 /**
  * Expediente: mesmo formato que `overview-service` já lê (start/end/days).
  *
- * `setupStart`/`setupEnd` são a janela em que a equipe monta e retira — outra
- * coisa que o atendimento. Opcionais: sem eles, o parser cai no expediente,
- * que é como funcionava antes de existirem.
+ * `serviceStart`/`serviceEnd` são a janela em que a agenda pode oferecer
+ * horários. Opcionais: sem eles, o parser cai no expediente geral.
  */
 export const businessHoursInput = z.object({
   start: hhmm,
   end: hhmm,
   days: z.array(z.number().int().min(0).max(6)).max(7),
-  setupStart: hhmm.optional(),
-  setupEnd: hhmm.optional(),
+  serviceStart: hhmm.optional(),
+  serviceEnd: hhmm.optional(),
 });
 export type BusinessHoursInput = z.infer<typeof businessHoursInput>;
 
@@ -421,12 +417,9 @@ export const tenantSettingsInput = z.object({
   city: optText(100),
   baseAddress: optText(200),
   serviceRadiusKm: optNumber(0, 500),
-  deliveryFee: optNumber(0, 100_000),
-
-  // Estes dois têm default no banco (não anuláveis): "" mantém o valor atual.
-  minRentalHours: optNumberKeep(1, 24),
-  minRentalPrice: optNumberKeep(0, 100_000),
-  depositPolicy: optText(500),
+  defaultSlotMinutes: optNumberKeep(5, 240),
+  minAppointmentLeadMinutes: optNumberKeep(0, 10_080),
+  cancellationPolicy: optText(500),
   businessHours: businessHoursInput.optional(),
 
   headline: optText(150),
@@ -441,7 +434,7 @@ export const tenantSettingsInput = z.object({
   facebook: optText(200),
   googleMaps: optText(300),
 
-  postEventMessage: optText(500),
+  postServiceMessage: optText(500),
   reviewLink: optText(300),
 });
 export type TenantSettingsInput = z.infer<typeof tenantSettingsInput>;

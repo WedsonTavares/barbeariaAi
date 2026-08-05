@@ -1,6 +1,6 @@
 import { UsersRound } from "lucide-react";
 
-import { currentRole, services } from "@diny/core";
+import { currentRole, services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { CustomersDirectory, type CustomerDirectoryItem } from "./CustomersDirectory";
 import { NewCustomerDialog } from "./NewCustomerDialog";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const OKS: Record<string, string> = {
   1: "Cliente adicionado.",
   editado: "Cadastro atualizado.",
-  removido: "Cadastro removido sem apagar conversas, leads ou reservas.",
+  removido: "Cadastro removido sem apagar conversas, leads ou agendamentos.",
   arquivado: "Arquivado. Saiu de Clientes, do inbox e do funil — nada foi apagado.",
   restaurado: "Restaurado e de volta ao painel.",
 };
@@ -18,7 +18,7 @@ const OKS: Record<string, string> = {
 const ERRORS: Record<string, string> = {
   edicao: "Alteração não salva. Confira os campos do cliente.",
   nao_encontrado: "Este cadastro não existe mais ou não pertence a esta empresa.",
-  cliente_com_reservas: "Cadastro não removido: há reservas ligadas a ele e o histórico foi preservado.",
+  cliente_com_agendamentos: "Cadastro não removido: há agendamentos ligados a ele e o histórico foi preservado.",
   cliente_com_historico:
     "Cadastro não removido: existe conversa, lead ou orçamento ligado a ele. Ele segue arquivado, fora do painel.",
   cliente_com_dados:
@@ -70,7 +70,7 @@ export default async function ClientesPage({
     neighborhood: item.neighborhood,
     address: item.address,
     imageConsent: item.imageConsent,
-    bookingCount: item.bookingCount,
+    appointmentCount: item.appointmentCount,
     duplicateCount: item.duplicateCount,
     source: item.source,
     stage: item.stage,

@@ -1,18 +1,18 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { requireRole, services } from "@diny/core";
+import { requireRole, services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { sendText } from "@/lib/evolution";
 import { normalizeTag } from "@/lib/tags";
-import { sendPosFestaAutoMessage } from "@/lib/pos-festa";
+import { sendPosAtendimentoAutoMessage } from "@/lib/pos-atendimento";
 
 /**
  * Abre a conversa selecionada (thread + contexto). Zera o não-lido.
  *
- * As festas vêm do banco AGORA (`upcomingForPhone`), não do resumo escrito pela
+ * Os agendamentos vêm do banco AGORA (`upcomingForPhone`), não do resumo escrito pela
  * IA: o resumo é um texto congelado no momento em que ela fechou algo e continua
- * afirmando "reserva fechada" mesmo se a reserva foi cancelada ou apagada depois.
- * Quem manda sobre o que está marcado é a tabela de reservas.
+ * afirmando "agendamento fechado" mesmo se ele foi cancelado ou apagado depois.
+ * Quem manda sobre o que está marcado é a tabela de agendamentos.
  */
 export async function loadConversationAction(id: string) {
   const { tenant, ctx } = await requireTenant();
@@ -20,7 +20,7 @@ export async function loadConversationAction(id: string) {
   const c = await services.conversationService.get(tenant.id, id);
   if (!c) return null;
 
-  const bookings = await services.bookingService.upcomingForPhone(tenant.id, c.phone);
+  const appointments = await services.appointmentService.upcomingForPhone(tenant.id, c.phone);
 
   return {
     id: c.id,
@@ -34,14 +34,14 @@ export async function loadConversationAction(id: string) {
     summary: c.summary,
     summaryAt: c.summaryAt ? c.summaryAt.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
-    bookings: bookings.map((b) => ({
-      id: b.id,
-      status: b.status as string,
-      eventDate: b.eventDate.toISOString(),
-      setupTime: b.setupTime ? b.setupTime.toISOString() : null,
-      pickupTime: b.pickupTime ? b.pickupTime.toISOString() : null,
-      total: Number(b.total),
-      toys: b.items.map((i) => i.toy.name),
+    appointments: appointments.map((appointment) => ({
+      id: appointment.id,
+      status: appointment.status as string,
+      startAt: appointment.startAt.toISOString(),
+      endAt: appointment.endAt.toISOString(),
+      total: Number(appointment.total),
+      professionalName: appointment.professional?.name ?? null,
+      services: appointment.services.map((item) => item.serviceNameSnapshot),
     })),
     messages: c.messages.map((m) => ({
       id: m.id,
@@ -74,7 +74,7 @@ export async function replyAction(id: string, phone: string, text: string) {
 /**
  * Página anterior do histórico, para quando o atendente rola pra cima.
  *
- * Devolve só as mensagens — nada de reserva, tag ou nota: rolar pra ver o
+ * Devolve só as mensagens — nada de agendamento, tag ou nota: rolar pra ver o
  * passado não deve custar as consultas de contexto nem marcar nada como lido.
  */
 export async function mensagensAntigasAction(id: string, antesDeIso: string) {
@@ -121,10 +121,10 @@ export async function toggleTagAction(id: string, tag: string, on: boolean) {
 
   const changed = await services.conversationService.toggleTag(tenant.id, id, t, on);
 
-  // "pos-festa" tem o mesmo efeito de arrastar o card no Funil: dispara a
+  // "pos-atendimento" tem o mesmo efeito de arrastar o card no Funil: dispara a
   // mesma mensagem automática, só na transição de verdade.
-  if (t === "pos-festa" && on && changed.previousStage !== "POS_FESTA") {
-    await sendPosFestaAutoMessage(tenant, changed.phone);
+  if (t === "pos-atendimento" && on && changed.previousStage !== "POS_ATENDIMENTO") {
+    await sendPosAtendimentoAutoMessage(tenant, changed.phone);
   }
 
   revalidatePath("/admin/conversas");

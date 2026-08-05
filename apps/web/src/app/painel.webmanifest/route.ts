@@ -21,13 +21,13 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const tenant = await resolveTenant();
-  const nome = tenant?.name ?? "Diny";
+  const nome = tenant?.name ?? "Barbearia AI";
 
   return NextResponse.json(
     {
       name: `${nome} — Painel`,
       short_name: nome.split(" ")[0] ?? "Painel",
-      description: "Agenda, conversas e financeiro da locação de brinquedos.",
+      description: "Agenda, conversas e financeiro para barbearias.",
       // Abre direto no painel, não na vitrine.
       start_url: "/admin/dashboard",
       scope: "/admin",

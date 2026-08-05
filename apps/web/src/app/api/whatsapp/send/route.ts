@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { sendText } from "@/lib/evolution";
 
 /**

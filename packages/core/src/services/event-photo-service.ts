@@ -1,17 +1,16 @@
 import { withTenant } from "../db/withTenant";
 
 /**
- * Galeria de eventos do site público.
+ * Portfólio do site público.
  *
- * A tabela guarda só a URL — o arquivo vive no Supabase Storage (bucket
- * `eventos`), igual ao que a foto de brinquedo já faz. Quem sobe o binário é a
- * action do painel; aqui só entra o endereço final.
+ * A tabela guarda só a URL. Quem sobe o binário é a action do painel; aqui só
+ * entra o endereço final.
  */
 export const eventPhotoService = {
   /** Na ordem que o site exibe: `sortOrder` primeiro, mais recente como desempate. */
   list: (tenantId: string) =>
     withTenant(tenantId, (tx) =>
-      tx.eventPhoto.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }] })
+      tx.portfolioPhoto.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }] })
     ),
 
   /**
@@ -20,11 +19,11 @@ export const eventPhotoService = {
    */
   create: (tenantId: string, imageUrl: string, caption?: string) =>
     withTenant(tenantId, async (tx) => {
-      const ultima = await tx.eventPhoto.findFirst({
+      const ultima = await tx.portfolioPhoto.findFirst({
         orderBy: { sortOrder: "desc" },
         select: { sortOrder: true },
       });
-      return tx.eventPhoto.create({
+      return tx.portfolioPhoto.create({
         data: {
           tenantId,
           imageUrl,
@@ -36,7 +35,7 @@ export const eventPhotoService = {
 
   updateCaption: (tenantId: string, id: string, caption: string) =>
     withTenant(tenantId, (tx) =>
-      tx.eventPhoto.updateMany({ where: { id }, data: { caption: caption.trim() || null } })
+      tx.portfolioPhoto.updateMany({ where: { id }, data: { caption: caption.trim() || null } })
     ),
 
   /**
@@ -48,10 +47,10 @@ export const eventPhotoService = {
    */
   move: (tenantId: string, id: string, direcao: "up" | "down") =>
     withTenant(tenantId, async (tx) => {
-      const atual = await tx.eventPhoto.findFirst({ where: { id } });
+      const atual = await tx.portfolioPhoto.findFirst({ where: { id } });
       if (!atual) return null;
 
-      const vizinha = await tx.eventPhoto.findFirst({
+      const vizinha = await tx.portfolioPhoto.findFirst({
         where:
           direcao === "up"
             ? { sortOrder: { lt: atual.sortOrder } }
@@ -60,8 +59,8 @@ export const eventPhotoService = {
       });
       if (!vizinha) return null; // já está na ponta
 
-      await tx.eventPhoto.update({ where: { id: atual.id }, data: { sortOrder: vizinha.sortOrder } });
-      await tx.eventPhoto.update({ where: { id: vizinha.id }, data: { sortOrder: atual.sortOrder } });
+      await tx.portfolioPhoto.update({ where: { id: atual.id }, data: { sortOrder: vizinha.sortOrder } });
+      await tx.portfolioPhoto.update({ where: { id: vizinha.id }, data: { sortOrder: atual.sortOrder } });
       return { movida: atual.id, trocadaCom: vizinha.id };
     }),
 
@@ -71,9 +70,9 @@ export const eventPhotoService = {
    */
   remove: (tenantId: string, id: string) =>
     withTenant(tenantId, async (tx) => {
-      const foto = await tx.eventPhoto.findFirst({ where: { id }, select: { imageUrl: true } });
+      const foto = await tx.portfolioPhoto.findFirst({ where: { id }, select: { imageUrl: true } });
       if (!foto) return null;
-      await tx.eventPhoto.deleteMany({ where: { id } });
+      await tx.portfolioPhoto.deleteMany({ where: { id } });
       return foto.imageUrl;
     }),
 };

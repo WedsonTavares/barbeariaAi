@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { schemas, services, ZodError } from "@diny/core";
+import { schemas, services, ZodError } from "@barbearia-ai/core";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-diny-secret") !== secret) {
+  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AccessError, services } from "@diny/core";
+import { AccessError, services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { AdminTopbar } from "@/components/AdminTopbar";

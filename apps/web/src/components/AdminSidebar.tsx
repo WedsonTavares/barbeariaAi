@@ -2,9 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { LayoutDashboard, Boxes, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Braces, Images, Menu, X } from "lucide-react";
+import { LayoutDashboard, Scissors, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Braces, Images, Menu, X, UserRoundCog } from "lucide-react";
 
-// Reservas não fica no menu: as festas se abrem pelo calendário da Agenda.
 const GROUPS = [
   {
     label: "Atendimento",
@@ -19,7 +18,9 @@ const GROUPS = [
     label: "Negócio",
     links: [
       { href: "/admin/clientes", label: "Clientes", icon: Users },
-      { href: "/admin/brinquedos", label: "Brinquedos", icon: Boxes },
+      { href: "/admin/servicos", label: "Serviços", icon: Scissors },
+      { href: "/admin/profissionais", label: "Profissionais", icon: UserRoundCog },
+      { href: "/admin/agendamentos", label: "Agendamentos", icon: CalendarRange },
       { href: "/admin/galeria", label: "Galeria", icon: Images },
       { href: "/admin/financeiro", label: "Financeiro", icon: Wallet },
       { href: "/admin/configuracoes", label: "Configurações", icon: Settings },

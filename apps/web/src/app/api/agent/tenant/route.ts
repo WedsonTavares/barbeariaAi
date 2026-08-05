@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 
 /**
  * Roteador multi-tenant do n8n: dada a INSTÂNCIA do Evolution que recebeu a
@@ -13,12 +13,12 @@ import { services } from "@diny/core";
  * Diferente das outras rotas de agente, esta NÃO depende do host: pode ser
  * chamada no domínio raiz. Protegida por AGENT_API_SECRET (header ou ?token=).
  *
- * GET /api/agent/tenant?instance=diny-festas   (header x-diny-secret)
+ * GET /api/agent/tenant?instance=barbearia-central   (header x-barbearia-ai-secret)
  */
 export async function GET(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
   const url = new URL(req.url);
-  const token = req.headers.get("x-diny-secret") ?? url.searchParams.get("token");
+  const token = req.headers.get("x-barbearia-ai-secret") ?? url.searchParams.get("token");
   if (!secret || token !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

@@ -1,4 +1,4 @@
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { getAuthContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";

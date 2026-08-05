@@ -1,4 +1,4 @@
-import { APP_TZ } from "@diny/core";
+import { APP_TZ } from "@barbearia-ai/core";
 
 // Aceita também Prisma.Decimal (estruturalmente: tem toString()) sem acoplar a @prisma/client.
 export const brl = (n: number | string | { toString(): string }) =>

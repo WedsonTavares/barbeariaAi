@@ -5,7 +5,7 @@ import { brl } from "@/lib/format";
 type MonthlyPoint = {
   label: string;
   revenue: number;
-  bookings: number;
+  appointments: number;
 };
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -46,7 +46,7 @@ export function RevenueHistoryChart({ monthly }: { monthly: MonthlyPoint[] }) {
     ? `${left},${top + plotHeight} ${line} ${left + plotWidth},${top + plotHeight}`
     : "";
   const total = monthly.reduce((sum, point) => sum + point.revenue, 0);
-  const bookings = monthly.reduce((sum, point) => sum + point.bookings, 0);
+  const appointments = monthly.reduce((sum, point) => sum + point.appointments, 0);
 
   return (
     <section className="min-w-0 rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
@@ -62,7 +62,9 @@ export function RevenueHistoryChart({ monthly }: { monthly: MonthlyPoint[] }) {
         </div>
         <div className="text-right">
           <div className="text-sm font-extrabold tabular-nums">{brl(total)}</div>
-          <div className="text-[11px] text-[var(--color-muted)]">{bookings} festa{bookings === 1 ? "" : "s"} no período</div>
+          <div className="text-[11px] text-[var(--color-muted)]">
+            {appointments} atendimento{appointments === 1 ? "" : "s"} no período
+          </div>
         </div>
       </div>
 
@@ -120,7 +122,7 @@ export function RevenueHistoryChart({ monthly }: { monthly: MonthlyPoint[] }) {
               {points.map((point) => (
                 <g key={point.label}>
                   <circle cx={point.x} cy={point.y} r="6" fill="white" stroke="#2563EB" strokeWidth="4">
-                    <title>{`${point.label}: ${brl(point.revenue)} · ${point.bookings} festa${point.bookings === 1 ? "" : "s"}`}</title>
+                    <title>{`${point.label}: ${brl(point.revenue)} · ${point.appointments} atendimento${point.appointments === 1 ? "" : "s"}`}</title>
                   </circle>
                   <text x={point.x} y={height - 18} textAnchor="middle" fill="#64748B" fontSize="12" fontWeight="600">
                     {monthLabel(point.label)}
@@ -145,13 +147,13 @@ export function RevenueHistoryChart({ monthly }: { monthly: MonthlyPoint[] }) {
             <div className="text-[10px] font-semibold text-[var(--color-muted)]">{monthLabel(point.label)}</div>
             <div className="mt-0.5 text-[11px] font-bold tabular-nums">{compactMoney(point.revenue)}</div>
             <div className="text-[10px] text-[var(--color-muted)]">
-              {point.bookings} festa{point.bookings === 1 ? "" : "s"}
+              {point.appointments} atendimento{point.appointments === 1 ? "" : "s"}
             </div>
           </div>
         ))}
       </div>
       <p className="mt-2 text-[10px] text-[var(--color-muted)]">
-        Receita segue a data do pagamento; festas seguem a data do evento.
+        Receita segue a data do pagamento; atendimentos seguem a data do agendamento.
       </p>
     </section>
   );
@@ -161,12 +163,12 @@ export function MonthBalanceChart({
   revenue,
   costs,
   profit,
-  bookings,
+  appointments,
 }: {
   revenue: number;
   costs: number;
   profit: number;
-  bookings: number;
+  appointments: number;
 }) {
   const maxValue = Math.max(1, revenue, costs);
   const margin = revenue > 0 ? (profit / revenue) * 100 : null;
@@ -233,8 +235,8 @@ export function MonthBalanceChart({
 
       <dl className="mt-4 grid grid-cols-2 divide-x divide-black/5 rounded-xl border border-black/5">
         <div className="p-3">
-          <dt className="text-[11px] font-semibold text-[var(--color-muted)]">Reservas no mês</dt>
-          <dd className="mt-0.5 text-lg font-extrabold tabular-nums">{bookings}</dd>
+          <dt className="text-[11px] font-semibold text-[var(--color-muted)]">Agendamentos no mês</dt>
+          <dd className="mt-0.5 text-lg font-extrabold tabular-nums">{appointments}</dd>
         </div>
         <div className="p-3">
           <dt className="text-[11px] font-semibold text-[var(--color-muted)]">Custos / receita</dt>

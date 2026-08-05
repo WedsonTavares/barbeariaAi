@@ -97,7 +97,7 @@ export function NewCustomerDialog({ errorCode }: { errorCode?: string }) {
                   Novo cliente
                 </h2>
                 <p id="new-customer-description" className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  Cadastre os dados sem criar uma reserva.
+                  Cadastre os dados sem criar um agendamento.
                 </p>
               </div>
             </div>

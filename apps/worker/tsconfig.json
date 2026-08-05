@@ -6,8 +6,8 @@
     "noEmit": true,
     "types": ["node"],
     "paths": {
-      "@diny/core": ["../../packages/core/src/index.ts"],
-      "@diny/core/services": ["../../packages/core/src/services/index.ts"]
+      "@barbearia-ai/core": ["../../packages/core/src/index.ts"],
+      "@barbearia-ai/core/services": ["../../packages/core/src/services/index.ts"]
     }
   },
   "include": ["src"]

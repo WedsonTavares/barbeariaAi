@@ -1,9 +1,9 @@
 /**
- * Normaliza texto pra comparação tolerante (nome de brinquedo dito pela IA vs.
- * cadastrado no catálogo): remove acento, ignora maiúscula/minúscula e trata
+ * Normaliza texto pra comparação tolerante (nome dito pela IA vs. cadastrado no
+ * catálogo): remove acento, ignora maiúscula/minúscula e trata
  * hífen/underscore como espaço. Sem isso, "Pula-pula" (cadastro) não bate com
  * "pula pula" (como o cliente/IA escreveu) num `.includes()` cru — foi a causa
- * de a IA dizer "sem disponibilidade" para um brinquedo que na verdade estava livre.
+ * de a IA dizer "sem disponibilidade" para um item que na verdade estava livre.
  */
 export function normalizeMatchTerm(s: string): string {
   return s
@@ -57,18 +57,25 @@ function levenshtein(a: string, b: string): number {
   return dp[a.length]![b.length]!;
 }
 
+function adjacentTransposition(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const diff: number[] = [];
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) diff.push(i);
+  }
+  return diff.length === 2 && diff[1] === diff[0]! + 1 && a[diff[0]!] === b[diff[1]!] && a[diff[1]!] === b[diff[0]!];
+}
+
 /**
- * O nome dito (cliente/IA) identifica o brinquedo cadastrado? Além do que
+ * O nome dito (cliente/IA) identifica o item cadastrado? Além do que
  * `normalizeMatchTerm` já resolve (acento/maiúscula/hífen), tolera 1 letra
  * faltando ou trocada por palavra e funciona nos dois sentidos de conter.
  *
- * Sem isso, um typo como "pula ula" não batia com "Pula Pula 3m" — a IA dizia
- * "sem disponibilidade" para um brinquedo que, na verdade, nunca chegou a ser
+ * Sem isso, um typo como "crote" não batia com "Corte" — a IA dizia
+ * "sem disponibilidade" para um serviço que, na verdade, nunca chegou a ser
  * consultado: a busca por nome não achava nada, então a lista vinha vazia.
- * Com 1 único item no catálogo hoje, esse falso negativo tira o único produto
- * do ar por causa de uma letra.
  */
-export function matchesToyName(catalogName: string, said: string): boolean {
+export function matchesCatalogName(catalogName: string, said: string): boolean {
   const catalog = normalizeMatchTerm(catalogName);
   const term = normalizeMatchTerm(said);
   if (!term) return false;
@@ -78,6 +85,10 @@ export function matchesToyName(catalogName: string, said: string): boolean {
   const saidWords = term.split(" ").filter(Boolean);
   if (!saidWords.length) return false;
   return saidWords.every((sw) =>
-    catalogWords.some((cw) => cw === sw || (sw.length >= 3 && cw.length >= 3 && levenshtein(cw, sw) <= 1))
+    catalogWords.some(
+      (cw) =>
+        cw === sw ||
+        (sw.length >= 3 && cw.length >= 3 && (levenshtein(cw, sw) <= 1 || adjacentTransposition(cw, sw)))
+    )
   );
 }

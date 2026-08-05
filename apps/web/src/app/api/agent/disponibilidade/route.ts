@@ -1,22 +1,37 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { parseLocalDateTime, matchesToyName, parseBusinessHours, services, schemas, ZodError } from "@diny/core";
+import {
+  matchesCatalogName,
+  parseBusinessHours,
+  parseLocalDateTime,
+  schemas,
+  services,
+  spClock,
+  ZodError,
+} from "@barbearia-ai/core";
 
-/** "08:00" → 480. Entrada já validada como HH:mm pelo schema do expediente. */
 function hhmmToMin(value: string): number {
   const [hour, minute] = value.split(":").map(Number);
   return (hour || 0) * 60 + (minute || 0);
 }
 
+function minToHhmm(value: number): string {
+  const hour = Math.floor(value / 60);
+  const minute = value % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function byName<T extends { name: string }>(items: T[], name?: string) {
+  return name?.trim() ? items.filter((item) => matchesCatalogName(item.name, name)) : items;
+}
+
 /**
- * Ferramenta pro agente de IA (que roda no n8n): "esse brinquedo/categoria está livre
- * nesse dia?". Só leitura — nunca cria/altera reserva. Tenant vem do host (subdomínio);
- * nunca confiar em tenantId vindo do corpo. Reaproveita a MESMA checagem de conflito que
- * bloqueia reserva dupla no painel. Sem AGENT_API_SECRET, toda chamada é rejeitada.
+ * Ferramenta pro agente de IA: consulta horários livres por serviço e
+ * profissional. Só leitura; nunca cria nem altera agendamento.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-diny-secret") !== secret) {
+  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -26,92 +41,103 @@ export async function POST(req: Request) {
   let input;
   try {
     input = schemas.agentAvailabilityInput.parse(await req.json());
-  } catch (e) {
-    if (e instanceof ZodError) return NextResponse.json({ error: "dados inválidos", details: e.issues }, { status: 400 });
-    throw e;
+  } catch (error) {
+    if (error instanceof ZodError) return NextResponse.json({ error: "dados inválidos", details: error.issues }, { status: 400 });
+    throw error;
   }
 
-  const dayStart = input.date;
-  const date = dayStart.toISOString().slice(0, 10);
-  const slotMode = input.slotMinutes === 30;
-  const exactInterval = Boolean(input.setupTime && input.pickupTime);
-  const rangeStart = exactInterval
-    ? parseLocalDateTime(`${date}T${input.setupTime}`)
-    : dayStart;
-  const rangeEnd = exactInterval
-    ? parseLocalDateTime(`${date}T${input.pickupTime}`)
-    : new Date(dayStart.getTime() + 86_400_000);
+  const [settings, catalog, professionals] = await Promise.all([
+    services.tenantService.getSettings(tenant.id),
+    services.serviceCatalogService.active(tenant.id),
+    services.professionalService.list(tenant.id),
+  ]);
 
-  const allToys = await services.toyService.list(tenant.id);
-  const candidates = allToys.filter((t) => {
-    // Fora do catálogo da IA: aposentado (removido) e em manutenção — assim a IA
-    // nunca oferece o que a equipe tirou de circulação no painel.
-    if (t.status === "RETIRED" || t.status === "MAINTENANCE") return false;
-    if (input.toyName) return matchesToyName(t.name, input.toyName);
-    if (input.category) return t.category === input.category;
-    return true;
+  const activeServices = byName(catalog, input.serviceName);
+  const activeProfessionals = byName(
+    professionals.filter((professional) => professional.status === "ACTIVE"),
+    input.professionalName
+  ).filter((professional) => {
+    if (activeServices.length === 0) return true;
+    const links = professional.services.filter((item) => item.active);
+    if (links.length === 0) return true;
+    return activeServices.every((service) => links.some((item) => item.serviceId === service.id));
   });
 
-  if (slotMode) {
-    // A grade crua cobre 00:00–24:00. Sem recortar, a IA oferece montagem de
-    // madrugada. O corte é pela JANELA DE MONTAGEM, não pelo expediente de
-    // atendimento: dá pra atender 24h e só montar das 8h às 20h. Sem nada
-    // configurado, devolver a grade inteira é melhor do que esconder
-    // disponibilidade real por causa de um padrão que ninguém revisou.
-    const settings = await services.tenantService.getSettings(tenant.id);
-    const hours = settings?.businessHours ? parseBusinessHours(settings.businessHours) : null;
-    const opensAt = hours ? hhmmToMin(hours.setupStart) : null;
-    const closesAt = hours ? hhmmToMin(hours.setupEnd) : null;
+  const date = spClock(input.date).dayKey;
+  const slotMinutes = settings?.defaultSlotMinutes ?? 30;
+  const durationMinutes =
+    activeServices.length > 0
+      ? activeServices.reduce((sum, service) => sum + service.durationMinutes, 0)
+      : slotMinutes;
 
-    const slotsByToy = candidates.length
-      ? await services.bookingService.availabilitySlots(
+  if (input.startTime && input.endTime) {
+    const startAt = parseLocalDateTime(`${date}T${input.startTime}`);
+    const endAt = parseLocalDateTime(`${date}T${input.endTime}`);
+    const conflicts = activeProfessionals.length
+      ? await services.appointmentService.checkAvailability(
           tenant.id,
-          candidates.map((t) => t.id),
-          dayStart,
-          input.slotMinutes
+          activeProfessionals.map((professional) => professional.id),
+          startAt,
+          endAt
         )
-      : {};
+      : [];
+    const conflictSet = new Set(conflicts);
 
     return NextResponse.json({
+      ok: true,
       date,
-      scope: "slots",
-      slotMinutes: input.slotMinutes,
-      businessHours: hours,
-      toys: candidates.map((t) => {
-        const slots = (slotsByToy[t.id] ?? [])
-          .filter((slot) => slot.available)
-          .filter(
-            (slot) =>
-              opensAt === null ||
-              closesAt === null ||
-              (hhmmToMin(slot.startTime) >= opensAt && hhmmToMin(slot.endTime) <= closesAt)
-          )
-          .map(({ startTime, endTime }) => ({ startTime, endTime }));
-
-        return {
-          name: t.name,
-          category: t.category,
-          slots,
-        };
-      }),
+      scope: "interval",
+      startTime: input.startTime,
+      endTime: input.endTime,
+      services: activeServices.map((service) => ({
+        name: service.name,
+        durationMinutes: service.durationMinutes,
+        price: Number(service.defaultPrice),
+      })),
+      professionals: activeProfessionals.map((professional) => ({
+        id: professional.id,
+        name: professional.name,
+        available: !conflictSet.has(professional.id),
+      })),
     });
   }
 
-  const conflicts = candidates.length
-    ? await services.bookingService.checkAvailability(tenant.id, candidates.map((t) => t.id), rangeStart, rangeEnd)
-    : [];
-  const conflictSet = new Set(conflicts);
+  const hours = parseBusinessHours(settings?.businessHours);
+  const opensAt = hhmmToMin(hours.serviceStart);
+  const closesAt = hhmmToMin(hours.serviceEnd);
+  const slots = [];
+  for (let start = opensAt; start + durationMinutes <= closesAt; start += slotMinutes) {
+    const startTime = minToHhmm(start);
+    const endTime = minToHhmm(start + durationMinutes);
+    const startAt = parseLocalDateTime(`${date}T${startTime}`);
+    const endAt = parseLocalDateTime(`${date}T${endTime}`);
+    const conflicts = activeProfessionals.length
+      ? await services.appointmentService.checkAvailability(
+          tenant.id,
+          activeProfessionals.map((professional) => professional.id),
+          startAt,
+          endAt
+        )
+      : [];
+    const availableProfessionals = activeProfessionals
+      .filter((professional) => !conflicts.includes(professional.id))
+      .map((professional) => ({ id: professional.id, name: professional.name }));
+    if (availableProfessionals.length > 0) slots.push({ startTime, endTime, professionals: availableProfessionals });
+  }
 
   return NextResponse.json({
+    ok: true,
     date,
-    scope: exactInterval ? "interval" : "day",
-    setupTime: input.setupTime ?? null,
-    pickupTime: input.pickupTime ?? null,
-    toys: candidates.map((t) => ({
-      name: t.name,
-      category: t.category,
-      price: Number(t.defaultRentPrice),
-      available: !conflictSet.has(t.id),
+    scope: "slots",
+    slotMinutes,
+    durationMinutes,
+    businessHours: hours,
+    services: activeServices.map((service) => ({
+      name: service.name,
+      durationMinutes: service.durationMinutes,
+      price: Number(service.defaultPrice),
     })),
+    professionals: activeProfessionals.map((professional) => ({ id: professional.id, name: professional.name })),
+    slots,
   });
 }

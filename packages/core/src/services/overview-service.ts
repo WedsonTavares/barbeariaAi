@@ -5,10 +5,10 @@ import { spClock, spDayRange } from "../time";
  * Métricas da tela "Visão Geral" (/admin/dashboard).
  *
  * Duas convenções valem para tudo aqui:
- *  - **Reserva fechada pela IA** = `leadSource = WHATSAPP`. Só o agente grava esse
- *    valor (`bookingService.createFromAgent`); o formulário do painel não oferece
+ *  - **Agendamento fechado pela IA** = `leadSource = WHATSAPP`. Só o agente grava esse
+ *    valor (`appointmentService.createFromAgent`); o formulário do painel não oferece
  *    o campo, então a marca é confiável para separar IA × equipe.
- *  - **Fora do expediente** usa o `createdAt` da reserva (o instante em que a IA
+ *  - **Fora do expediente** usa o `createdAt` do agendamento (o instante em que a IA
  *    fechou), lido no fuso de SP. É a métrica que mostra o dinheiro que teria
  *    ficado esperando o telefone abrir no dia seguinte.
  */
@@ -20,8 +20,8 @@ const DEFAULT_HOURS: BusinessHours = {
   start: "08:00",
   end: "18:00",
   days: [1, 2, 3, 4, 5, 6],
-  setupStart: "08:00",
-  setupEnd: "18:00",
+  serviceStart: "08:00",
+  serviceEnd: "18:00",
 };
 
 export interface BusinessHours {
@@ -29,15 +29,13 @@ export interface BusinessHours {
   end: string; // "18:00"
   days: number[]; // 0 = domingo
   /**
-   * Janela em que a equipe monta e retira. É OUTRA coisa que o expediente de
-   * atendimento: dá pra atender 24h e só montar das 8h às 20h — e o brinquedo
-   * pode ficar com o cliente fora dessa faixa.
+   * Janela em que a agenda pode oferecer horários.
    *
    * Quando o tenant não configurou, cai no expediente (`start`/`end`), que era
    * o comportamento antes desses campos existirem.
    */
-  setupStart: string;
-  setupEnd: string;
+  serviceStart: string;
+  serviceEnd: string;
 }
 
 export interface OverviewDay {
@@ -49,8 +47,8 @@ export interface OverviewDay {
   contacts: number;
   /** Registros na tabela Lead (formulário do site / tool de lead da IA). */
   leads: number;
-  bookings: number;
-  aiBookings: number;
+  appointments: number;
+  aiAppointments: number;
 }
 
 export interface OverviewTrend {
@@ -76,11 +74,9 @@ export function parseBusinessHours(raw: unknown): BusinessHours {
     Array.isArray(o.days) && o.days.every((d) => typeof d === "number")
       ? (o.days as number[])
       : DEFAULT_HOURS.days;
-  // Sem janela de montagem configurada, vale o expediente — é o que valia antes
-  // desses campos existirem, então tenant antigo não muda de comportamento.
-  const setupStart = typeof o.setupStart === "string" ? o.setupStart : start;
-  const setupEnd = typeof o.setupEnd === "string" ? o.setupEnd : end;
-  return { start, end, days, setupStart, setupEnd };
+    const serviceStart = typeof o.serviceStart === "string" ? o.serviceStart : start;
+    const serviceEnd = typeof o.serviceEnd === "string" ? o.serviceEnd : end;
+    return { start, end, days, serviceStart, serviceEnd };
 }
 
 /**
@@ -135,9 +131,8 @@ export const overviewService = {
    * aquela conta não existe mais — nada nunca cai fora de 00:00–23:59 — e o
    * card virava um zero permanente.
    *
-   * A régua aqui é a JANELA DE MONTAGEM (`setupStart`/`setupEnd`, hoje 8h–20h):
-   * é quando a equipe de fato trabalha. Então o número responde a pergunta que
-   * interessa — quanto a IA fechou enquanto ninguém estava trabalhando.
+   * A régua aqui é a janela de serviços (`serviceStart`/`serviceEnd`): quanto a
+   * IA fechou fora da agenda operacional.
    *
    * Acompanha a configuração: mudar a janela de montagem muda a régua junto,
    * sem tocar em código.
@@ -154,7 +149,7 @@ export const overviewService = {
 
       const [settings, rows] = await Promise.all([
         tx.tenantSettings.findUnique({ where: { tenantId }, select: { businessHours: true } }),
-        tx.booking.findMany({
+        tx.appointment.findMany({
           where: {
             createdAt: { gte: previousStart },
             leadSource: "WHATSAPP",
@@ -165,8 +160,8 @@ export const overviewService = {
       ]);
 
       const hours = parseBusinessHours(settings?.businessHours);
-      const abre = toMinutes(hours.setupStart, 8 * 60);
-      const fecha = toMinutes(hours.setupEnd, 20 * 60);
+      const abre = toMinutes(hours.serviceStart, 8 * 60);
+      const fecha = toMinutes(hours.serviceEnd, 20 * 60);
 
       const foraDaJanela = (at: Date) => {
         const { hour, minute, weekday } = spClock(at);
@@ -181,7 +176,7 @@ export const overviewService = {
       );
 
       return {
-        janela: { inicio: hours.setupStart, fim: hours.setupEnd },
+        janela: { inicio: hours.serviceStart, fim: hours.serviceEnd },
         atual: noPeriodo.length,
         anterior: noAnterior.length,
         changePct: noAnterior.length > 0
@@ -209,10 +204,10 @@ export const overviewService = {
       const chartStart = spDayRange(new Date(now.getTime() - (chartDays - 1) * DAY_MS)).start;
       const since = new Date(Math.min(previousStart.getTime(), chartStart.getTime()));
 
-      const [settings, leadRows, bookingRows, botConversations, conversations, newConversations] = await Promise.all([
+      const [settings, leadRows, appointmentRows, botConversations, conversations, newConversations] = await Promise.all([
         tx.tenantSettings.findUnique({ where: { tenantId }, select: { businessHours: true } }),
         tx.lead.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } }),
-        tx.booking.findMany({
+        tx.appointment.findMany({
           where: { createdAt: { gte: since } },
           select: { createdAt: true, status: true, leadSource: true, total: true },
         }),
@@ -245,14 +240,14 @@ export const overviewService = {
       );
 
       // ── Agendamentos (canceladas não contam como agendamento) ─────────────────
-      const active = bookingRows.filter((b) => b.status !== "CANCELED");
-      const periodBookings = active.filter((b) => inPeriod(b.createdAt));
-      const bookings = trend(periodBookings.length, active.filter((b) => inPrevious(b.createdAt)).length);
+      const active = appointmentRows.filter((appointment) => appointment.status !== "CANCELED");
+      const periodAppointments = active.filter((appointment) => inPeriod(appointment.createdAt));
+      const appointments = trend(periodAppointments.length, active.filter((appointment) => inPrevious(appointment.createdAt)).length);
 
       // ── IA ───────────────────────────────────────────────────────────────────
-      const aiAll = active.filter((b) => b.leadSource === "WHATSAPP");
-      const aiPeriod = aiAll.filter((b) => inPeriod(b.createdAt));
-      const aiBookings = trend(aiPeriod.length, aiAll.filter((b) => inPrevious(b.createdAt)).length);
+      const aiAll = active.filter((appointment) => appointment.leadSource === "WHATSAPP");
+      const aiPeriod = aiAll.filter((appointment) => inPeriod(appointment.createdAt));
+      const aiAppointments = trend(aiPeriod.length, aiAll.filter((appointment) => inPrevious(appointment.createdAt)).length);
 
       const afterHoursRows = aiPeriod.filter((b) => isAfterHours(b.createdAt, hours));
       const afterHoursPrev = aiAll.filter((b) => inPrevious(b.createdAt) && isAfterHours(b.createdAt, hours));
@@ -269,7 +264,7 @@ export const overviewService = {
       for (let i = chartDays - 1; i >= 0; i--) {
         const { dayKey } = spClock(new Date(now.getTime() - i * DAY_MS));
         const [, month, day] = dayKey.split("-");
-        buckets.set(dayKey, { key: dayKey, label: `${day}/${month}`, contacts: 0, leads: 0, bookings: 0, aiBookings: 0 });
+        buckets.set(dayKey, { key: dayKey, label: `${day}/${month}`, contacts: 0, leads: 0, appointments: 0, aiAppointments: 0 });
       }
       for (const c of newConversations) {
         const b = buckets.get(spClock(c.createdAt).dayKey);
@@ -279,11 +274,11 @@ export const overviewService = {
         const b = buckets.get(spClock(l.createdAt).dayKey);
         if (b) b.leads++;
       }
-      for (const bk of active) {
-        const b = buckets.get(spClock(bk.createdAt).dayKey);
+      for (const appointment of active) {
+        const b = buckets.get(spClock(appointment.createdAt).dayKey);
         if (!b) continue;
-        b.bookings++;
-        if (bk.leadSource === "WHATSAPP") b.aiBookings++;
+        b.appointments++;
+        if (appointment.leadSource === "WHATSAPP") b.aiAppointments++;
       }
 
       return {
@@ -291,12 +286,12 @@ export const overviewService = {
         businessHours: hours,
         contacts,
         leads,
-        bookings,
+        appointments,
         ai: {
-          bookings: aiBookings,
+          appointments: aiAppointments,
           afterHours,
           /** Fatia dos agendamentos do período que a IA fechou sozinha (%). */
-          sharePct: ratio(aiPeriod.length, periodBookings.length),
+          sharePct: ratio(aiPeriod.length, periodAppointments.length),
           revenue: aiPeriod.reduce((sum, b) => sum + Number(b.total), 0),
           afterHoursRevenue: afterHoursRows.reduce((sum, b) => sum + Number(b.total), 0),
           /** Conversas em que a IA respondeu no período. */
@@ -305,7 +300,7 @@ export const overviewService = {
           escalated,
           /** Conversas paradas com humano e com mensagem não lida. */
           waiting,
-          /** Conversas atendidas que viraram reserva (%). */
+          /** Conversas atendidas que viraram agendamento (%). */
           conversionPct: ratio(aiPeriod.length, attended),
           /** Conversas resolvidas sem precisar de gente (%). */
           autonomyPct: attended > 0 ? ratio(Math.max(0, attended - escalated), attended) : null,

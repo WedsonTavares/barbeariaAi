@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { getTenantByHost, requireTenantAccess, type AuthContext } from "@diny/core";
+import { getTenantByHost, requireTenantAccess, type AuthContext } from "@barbearia-ai/core";
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "lvh.me";
 

@@ -4,9 +4,8 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isProtected = createRouteMatcher(["/admin(.*)", "/super-admin(.*)"]);
 
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "lvh.me";
-// Domínio raiz (sem subdomínio) não pertence a nenhum tenant específico —
-// decisão do usuário (2026-07-23): manda pro tenant principal (Diny Play).
-const PRIMARY_TENANT_SLUG = "dinyplay";
+// Domínio raiz (sem subdomínio) redireciona para o tenant principal do ambiente.
+const PRIMARY_TENANT_SLUG = process.env.PRIMARY_TENANT_SLUG ?? "barbearia-ai";
 
 export default clerkMiddleware(async (auth, req) => {
   const hostname = (req.headers.get("host") ?? "").split(":")[0];

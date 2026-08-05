@@ -23,7 +23,7 @@ export default function ApiDocsPage() {
         <p className="font-semibold">Isto aqui é produção.</p>
         <p className="mt-1">
           As requisições valem de verdade e caem no tenant desta aba.{" "}
-          <code>agendar</code> cria reserva, <code>cancelar</code> cancela festa e{" "}
+          <code>agendar</code> cria agendamento, <code>cancelar</code> cancela atendimento e{" "}
           <code>reagendar</code> muda horário de cliente real. Para explorar sem
           risco, prefira as rotas de leitura: <code>info</code>,{" "}
           <code>disponibilidade</code>, <code>meus-agendamentos</code>,{" "}

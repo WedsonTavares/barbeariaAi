@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services, schemas, ZodError } from "@diny/core";
+import { services, schemas, ZodError } from "@barbearia-ai/core";
 import { avisarEquipe } from "@/lib/aviso-interno";
 
 /**
- * Cancela de verdade uma reserva identificada por /api/agent/meus-agendamentos.
+ * Cancela de verdade um agendamento identificado por /api/agent/meus-agendamentos.
  * Mantém todo o histórico e não altera CRM, tags, notas ou dados financeiros.
  */
 export async function POST(req: Request) {
   const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-diny-secret") !== secret) {
+  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
   let input;
   try {
-    input = schemas.agentBookingCancelInput.parse(await req.json());
+    input = schemas.agentAppointmentCancelInput.parse(await req.json());
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
@@ -30,15 +30,18 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await services.bookingService.cancelFromAgent(tenant.id, input);
+    const result = await services.appointmentService.cancelFromAgent(tenant.id, input);
 
     // Cancelou de verdade agora: a equipe precisa saber na hora, senão só
     // descobre abrindo o painel. Cancelamento repetido não reavisa.
     if (!result.alreadyCanceled) {
       await avisarEquipe(
         tenant,
-        ["❌ Reserva CANCELADA pelo cliente (via IA)", `📱 ${input.phone}`].join("\n")
+        ["Agendamento CANCELADO pelo cliente (via IA)", `Telefone: ${input.phone}`].join("\n")
       ).catch(() => {});
+      await services.calendarService.syncAppointment(tenant.id, result.appointmentId).catch((error) => {
+        console.error("[google-calendar] sync ao cancelar falhou", error);
+      });
     }
 
     return NextResponse.json({
@@ -55,21 +58,21 @@ export async function POST(req: Request) {
           },
     });
   } catch (error) {
-    if (error instanceof services.BookingAgentError) {
+    if (error instanceof services.AppointmentAgentError) {
       return NextResponse.json(
         { ok: false, reason: "nao_encontrado", message: error.message },
         { status: 404 }
       );
     }
-    // Antes de BookingStateError: BookingPaymentError estende ele e precisa de
+    // Antes de AppointmentStateError: AppointmentPaymentError estende ele e precisa de
     // um motivo próprio pro n8n cair no fluxo humano (/api/agent/cancelamento).
-    if (error instanceof services.BookingPaymentError) {
+    if (error instanceof services.AppointmentPaymentError) {
       return NextResponse.json(
         { ok: false, canceled: false, reason: "financeiro", message: error.message },
         { status: 409 }
       );
     }
-    if (error instanceof services.BookingStateError) {
+    if (error instanceof services.AppointmentStateError) {
       return NextResponse.json(
         { ok: false, reason: "estado", message: error.message },
         { status: 409 }

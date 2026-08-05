@@ -1,6 +1,6 @@
 import { Webhook } from "svix";
 import { headers } from "next/headers";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 
 function slugify(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");

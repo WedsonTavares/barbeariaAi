@@ -1,7 +1,7 @@
 /**
- * Cliente server-only do Evolution API (WhatsApp do Diny), atrás do nginx seguro
- * (evo.dinyfestas.com.br). Toda chamada leva DOIS segredos: a apikey do Evolution e o
- * x-diny-proxy (exigido pelo nginx). Nenhum deles vai pro navegador — só é usado em
+ * Cliente server-only do Evolution API, atrás do proxy seguro do ambiente.
+ * Toda chamada leva DOIS segredos: a apikey do Evolution e o
+ * header de proxy configurado no ambiente. Nenhum deles vai pro navegador — só é usado em
  * server actions / server components.
  *
  * MULTI-TENANT: a `instance` é SEMPRE por tenant (vem de TenantSettings.evolutionInstance,
@@ -11,6 +11,7 @@
 const API_URL = process.env.EVOLUTION_API_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 const PROXY = process.env.EVOLUTION_PROXY_SECRET;
+const PROXY_HEADER = process.env.EVOLUTION_PROXY_HEADER ?? "x-evolution-proxy";
 
 export type WhatsappState = "open" | "connecting" | "close" | "unknown";
 
@@ -19,7 +20,7 @@ export function evolutionConfigured(): boolean {
 }
 
 function headers(): Record<string, string> {
-  return { apikey: API_KEY ?? "", "x-diny-proxy": PROXY ?? "", "content-type": "application/json" };
+  return { apikey: API_KEY ?? "", [PROXY_HEADER]: PROXY ?? "", "content-type": "application/json" };
 }
 
 /** Estado da conexão: open = conectado, connecting = aguardando QR, close = desconectado. */

@@ -1,5 +1,5 @@
 import { requireTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { FunilBoard, type Board } from "./FunilBoard";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export default async function FunilPage() {
       cards.map((c) => ({
         ...c,
         lastMessageAt: c.lastMessageAt.toISOString(),
-        activeBookingAt: c.activeBookingAt?.toISOString() ?? null,
+        activeAppointmentAt: c.activeAppointmentAt?.toISOString() ?? null,
       })),
     ])
   );

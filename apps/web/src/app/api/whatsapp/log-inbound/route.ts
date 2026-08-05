@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveTenant } from "@/lib/tenant";
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 
 /**
  * O n8n chama aqui pra ESPELHAR uma mensagem recebida no inbox nativo

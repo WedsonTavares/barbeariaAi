@@ -5,7 +5,7 @@ import { withTenant } from "../db/withTenant";
  * Resumo da conversa inteira, para quem assume um atendimento sem ter lido tudo.
  *
  * Fica separado do `notes`: aquele é a última nota de EVENTO escrita pela IA
- * (reserva, lead, escalonamento) e é sobrescrita a cada novo evento. Este é a
+ * (agendamento, lead, escalonamento) e é sobrescrita a cada novo evento. Este é a
  * história da conversa do começo ao fim.
  *
  * Usa OpenAI porque é o que o resto do sistema já usa (o agente no n8n roda em
@@ -26,12 +26,12 @@ const MAX_CHARS = 50_000;
 
 const QUEM: Record<string, string> = { CONTACT: "Cliente", BOT: "IA", AGENT: "Equipe" };
 
-const INSTRUCAO = `Você resume conversas de atendimento de uma empresa que aluga brinquedos para festas infantis.
+const INSTRUCAO = `Você resume conversas de atendimento de uma empresa de serviços com agenda.
 
 Escreva em português do Brasil, no máximo 8 linhas, para um atendente que vai assumir a conversa AGORA e não leu nada.
 
 Cubra, quando existir na conversa:
-- o que o cliente quer (brinquedo, data, local, número de crianças)
+- o que o cliente quer (serviço, profissional, data e horário)
 - valores e condições que já foram combinados
 - o que ficou pendente ou prometido
 - o clima do contato (tranquilo, apressado, insatisfeito)

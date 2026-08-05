@@ -1,7 +1,7 @@
 // Tipos (enums) do Prisma re-exportados para os apps não importarem @prisma/client direto.
 export type {
   ExpenseCategory,
-  ReminderType,
+  AppointmentReminderType,
   NotificationType,
   ConversationStage,
 } from "@prisma/client";

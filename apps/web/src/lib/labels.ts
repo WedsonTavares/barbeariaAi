@@ -1,46 +1,48 @@
 /** Labels em pt-BR para os enums do banco (UI nunca mostra o enum cru). */
 
-export const BOOKING_STATUS: Record<string, string> = {
-  LEAD: "Lead",
-  QUOTE_SENT: "Orçamento enviado",
-  WAITING_DEPOSIT: "Aguardando sinal",
-  CONFIRMED: "Confirmada",
-  IN_DELIVERY: "Em entrega",
-  MOUNTED: "Montado",
-  PICKED_UP: "Retirado",
-  FINISHED: "Finalizada",
-  CANCELED: "Cancelada",
+export const APPOINTMENT_STATUS: Record<string, string> = {
+  REQUESTED: "Solicitado",
+  CONFIRMED: "Confirmado",
+  ARRIVED: "Cliente chegou",
+  IN_SERVICE: "Em atendimento",
+  COMPLETED: "Concluído",
+  NO_SHOW: "Não compareceu",
+  CANCELED: "Cancelado",
 };
 
 export const PAYMENT_STATUS: Record<string, string> = {
-  PENDING: "Pagamento pendente",
-  DEPOSIT_PAID: "Sinal pago",
+  PENDING: "Pendente",
+  PARTIAL: "Parcial",
   PAID: "Pago",
   OVERDUE: "Atrasado",
   REFUNDED: "Reembolsado",
 };
 
-export const TOY_CATEGORY: Record<string, string> = {
-  CAMA_ELASTICA: "Cama elástica",
-  PISCINA_BOLINHAS: "Piscina de bolinhas",
-  INFLAVEL: "Inflável",
-  ESCORREGADOR: "Escorregador",
-  MESA_CADEIRA: "Mesa e cadeira",
+export const SERVICE_CATEGORY: Record<string, string> = {
+  HAIR: "Cabelo",
+  BEARD: "Barba",
+  NAILS: "Unhas",
+  BROWS: "Sobrancelha",
+  AESTHETICS: "Estética",
+  TATTOO: "Tatuagem",
+  MASSAGE: "Massagem",
   OUTRO: "Outro",
+  OTHER: "Outro",
 };
 
-export const TOY_STATUS: Record<string, string> = {
-  AVAILABLE: "Disponível",
-  RENTED: "Alugado",
-  MAINTENANCE: "Manutenção",
-  RETIRED: "Aposentado",
+export const SERVICE_STATUS: Record<string, string> = {
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
+  ARCHIVED: "Arquivado",
 };
 
 export const EXPENSE_CATEGORY: Record<string, string> = {
-  FUEL: "Combustível",
-  HELPER: "Ajudante",
-  MAINTENANCE: "Manutenção",
-  CLEANING: "Limpeza",
+  COMMISSION: "Comissão",
+  PRODUCTS: "Produtos",
+  RENT: "Aluguel",
+  UTILITIES: "Contas",
+  MARKETING: "Marketing",
+  SALARY: "Salário",
   OTHER: "Outro",
 };
 

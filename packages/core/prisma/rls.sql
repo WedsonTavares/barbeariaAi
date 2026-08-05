@@ -20,9 +20,12 @@ CREATE POLICY tenant_app_access ON "Tenant" FOR ALL TO app_runtime USING (true) 
 DO $$
 DECLARE t text;
 DECLARE tables text[] := ARRAY[
-  'TenantSettings','Toy','Customer','Lead','Quote','Booking','BookingItem',
-  'Payment','Expense','Maintenance','BookingReminder','Notification','AuditLog',
-  'Conversation','Message','EventPhoto'
+  'TenantSettings','Customer','Lead','Quote',
+  'Service','Professional','ProfessionalService','Resource','WorkingSchedule',
+  'TimeOff','Appointment','AppointmentService','CalendarConnection',
+  'CalendarSubscription','Commission','WaitlistEntry',
+  'Payment','Expense','AppointmentReminder','Notification','AuditLog',
+  'Conversation','Message','PortfolioPhoto'
 ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -41,7 +44,7 @@ END $$;
 CREATE OR REPLACE FUNCTION get_due_reminders(p_now timestamptz)
 RETURNS TABLE (id text, "tenantId" text)
 LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-  SELECT id, "tenantId" FROM "BookingReminder"
+  SELECT id, "tenantId" FROM "AppointmentReminder"
   WHERE status = 'SCHEDULED' AND "fireAt" <= p_now
   ORDER BY "fireAt" LIMIT 500;
 $$;

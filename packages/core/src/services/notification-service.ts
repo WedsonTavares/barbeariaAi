@@ -15,7 +15,7 @@ const actionableUnread = {
 export async function pushNotification(
   tx: Tx,
   tenantId: string,
-  n: { type: NotificationType; title: string; body?: string; bookingId?: string }
+  n: { type: NotificationType; title: string; body?: string; appointmentId?: string }
 ) {
   return tx.notification.create({ data: { tenantId, ...n } });
 }
@@ -35,7 +35,7 @@ export const notificationService = {
     ),
 
   /**
-   * Os sinais que o painel pisca no topo, numa leitura só.
+   * Os avisos que o painel atualiza no topo, numa leitura só.
    *
    * São DUAS origens diferentes: agendamento novo, cancelamento e pedido de
    * atendimento humano viram registro de Notification; mensagem comum não —
@@ -45,7 +45,7 @@ export const notificationService = {
    * `ultimoAvisoEm` deixa o cliente saber se apareceu algo NOVO desde a última
    * consulta sem precisar comparar listas.
    */
-  sinais: (tenantId: string) =>
+  liveCounters: (tenantId: string) =>
     withTenant(tenantId, async (tx) => {
       const [avisos, conversas, ultimo] = await Promise.all([
         tx.notification.count({ where: actionableUnread }),
@@ -71,7 +71,7 @@ export const notificationService = {
       // na tela nem no contador. Assim o histórico antigo também é saneado.
       tx.notification.updateMany({ where: { read: false }, data: { read: true } })
     ),
-  create: (tenantId: string, n: { type: NotificationType; title: string; body?: string; bookingId?: string }) =>
+  create: (tenantId: string, n: { type: NotificationType; title: string; body?: string; appointmentId?: string }) =>
     withTenant(tenantId, (tx) => pushNotification(tx, tenantId, n)),
 
   /** Uma única pendência de atendimento humano por telefone até ser lida. */

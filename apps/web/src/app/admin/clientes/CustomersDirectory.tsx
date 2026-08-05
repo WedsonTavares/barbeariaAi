@@ -36,7 +36,7 @@ export type CustomerDirectoryItem = {
   neighborhood: string | null;
   address: string | null;
   imageConsent: boolean;
-  bookingCount: number;
+  appointmentCount: number;
   duplicateCount: number;
   source: string | null;
   stage: string | null;
@@ -188,7 +188,7 @@ function EditCustomerDialog({
             <span className="text-[11px] text-[var(--color-muted)]">protegido</span>
           </div>
           <p className="mt-1 text-[11px] text-[var(--color-muted)]">
-            O número liga este cliente às conversas e reservas, por isso não é alterado aqui.
+            O número liga este cliente às conversas e agendamentos, por isso não é alterado aqui.
           </p>
         </div>
 
@@ -294,7 +294,7 @@ function RemoveCustomerDialog({
   }
 
   if (!customer) return null;
-  const hasBookings = customer.bookingCount > 0;
+  const hasAppointments = customer.appointmentCount > 0;
   const isDuplicate = customer.duplicateCount > 1;
 
   return (
@@ -330,11 +330,11 @@ function RemoveCustomerDialog({
           </span>
           <div className="min-w-0">
             <h2 id="remove-customer-title" className="font-extrabold">
-              {hasBookings ? "Este cadastro não pode ser removido" : `Remover ${customer.name}?`}
+              {hasAppointments ? "Este cadastro não pode ser removido" : `Remover ${customer.name}?`}
             </h2>
             <p id="remove-customer-description" className="mt-1 text-sm leading-5 text-[var(--color-muted)]">
-              {hasBookings
-                ? `Há ${customer.bookingCount} festa${customer.bookingCount === 1 ? "" : "s"} ligada${customer.bookingCount === 1 ? "" : "s"} a ele. O histórico e as reservas serão preservados.`
+              {hasAppointments
+                ? `Há ${customer.appointmentCount} agendamento${customer.appointmentCount === 1 ? "" : "s"} ligado${customer.appointmentCount === 1 ? "" : "s"} a ele. O histórico será preservado.`
                 : isDuplicate
                   ? "Existe outro cadastro com o mesmo WhatsApp. Se os dados forem equivalentes, este registro pode ser removido e os vínculos serão mantidos no outro."
                   : "Somente o cadastro será excluído. Se houver conversa, lead ou orçamento ligado a ele, o sistema bloqueará a ação para preservar o histórico."}
@@ -342,7 +342,7 @@ function RemoveCustomerDialog({
           </div>
         </div>
 
-        {hasBookings ? (
+        {hasAppointments ? (
           <div className="mt-5 flex justify-end">
             <button
               type="button"
@@ -425,7 +425,7 @@ function ArchiveDialog({
             </h2>
             <p className="mt-1 text-sm leading-5 text-[var(--color-muted)]">
               {archiving
-                ? "Sai de Clientes, do inbox e do funil. Nada é apagado: reservas, conversas e leads continuam guardados, e você pode restaurar quando quiser. Se o contato mandar uma mensagem nova, ele volta sozinho."
+                ? "Sai de Clientes, do inbox e do funil. Nada é apagado: agendamentos, conversas e leads continuam guardados, e você pode restaurar quando quiser. Se o contato mandar uma mensagem nova, ele volta sozinho."
                 : "Volta para Clientes e para o inbox, do jeito que estava."}
             </p>
           </div>
@@ -596,7 +596,7 @@ export function CustomersDirectory({
                   {initials(item.name, item.phone)}
                 </span>
 
-                {/* Só nome e telefone: o resto (etapa, festas, origem, bairro, e-mail,
+                {/* Só nome e telefone: o resto (etapa, agendamentos, origem, bairro, e-mail,
                     duplicidade) continua no cadastro e abre ao clicar no nome. */}
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5">
                   {destination ? (

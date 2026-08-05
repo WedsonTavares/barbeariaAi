@@ -1,6 +1,6 @@
 import { Images } from "lucide-react";
 
-import { services } from "@diny/core";
+import { services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { GaleriaBoard, type PhotoCard } from "./GaleriaBoard";
 

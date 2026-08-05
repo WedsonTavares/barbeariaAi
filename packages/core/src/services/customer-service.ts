@@ -38,7 +38,7 @@ export type CustomerDirectoryEntry = {
   neighborhood: string | null;
   address: string | null;
   imageConsent: boolean;
-  bookingCount: number;
+  appointmentCount: number;
   duplicateCount: number;
   source: string | null;
   stage: string | null;
@@ -50,7 +50,7 @@ export type CustomerDirectoryEntry = {
 
 export type CustomerRemovalResult =
   | { removed: true; replacementId: string | null }
-  | { removed: false; reason: "NOT_FOUND" | "BOOKINGS" | "HISTORY" | "DATA" };
+  | { removed: false; reason: "NOT_FOUND" | "APPOINTMENTS" | "HISTORY" | "DATA" };
 
 /**
  * Uma linha do diretório pode ser sustentada por até três registros do mesmo
@@ -68,7 +68,7 @@ export const customerService = {
     withTenant(tenantId, (tx) => tx.customer.findMany({ orderBy: { name: "asc" } })),
   /**
    * Diretório de pessoas do painel. Customer continua sendo a entidade usada por
-   * reservas; aqui apenas reunimos também Conversation e Lead pelo telefone
+   * agendamentos; aqui apenas reunimos também Conversation e Lead pelo telefone
    * normalizado para que um contato novo não suma da tela de Clientes.
    *
    * `archived: true` mostra a lixeira em vez da lista ativa. Os dois lados usam a
@@ -90,7 +90,7 @@ export const customerService = {
             address: true,
             imageConsent: true,
             createdAt: true,
-            _count: { select: { bookings: true } },
+            _count: { select: { appointments: true } },
           },
         }),
         tx.conversation.findMany({
@@ -150,7 +150,7 @@ export const customerService = {
       for (const customer of customers) {
         const phone = customerPhoneKey(customer.phone);
         const current = fallbackCustomerByPhone.get(phone);
-        if (!current || customer._count.bookings > current._count.bookings) {
+        if (!current || customer._count.appointments > current._count.appointments) {
           fallbackCustomerByPhone.set(phone, customer);
         }
       }
@@ -176,7 +176,7 @@ export const customerService = {
           neighborhood: customer.neighborhood,
           address: customer.address,
           imageConsent: customer.imageConsent,
-          bookingCount: customer._count.bookings,
+          appointmentCount: customer._count.appointments,
           duplicateCount: phoneCounts.get(phone) ?? 1,
           source: lead?.source ?? (conversation ? "WHATSAPP" : null),
           stage: conversation?.stage ?? null,
@@ -208,7 +208,7 @@ export const customerService = {
           neighborhood: lead?.neighborhood ?? null,
           address: null,
           imageConsent: false,
-          bookingCount: 0,
+          appointmentCount: 0,
           duplicateCount: 0,
           source: lead?.source ?? "WHATSAPP",
           stage: conversation.stage,
@@ -243,7 +243,7 @@ export const customerService = {
           neighborhood: lead.neighborhood,
           address: null,
           imageConsent: false,
-          bookingCount: 0,
+          appointmentCount: 0,
           duplicateCount: 0,
           source: lead.source,
           stage: null,
@@ -259,10 +259,10 @@ export const customerService = {
   get: (tenantId: string, id: string) =>
     withTenant(tenantId, (tx) => tx.customer.findFirst({ where: { id } })),
   /**
-   * Ficha do cliente: dados + todas as festas (itens, pagamentos) + o CONTEXTO do
+   * Ficha do cliente: dados + todos os agendamentos (serviços, pagamentos) + o CONTEXTO do
    * atendimento no WhatsApp (resumo da IA, etapa, tags e as últimas mensagens).
    *
-   * Antes a ficha só mostrava reserva: quem tinha conversado sem fechar nada não
+   * Antes a ficha só mostrava agendamento: quem tinha conversado sem fechar nada não
    * deixava rastro nenhum aqui. A conversa é buscada pelo vínculo `customerId` e,
    * como fallback, pelo telefone (o vínculo só é criado quando a IA fecha algo).
    * Tudo dentro do `withTenant` — a conversa de outra empresa não é alcançável
@@ -273,9 +273,9 @@ export const customerService = {
       const customer = await tx.customer.findFirst({
         where: { id },
         include: {
-          bookings: {
-            orderBy: { eventDate: "desc" },
-            include: { items: { include: { toy: true } }, payments: true },
+          appointments: {
+            orderBy: { startAt: "desc" },
+            include: { services: { include: { service: true } }, payments: true, professional: true },
           },
         },
       });
@@ -346,8 +346,8 @@ export const customerService = {
    *
    * Serve o atalho "Agendar" a partir de uma conversa: o telefone já é
    * conhecido, e quem agenda digita o nome do responsável na hora. Sem isso o
-   * fluxo obrigava a cadastrar o cliente numa tela antes de conseguir marcar
-   * a festa em outra.
+   * fluxo obrigava a cadastrar o cliente numa tela antes de conseguir agendar
+   * em outra.
    *
    * Nome só é ATUALIZADO quando o cadastro ainda não tem um — quem agenda pode
    * digitar um apelido, e isso não pode apagar o nome completo já cadastrado.
@@ -424,7 +424,7 @@ export const customerService = {
 
   /**
    * Arquiva a pessoa: some do painel (Clientes, inbox e funil) sem apagar linha
-   * nenhuma — reservas, mensagens e leads continuam lá. É a saída segura para
+   * nenhuma — agendamentos, mensagens e leads continuam lá. É a saída segura para
    * contato errado, teste e spam, já que excluir de verdade esbarra no histórico.
    *
    * Age nos três registros do mesmo telefone de uma vez (ver `DirectoryTarget`).
@@ -468,8 +468,8 @@ export const customerService = {
     }),
 
   /**
-   * "Remover" significa excluir apenas um cadastro descartável. Reservas nunca
-   * são apagadas. Conversas/leads/orçamentos também ficam preservados; quando há
+   * "Remover" significa excluir apenas um cadastro descartável. Agendamentos nunca
+   * são apagados. Conversas/leads/orçamentos também ficam preservados; quando há
    * outro cadastro do mesmo telefone, os vínculos migram para ele antes da limpeza.
    */
   removeRegistration: async (
@@ -493,11 +493,11 @@ export const customerService = {
             neighborhood: true,
             imageConsent: true,
             createdAt: true,
-            _count: { select: { bookings: true } },
+            _count: { select: { appointments: true } },
           },
         });
         if (!customer) return { removed: false, reason: "NOT_FOUND" };
-        if (customer._count.bookings > 0) return { removed: false, reason: "BOOKINGS" };
+        if (customer._count.appointments > 0) return { removed: false, reason: "APPOINTMENTS" };
 
         const phone = customerPhoneKey(customer.phone);
         const [otherCustomers, conversations, leads, quoteCount] = await Promise.all([
@@ -512,7 +512,7 @@ export const customerService = {
               neighborhood: true,
               imageConsent: true,
               createdAt: true,
-              _count: { select: { bookings: true } },
+              _count: { select: { appointments: true } },
             },
           }),
           tx.conversation.findMany({ select: { id: true, phone: true, customerId: true } }),
@@ -525,7 +525,7 @@ export const customerService = {
             .filter((candidate) => customerPhoneKey(candidate.phone) === phone)
             .sort(
               (a, b) =>
-                b._count.bookings - a._count.bookings ||
+                b._count.appointments - a._count.appointments ||
                 a.createdAt.getTime() - b.createdAt.getTime(),
             )[0] ?? null;
         const relatedConversations = conversations.filter(
@@ -571,7 +571,7 @@ export const customerService = {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
-        return { removed: false, reason: "BOOKINGS" };
+        return { removed: false, reason: "APPOINTMENTS" };
       }
       throw error;
     }

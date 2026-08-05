@@ -1,5 +1,5 @@
 {
-  "name": "@diny/worker",
+  "name": "@barbearia-ai/worker",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@diny/core": "workspace:*",
+    "@barbearia-ai/core": "workspace:*",
     "bullmq": "^5.34.0",
     "ioredis": "^5.4.0"
   },

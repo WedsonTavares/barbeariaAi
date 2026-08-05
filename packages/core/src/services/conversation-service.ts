@@ -11,7 +11,7 @@ export const CONVERSATION_STAGES = [
   "IA_ATENDENDO",
   "SUPORTE_HUMANO",
   "AGENDADO",
-  "POS_FESTA",
+  "POS_ATENDIMENTO",
 ] as const satisfies readonly ConversationStage[];
 
 /**
@@ -24,7 +24,7 @@ export const STAGE_TAG: Record<ConversationStage, string | null> = {
   IA_ATENDENDO: null, // fluxo normal: sem tag (a IA responde)
   SUPORTE_HUMANO: "atendimento-humano",
   AGENDADO: "agendado",
-  POS_FESTA: "pos-festa",
+  POS_ATENDIMENTO: "pos-atendimento",
 };
 
 const ALL_STAGE_TAGS = Object.values(STAGE_TAG).filter((t): t is string => Boolean(t));
@@ -32,34 +32,32 @@ const ALL_STAGE_TAGS = Object.values(STAGE_TAG).filter((t): t is string => Boole
 /** Quantas mensagens por página no inbox (abertura e cada rolagem pra cima). */
 export const MENSAGENS_POR_PAGINA = 50;
 
-/** Reservas ainda por acontecer, indexadas pelos dois jeitos de achar o dono. */
-type ActiveBookings = { byCustomer: Map<string, Date>; byPhone: Map<string, Date> };
+/** Agendamentos ainda por acontecer, indexados pelos dois jeitos de achar o dono. */
+type ActiveAppointments = { byCustomer: Map<string, Date>; byPhone: Map<string, Date> };
 
-const NO_ACTIVE_BOOKINGS: ActiveBookings = { byCustomer: new Map(), byPhone: new Map() };
+const NO_ACTIVE_APPOINTMENTS: ActiveAppointments = { byCustomer: new Map(), byPhone: new Map() };
 
 /**
- * Carrega as reservas ativas (confirmada/em entrega/montada e ainda não retirada).
+ * Carrega os agendamentos ativos.
  * É a base para derivar AGENDADO na leitura, em vez de confiar no `stage` gravado:
- * a festa acontecer, ser cancelada ou o horário passar não escreve no banco.
+ * o atendimento acontecer, ser cancelado ou o horário passar não escreve no banco.
  */
-async function loadActiveBookings(tx: Tx, now: Date): Promise<ActiveBookings> {
-  const bookings = await tx.booking.findMany({
-    where: { status: { in: ["CONFIRMED", "IN_DELIVERY", "MOUNTED"] }, pickupTime: { gte: now } },
-    orderBy: [{ setupTime: "asc" }, { eventDate: "asc" }, { id: "asc" }],
+async function loadActiveAppointments(tx: Tx, now: Date): Promise<ActiveAppointments> {
+  const appointments = await tx.appointment.findMany({
+    where: { status: { in: ["REQUESTED", "CONFIRMED", "ARRIVED", "IN_SERVICE"] }, endAt: { gte: now } },
+    orderBy: [{ startAt: "asc" }, { id: "asc" }],
     select: {
       customerId: true,
-      eventDate: true,
-      setupTime: true,
+      startAt: true,
       customer: { select: { phone: true } },
     },
   });
   const byCustomer = new Map<string, Date>();
   const byPhone = new Map<string, Date>();
-  for (const booking of bookings) {
-    const at = booking.setupTime ?? booking.eventDate;
-    if (!byCustomer.has(booking.customerId)) byCustomer.set(booking.customerId, at);
-    const phone = customerPhoneKey(booking.customer.phone);
-    if (!byPhone.has(phone)) byPhone.set(phone, at);
+  for (const appointment of appointments) {
+    if (!byCustomer.has(appointment.customerId)) byCustomer.set(appointment.customerId, appointment.startAt);
+    const phone = customerPhoneKey(appointment.customer.phone);
+    if (!byPhone.has(phone)) byPhone.set(phone, appointment.startAt);
   }
   return { byCustomer, byPhone };
 }
@@ -69,7 +67,7 @@ async function loadActiveBookings(tx: Tx, now: Date): Promise<ActiveBookings> {
  *
  * O `contactName` da conversa é o pushName do WhatsApp — o cliente escolhe e
  * muda quando quiser. O nome do `Customer` foi digitado pela equipe (ou veio
- * junto com uma reserva), então é o confiável. Sem isso, um contato com festa
+ * junto com um agendamento), então é o confiável. Sem isso, um contato com atendimento
  * fechada continuava aparecendo como "Bella" no funil enquanto o cadastro
  * dizia "Isabella Martins".
  *
@@ -86,10 +84,10 @@ async function customerNames(tx: Tx, ids: (string | null | undefined)[]): Promis
   return new Map(clientes.map((c) => [c.id, c.name]));
 }
 
-/** Data da próxima festa desta conversa (pelo vínculo ou pelo telefone), se houver. */
-function activeBookingAt(
+/** Data do próximo atendimento desta conversa (pelo vínculo ou pelo telefone), se houver. */
+function activeAppointmentAt(
   row: { phone: string; customerId?: string | null },
-  active: ActiveBookings
+  active: ActiveAppointments
 ): Date | null {
   return (
     (row.customerId ? active.byCustomer.get(row.customerId) : undefined) ??
@@ -99,16 +97,16 @@ function activeBookingAt(
 }
 
 /**
- * Etapa exibida. AGENDADO só vale enquanto existe reserva ativa — sem ela, o card
+ * Etapa exibida. AGENDADO só vale enquanto existe agendamento ativo — sem ele, o card
  * volta para o fluxo natural (Suporte se a tag humana estiver marcada, senão IA).
  * Regra única para Funil, inbox e detalhe do contato: a etapa não fica "presa"
- * em Agendado depois que a festa passou ou foi cancelada.
+ * em Agendado depois que o atendimento passou ou foi cancelado.
  */
 function displayStage(
   row: { stage: ConversationStage; tags: string[] },
-  bookingAt: Date | null
+  appointmentAt: Date | null
 ): ConversationStage {
-  if (bookingAt) return "AGENDADO";
+  if (appointmentAt) return "AGENDADO";
   if (row.stage !== "AGENDADO") return row.stage;
   return row.tags.includes("atendimento-humano") ? "SUPORTE_HUMANO" : "IA_ATENDENDO";
 }
@@ -129,8 +127,8 @@ async function takeOverConversation(tx: Tx, id: string) {
 }
 
 /**
- * Fecha o ciclo do atendimento quando uma reserva é criada pelo agente.
- * Recebe a transação da reserva para que booking + etapa + contexto sejam atômicos:
+   * Fecha o ciclo do atendimento quando um agendamento é criado pelo agente.
+   * Recebe a transação do agendamento para que agenda + etapa + contexto sejam atômicos:
  * ou tudo é persistido, ou tudo sofre rollback.
  */
 export async function markConversationScheduled(
@@ -145,14 +143,14 @@ export async function markConversationScheduled(
   if (!found) return null;
 
   // Usa o mesmo lock de toggleTag para não perder uma tag marcada por outro
-  // atendente enquanto a reserva muda o card de coluna.
+  // atendente enquanto o agendamento muda o card de coluna.
   await lockConversation(tx, found.id);
   const conversation = await tx.conversation.findUnique({
     where: { tenantId_phone: { tenantId, phone: input.phone } },
   });
   if (!conversation) return null;
-  // Retry de uma reserva antiga pode reparar cards que ainda ficaram no fluxo
-  // da IA, mas nunca desfaz uma tomada humana nem regride um pós-festa.
+  // Retry de um agendamento antigo pode reparar cards que ainda ficaram no fluxo
+  // da IA, mas nunca desfaz uma tomada humana nem regride um pós-atendimento.
   if (input.repairOnly && !["NOVO_LEAD", "IA_ATENDENDO"].includes(conversation.stage)) {
     return conversation;
   }
@@ -220,8 +218,8 @@ export async function recordMessage(
 export const conversationService = {
   /**
    * Lista de conversas (mais recentes primeiro) pro inbox. A etapa vem derivada
-   * da reserva ativa, igual ao funil — sem isso o chip ficava "Agendado" para
-   * sempre, mesmo com a festa já realizada ou cancelada.
+   * do agendamento ativo, igual ao funil — sem isso o chip ficava "Agendado" para
+   * sempre, mesmo com atendimento já realizado ou cancelado.
    */
   list: (tenantId: string, now = new Date()) =>
     withTenant(tenantId, async (tx) => {
@@ -230,12 +228,12 @@ export const conversationService = {
         orderBy: { lastMessageAt: "desc" },
         take: 100,
       });
-      const active = rows.length ? await loadActiveBookings(tx, now) : NO_ACTIVE_BOOKINGS;
+      const active = rows.length ? await loadActiveAppointments(tx, now) : NO_ACTIVE_APPOINTMENTS;
       const nomes = await customerNames(tx, rows.map((r) => r.customerId));
       return rows.map((row) => ({
         ...row,
         contactName: (row.customerId && nomes.get(row.customerId)) || row.contactName,
-        stage: displayStage(row, activeBookingAt(row, active)),
+        stage: displayStage(row, activeAppointmentAt(row, active)),
       }));
     }),
 
@@ -272,12 +270,12 @@ export const conversationService = {
         : messages.length;
 
       if (convo.unread > 0) await tx.conversation.update({ where: { id }, data: { unread: 0 } });
-      const active = await loadActiveBookings(tx, now);
+      const active = await loadActiveAppointments(tx, now);
       const nomes = await customerNames(tx, [convo.customerId]);
       return {
         ...convo,
         contactName: (convo.customerId && nomes.get(convo.customerId)) || convo.contactName,
-        stage: displayStage(convo, activeBookingAt(convo, active)),
+        stage: displayStage(convo, activeAppointmentAt(convo, active)),
         unread: 0,
         messages,
         temMaisAntigas,
@@ -377,8 +375,8 @@ export const conversationService = {
    */
   /**
    * `previousStage` no retorno permite que quem chamou saiba se foi uma
-   * TRANSIÇÃO de verdade (ex.: entrou em POS_FESTA agora) — é assim que a
-   * action web decide se dispara a mensagem automática do pós-festa, sem esta
+   * TRANSIÇÃO de verdade (ex.: entrou em POS_ATENDIMENTO agora) — é assim que a
+   * action web decide se dispara a mensagem automática do pós-atendimento, sem esta
    * função (core) precisar saber nada de WhatsApp/Evolution.
    */
   toggleTag: (tenantId: string, id: string, tag: string, on: boolean) =>
@@ -401,16 +399,16 @@ export const conversationService = {
             stage = "IA_ATENDENDO";
           }
         }
-      } else if (tag === "pos-festa") {
+      } else if (tag === "pos-atendimento") {
         // Mesma forma do atendimento-humano acima: marcar/desmarcar a tag na
         // mão tem o MESMO efeito de arrastar o card no Funil (ver STAGE_TAG).
         if (on) {
           const kept = c.tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
           tags = [...new Set([...kept, tag])];
-          stage = "POS_FESTA";
+          stage = "POS_ATENDIMENTO";
         } else {
           tags = c.tags.filter((t) => t !== tag);
-          if (c.stage === "POS_FESTA") {
+          if (c.stage === "POS_ATENDIMENTO") {
             tags = tags.filter((t) => !ALL_STAGE_TAGS.includes(t));
             stage = "IA_ATENDENDO";
           }
@@ -506,7 +504,7 @@ export const conversationService = {
         select: { sender: true, text: true, createdAt: true },
       });
       const historyTruncated = rows.length > take;
-      const active = await loadActiveBookings(tx, now);
+      const active = await loadActiveAppointments(tx, now);
 
       return {
         found: true,
@@ -522,7 +520,7 @@ export const conversationService = {
           conversation.tags.some((tag) => BOT_SILENCING_TAGS.includes(tag)),
         silencedBy: BOT_SILENCING_TAGS,
         botPaused: conversation.botPaused,
-        stage: displayStage(conversation, activeBookingAt(conversation, active)),
+        stage: displayStage(conversation, activeAppointmentAt(conversation, active)),
         notes: conversation.notes,
         notesAt: conversation.notesAt,
         lastMessageAt: conversation.lastMessageAt,
@@ -553,8 +551,8 @@ export const conversationService = {
     }),
 
   /**
-   * Quadro do funil. A coluna AGENDADO é derivada da reserva ativa, não apenas
-   * do stage persistido: isso cobre reservas antigas/manuais, cancelamento e a
+   * Quadro do funil. A coluna AGENDADO é derivada do agendamento ativo, não apenas
+   * do stage persistido: isso cobre agendamentos manuais, cancelamento e a
    * passagem natural do horário sem precisar escrever no banco durante a leitura.
    * O estado da IA continua independente em botPaused.
    */
@@ -569,43 +567,17 @@ export const conversationService = {
           botPaused: true, unread: true, lastMessageAt: true, stage: true, notes: true,
         },
       });
-      const activeBookings = rows.length
-        ? await tx.booking.findMany({
-            where: {
-              status: { in: ["CONFIRMED", "IN_DELIVERY", "MOUNTED"] },
-              pickupTime: { gte: now },
-            },
-            orderBy: [{ setupTime: "asc" }, { eventDate: "asc" }, { id: "asc" }],
-            select: {
-              customerId: true,
-              eventDate: true,
-              setupTime: true,
-              customer: { select: { phone: true } },
-            },
-          })
-        : [];
-      const activeBookingByCustomer = new Map<string, Date>();
-      const activeBookingByPhone = new Map<string, Date>();
-      for (const booking of activeBookings) {
-        const at = booking.setupTime ?? booking.eventDate;
-        if (!activeBookingByCustomer.has(booking.customerId)) {
-          activeBookingByCustomer.set(booking.customerId, at);
-        }
-        const phone = customerPhoneKey(booking.customer.phone);
-        if (!activeBookingByPhone.has(phone)) {
-          activeBookingByPhone.set(phone, at);
-        }
-      }
+      const active = rows.length ? await loadActiveAppointments(tx, now) : NO_ACTIVE_APPOINTMENTS;
       const nomes = await customerNames(tx, rows.map((r) => r.customerId));
       const cards = rows.map(({ customerId, ...row }) => {
         const phone = customerPhoneKey(row.phone);
         // Nome do cadastro manda sobre o pushName (ver customerNames).
         const contactName = (customerId && nomes.get(customerId)) || row.contactName;
-        const activeBookingAt =
-          (customerId ? activeBookingByCustomer.get(customerId) : undefined) ??
-          activeBookingByPhone.get(phone) ??
+        const activeAppointmentAt =
+          (customerId ? active.byCustomer.get(customerId) : undefined) ??
+          active.byPhone.get(phone) ??
           null;
-        const stage: ConversationStage = activeBookingAt
+        const stage: ConversationStage = activeAppointmentAt
           ? "AGENDADO"
           : row.stage === "AGENDADO"
             ? (row.tags.includes("atendimento-humano") ? "SUPORTE_HUMANO" : "IA_ATENDENDO")
@@ -614,7 +586,7 @@ export const conversationService = {
           ...row,
           contactName,
           stage,
-          activeBookingAt,
+          activeAppointmentAt,
         };
       });
       const byStage = Object.fromEntries(
@@ -630,7 +602,7 @@ export const conversationService = {
    * Preserva as tags livres do usuário (só troca as tags de etapa).
    *
    * Devolve `previousStage` pra quem chama decidir side effects de TRANSIÇÃO
-   * (ex.: mandar a mensagem automática só ao ENTRAR em POS_FESTA, não a cada
+   * (ex.: mandar a mensagem automática só ao ENTRAR em POS_ATENDIMENTO, não a cada
    * re-drag). Não usa `conversationService.get` pra isso de propósito: ele zera
    * o não-lido como efeito colateral, o que aqui seria um bug — ninguém abriu
    * a conversa, só arrastou o card.
@@ -672,14 +644,14 @@ export const conversationService = {
     }),
 
   /**
-   * A pergunta de pós-festa já foi feita a esse contato nas últimas `horas`?
+   * A pergunta de pós-atendimento já foi feita a esse contato nas últimas `horas`?
    *
-   * A guarda por transição de etapa (`previousStage !== "POS_FESTA"`) não cobre
+   * A guarda por transição de etapa (`previousStage !== "POS_ATENDIMENTO"`) não cobre
    * tirar o card da coluna e devolver — para o sistema é entrada nova, e o
    * cliente recebia a mesma pergunta duas vezes. Aqui a checagem é pela
    * MENSAGEM, que é o que ele de fato vê.
    */
-  posFestaJaPerguntado: (tenantId: string, phone: string, texto: string, horas = 24) =>
+  postServiceAlreadyAsked: (tenantId: string, phone: string, texto: string, horas = 24) =>
     withTenant(tenantId, async (tx) => {
       const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
       if (!c) return false;
@@ -692,34 +664,34 @@ export const conversationService = {
     }),
 
   /**
-   * Conversas paradas em Pós-festa há mais de `horas` sem nenhuma mensagem.
+   * Conversas paradas em Pós-atendimento há mais de `horas` sem nenhuma mensagem.
    *
    * Sem isso o contato fica preso: o card não sai da coluna e — pior — toda
-   * mensagem futura dele cai no agente de pós-festa, que só sabe coletar nota.
+   * mensagem futura dele cai no agente de pós-atendimento, que só sabe coletar nota.
    * Quem ia avaliar já avaliou; o resto volta pro atendimento normal.
    */
-  posFestaAbandonadas: (tenantId: string, horas: number) =>
+  abandonedPostServiceConversations: (tenantId: string, horas: number) =>
     withTenant(tenantId, async (tx) => {
       const limite = new Date(Date.now() - horas * 3_600_000);
       return tx.conversation.findMany({
-        where: { tags: { has: "pos-festa" }, lastMessageAt: { lt: limite } },
+        where: { tags: { has: "pos-atendimento" }, lastMessageAt: { lt: limite } },
         select: { id: true, phone: true },
       });
     }),
 
   /**
    * Tira UMA tag por telefone — pro fluxo que "desarma" um roteamento sem ser
-   * um toggle de checkbox (ex.: a IA concluindo o pós-festa via `encerrar_pos_festa`).
+   * um toggle de checkbox (ex.: a IA concluindo o pós-atendimento via `encerrar_pos_atendimento`).
    *
-   * Pra `pos-festa` especificamente, sai da etapa POS_FESTA de volta pra
+   * Pra `pos-atendimento` especificamente, sai da etapa POS_ATENDIMENTO de volta pra
    * IA_ATENDENDO quando a tag sai — MESMO comportamento de desmarcar a tag na
    * mão pelo checkbox (`toggleTag`). Sem isso, concluir pela IA e desmarcar na
-   * mão faziam coisas diferentes pro mesmo "sair do pós-festa": um deixava o
+   * mão faziam coisas diferentes pro mesmo "sair do pós-atendimento": um deixava o
    * card preso lá (sem coluna "Concluído" pra ele ir), o outro tirava.
    *
    * A correção de stage é checada INDEPENDENTE da tag já ter saído ou não —
    * de propósito: uma conversa que perdeu a tag (pela rede de segurança em
-   * /positiva, por exemplo) mas ainda ficou presa em POS_FESTA precisa sair
+   * /positiva, por exemplo) mas ainda ficou presa em POS_ATENDIMENTO precisa sair
    * na PRÓXIMA chamada, mesmo sem a tag pra remover de novo. Só "já não tinha
    * tag E já não precisa corrigir stage" conta como nada-a-fazer.
    *
@@ -731,7 +703,7 @@ export const conversationService = {
       if (!c) return;
       await lockConversation(tx, c.id);
 
-      const needsStageFix = tag === "pos-festa" && c.stage === "POS_FESTA";
+      const needsStageFix = tag === "pos-atendimento" && c.stage === "POS_ATENDIMENTO";
       const tags = c.tags.filter((t) => t !== tag);
       const tagChanged = tags.length !== c.tags.length;
       if (!tagChanged && !needsStageFix) return; // nada mudaria — não escreve à toa
