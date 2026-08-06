@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 /**
  * Manifest do PAINEL, para instalar como app no celular.
  *
- * Fica FORA de `/admin` de propósito: o middleware do Clerk protege
+ * Fica FORA de `/admin` de propósito: o proxy do Clerk protege
  * `/admin(.*)`, e o navegador busca o manifest sem credenciais — lá dentro
  * levaria 401 e o Chrome nunca ofereceria a instalação. A proteção continua
  * valendo pro que importa: abrir o app cai em `/admin/dashboard`, que exige
