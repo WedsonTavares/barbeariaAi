@@ -64,12 +64,21 @@ export const tenantService = {
     prisma.tenant.update({ where: { id: tenantId }, data: { name: name.trim() } }),
   // plataforma / super-admin
   listAll: () => prisma.tenant.findMany({ orderBy: { createdAt: "desc" } }),
-  createFromClerkOrg: (clerkOrgId: string, slug: string, name: string) =>
-    prisma.tenant.upsert({
+  createFromClerkOrg: async (clerkOrgId: string, slug: string, name: string) => {
+    const tenant = await prisma.tenant.upsert({
       where: { clerkOrgId },
-      update: { name, slug },
-      create: { clerkOrgId, slug, name, settings: { create: {} } },
-    }),
+      update: { name, slug, active: true },
+      create: { clerkOrgId, slug, name },
+    });
+    await withTenant(tenant.id, (tx) =>
+      tx.tenantSettings.upsert({
+        where: { tenantId: tenant.id },
+        update: {},
+        create: { tenantId: tenant.id },
+      })
+    );
+    return tenant;
+  },
   /** organization.deleted no Clerk → desativa (soft delete; dados ficam para auditoria). */
   deactivateByClerkOrg: (clerkOrgId: string) =>
     prisma.tenant.updateMany({ where: { clerkOrgId }, data: { active: false } }),
