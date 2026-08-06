@@ -1,9 +1,8 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { getTenantByHost, requireTenantAccess, type AuthContext } from "@barbearia-ai/core";
-
-const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "lvh.me";
+import { requireTenantAccess, type AuthContext } from "@barbearia-ai/core";
+import { tenantFromHost } from "./tenant-resolution";
 
 /** Monta o AuthContext a partir da sessão do Clerk (executa no servidor). */
 export const getAuthContext = cache(async function getAuthContext(): Promise<AuthContext> {
@@ -20,7 +19,7 @@ export const getAuthContext = cache(async function getAuthContext(): Promise<Aut
 /** Resolve o tenant pelo host (subdomínio ou domínio personalizado). Cacheado por request. */
 export const resolveTenant = cache(async function resolveTenant() {
   const host = (await headers()).get("host");
-  return getTenantByHost(host, ROOT);
+  return tenantFromHost(host);
 });
 
 /**

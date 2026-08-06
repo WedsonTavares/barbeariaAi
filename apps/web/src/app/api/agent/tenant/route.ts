@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { services } from "@barbearia-ai/core";
+import { tenantHost } from "@/lib/tenant-resolution";
 
 /**
  * Roteador multi-tenant do n8n: dada a INSTÂNCIA do Evolution que recebeu a
@@ -33,8 +34,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "instance não pertence a nenhum tenant ativo" }, { status: 404 });
   }
 
-  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "lvh.me";
-  const host = `${tenant.slug}.${root}`;
+  const host = tenantHost(tenant.slug);
 
   return NextResponse.json({
     tenantId: tenant.id,

@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 
-import { getTenantByHost, services } from "@barbearia-ai/core";
+import { services } from "@barbearia-ai/core";
 import { headers } from "next/headers";
 import { brl, waUrl } from "@/lib/format";
+import { tenantFromHost } from "@/lib/tenant-resolution";
 
-const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? "lvh.me";
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=1800&q=80";
 
 async function tenantForSite() {
   const host = (await headers()).get("host");
-  return getTenantByHost(host, ROOT);
+  return tenantFromHost(host);
 }
 
 export async function generateMetadata(): Promise<Metadata> {
