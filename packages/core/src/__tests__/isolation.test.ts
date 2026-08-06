@@ -12,7 +12,7 @@ import { withTenant } from "../db/withTenant";
 // verdade; rodar isto contra produção cria tenants "test-a"/"test-b" e um
 // cliente fake lá. Trocar DATABASE_URL/DIRECT_URL em packages/core/.env para
 // um banco de teste antes de rodar `pnpm test`.
-const PRODUCTION_MARKERS = ["rzezilteejznqnmonhyi"];
+const PRODUCTION_MARKERS = ["rzezilteejznqnmonhyi", "bfmhmmpkqgkjgrkpqjzv"];
 
 function assertNotProductionDatabase() {
   const urls = [process.env.DATABASE_URL, process.env.DIRECT_URL].filter(Boolean).join(" ");

@@ -45,7 +45,15 @@ async function tenantSeed(slug: string, name: string, clerkOrgId: string) {
 }
 
 async function main() {
-  await tenantSeed("barbearia", "Barbearia AI", "org_demo_barbearia");
+  const clerkOrgId = process.env.SEED_CLERK_ORG_ID;
+  if (!clerkOrgId) {
+    throw new Error("SEED_CLERK_ORG_ID ausente: informe o ID org_... da organização do Clerk antes de rodar o seed.");
+  }
+  await tenantSeed(
+    process.env.SEED_TENANT_SLUG ?? process.env.PRIMARY_TENANT_SLUG ?? "barbearia",
+    process.env.SEED_TENANT_NAME ?? "Barbearia AI",
+    clerkOrgId
+  );
 }
 
 main().then(() => prisma.$disconnect());

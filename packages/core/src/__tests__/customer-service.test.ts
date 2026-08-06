@@ -5,7 +5,7 @@ import { withTenant } from "../db/withTenant";
 import { customerPhoneKey, toWhatsAppPhone } from "../phone";
 import { customerService, CustomerDuplicateError } from "../services/customer-service";
 
-const PRODUCTION_MARKERS = ["rzezilteejznqnmonhyi"];
+const PRODUCTION_MARKERS = ["rzezilteejznqnmonhyi", "bfmhmmpkqgkjgrkpqjzv"];
 const owner = new PrismaClient({
   datasources: { db: { url: process.env.DIRECT_URL } },
 });
