@@ -29,11 +29,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     unreadCount = await services.notificationService.unreadCount(tenant.id).catch(() => 0);
   } catch (e) {
     if (e instanceof AccessError && e.message.includes("autenticado")) redirect("/sign-in");
+    const message = e instanceof AccessError ? e.message : "Não foi possível validar o acesso.";
     return (
       <main className="grid min-h-screen place-items-center p-8 text-center">
         <div>
           <h1 className="text-xl font-bold">Sem acesso a esta empresa</h1>
-          <p className="mt-2 text-[var(--color-muted)]">Sua conta não tem permissão para este painel. Troque de organização ou fale com o administrador.</p>
+          <p className="mt-2 text-[var(--color-muted)]">{message}</p>
         </div>
       </main>
     );
