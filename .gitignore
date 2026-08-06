@@ -4,31 +4,19 @@ dist
 .turbo
 .env
 .env.test
+.env.*
 .env*.local
 *.tsbuildinfo
 .DS_Store
 
-# Credenciais — NUNCA versionar (contém secrets do Clerk/Supabase)
+# Credenciais e documentação local — NUNCA versionar.
 credenciais.md
 
-# Docs internas / workflows n8n (incl. modelos de terceiros) — não versionar
-# (exports de workflow do n8n têm token em texto puro — nunca comitar esses)
-docs/*
+# Docs internas / workflows n8n podem conter tokens em texto puro.
+docs/
+docs/**
 
-# Nenhum .md no git (contexto/planejamento ficam só local)
+# Nenhum .md no git; contexto/planejamento ficam só local.
 *.md
-
 base_de_dados.md
 .vercel
-
-# Exceção: base de conhecimento da IA não tem segredo nenhum, vale versionar
-# e sincronizar entre máquinas — ao contrário do resto de docs/.
-!docs/base_de_dados.md
-
-# Exceções: documentação do próprio sistema. Não tem segredo — descreve
-# arquitetura e pendências, e precisa acompanhar o repo entre máquinas.
-# Os exports de workflow do n8n continuam fora (têm token em texto puro).
-# O openapi.yaml mora em apps/web/public/ (servido pela tela /admin/api-docs)
-# e não precisa de exceção aqui.
-!README.md
-!PENDENTE.md
