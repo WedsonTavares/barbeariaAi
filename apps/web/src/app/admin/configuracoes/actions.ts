@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole, services, schemas, ZodError } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { getQrCode, getConnectionState, logoutInstance, ensureInstance } from "@/lib/evolution";
+import { tenantHost } from "@/lib/tenant-resolution";
 
 const BASE = "/admin/configuracoes";
 
@@ -15,10 +16,24 @@ async function tenantInstance() {
   return services.tenantService.evolutionInstance(tenant.id, tenant.slug);
 }
 
+/**
+ * Webhook DESTE tenant. O Evolution entrega a mensagem no subdomínio da empresa,
+ * e é o host que diz de quem ela é (`/api/whatsapp/inbound` resolve o tenant
+ * assim). Sem isto a instância nasce sem webhook: o painel mostra "conectado" e
+ * nenhuma mensagem chega — falha silenciosa, no pior momento possível.
+ */
+function inboundWebhook(slug: string): string | undefined {
+  const secret = process.env.AGENT_API_SECRET;
+  if (!secret) return undefined;
+  return `https://${tenantHost(slug)}/api/whatsapp/inbound?token=${encodeURIComponent(secret)}`;
+}
+
 export async function fetchQrAction() {
-  const instance = await tenantInstance();
-  // tenant novo: cria a instância dele antes de pedir o QR
-  await ensureInstance(instance);
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  const instance = await services.tenantService.evolutionInstance(tenant.id, tenant.slug);
+  // tenant novo: cria a instância dele — já com o webhook — antes de pedir o QR
+  await ensureInstance(instance, inboundWebhook(tenant.slug));
   return getQrCode(instance);
 }
 
