@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildDailyAvailabilitySlots,
   bufferedWindow,
+  scheduleRanges,
   serviceBufferOf,
+  windowContains,
   windowsOverlap,
 } from "../availability";
 import { parseLocalDateTime } from "../time";
@@ -105,5 +107,65 @@ describe("buildDailyAvailabilitySlots", () => {
     const result = buildDailyAvailabilitySlots(dayStart, ["professional-1"], [], 30, now)["professional-1"] ?? [];
     expect(result[20]?.available).toBe(false);
     expect(result[21]?.available).toBe(true);
+  });
+});
+
+describe("scheduleRanges — expediente com pausas", () => {
+  it("sem pausa, devolve a janela inteira", () => {
+    expect(scheduleRanges("09:00", "18:00", null)).toEqual([{ inicio: 540, fim: 1080 }]);
+  });
+
+  it("o almoço parte o expediente em duas janelas", () => {
+    expect(scheduleRanges("09:00", "18:00", [{ start: "12:00", end: "13:00" }])).toEqual([
+      { inicio: 540, fim: 720 },
+      { inicio: 780, fim: 1080 },
+    ]);
+  });
+
+  it("aceita várias pausas, em qualquer ordem", () => {
+    const r = scheduleRanges("08:00", "20:00", [
+      { start: "15:00", end: "15:30" },
+      { start: "12:00", end: "13:00" },
+    ]);
+    expect(r).toEqual([
+      { inicio: 480, fim: 720 },
+      { inicio: 780, fim: 900 },
+      { inicio: 930, fim: 1200 },
+    ]);
+  });
+
+  it("pausa que cobre o dia inteiro não deixa janela nenhuma", () => {
+    expect(scheduleRanges("09:00", "18:00", [{ start: "09:00", end: "18:00" }])).toEqual([]);
+  });
+
+  it("horário inválido ou invertido não vira janela (nunca derruba a agenda)", () => {
+    expect(scheduleRanges("18:00", "09:00", null)).toEqual([]);
+    expect(scheduleRanges("qualquer", "18:00", null)).toEqual([]);
+  });
+
+  it("pausa malformada é ignorada em vez de quebrar", () => {
+    expect(scheduleRanges("09:00", "18:00", [{ start: "xx", end: "13:00" }, "lixo", null])).toEqual([
+      { inicio: 540, fim: 1080 },
+    ]);
+  });
+});
+
+describe("windowContains — o atendimento cabe no expediente?", () => {
+  const expediente = [{ from: 540, to: 720 }, { from: 780, to: 1080 }];
+
+  it("cabe dentro de uma janela", () => {
+    expect(windowContains(expediente, { from: 600, to: 660 })).toBe(true);
+  });
+
+  it("atravessar o almoço não cabe, mesmo com as duas pontas em expediente", () => {
+    expect(windowContains(expediente, { from: 700, to: 800 })).toBe(false);
+  });
+
+  it("encostar exatamente nas bordas cabe", () => {
+    expect(windowContains(expediente, { from: 540, to: 720 })).toBe(true);
+  });
+
+  it("sem janela nenhuma, nada cabe", () => {
+    expect(windowContains([], { from: 600, to: 660 })).toBe(false);
   });
 });

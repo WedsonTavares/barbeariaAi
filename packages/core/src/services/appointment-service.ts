@@ -19,6 +19,7 @@ import { APP_TZ, parseLocalDateTime } from "../time";
 import { customerPhoneKey, toWhatsAppPhone } from "../phone";
 import { normalizeMatchTerm } from "../text";
 import { markConversationScheduled } from "./conversation-service";
+import { trabalhaNoIntervalo, workingWindowsIn } from "./schedule-service";
 
 const SP_DATETIME = new Intl.DateTimeFormat("pt-BR", { timeZone: APP_TZ, dateStyle: "short", timeStyle: "short" });
 
@@ -214,6 +215,26 @@ async function assertSlotFree(
   if (await hasUnassignedConflict(tx, startAt, endAt, excludeAppointmentId, buffer)) {
     throw new AppointmentConflictError([], UNASSIGNED_CONFLICT_MESSAGE);
   }
+}
+
+/**
+ * O profissional trabalha nesse intervalo?
+ *
+ * Vale só para o agente, pela mesma razão da antecedência mínima: a equipe pode
+ * encaixar alguém fora do expediente conscientemente, a IA não pode prometer
+ * um horário em que ninguém vai estar na cadeira.
+ *
+ * Profissional sem expediente cadastrado não é restringido — ver
+ * `schedule-service`.
+ */
+async function assertWithinSchedule(tx: Tx, professionalId: string | null, startAt: Date, endAt: Date) {
+  if (!professionalId) return;
+  const janelas = await workingWindowsIn(tx, startAt, endAt);
+  const wanted = { from: startAt.getTime(), to: endAt.getTime() };
+  if (trabalhaNoIntervalo(janelas.get(professionalId), wanted)) return;
+  throw new AppointmentAgentError(
+    "Esse horário está fora do expediente do profissional. Quer ver os horários em que ele atende?"
+  );
 }
 
 /**
@@ -693,6 +714,7 @@ export const appointmentService = {
       // porque, antes, uma repetição do n8n batia no agendamento que ela mesma
       // criou e voltava "horário ocupado" em vez de "já estava confirmado".
       await assertLeadTime(tx, tenantId, startAt, now);
+      await assertWithinSchedule(tx, professional?.id ?? null, startAt, endAt);
       await assertSlotFree(tx, tenantId, professional?.id ?? null, startAt, endAt, buffer);
 
       let customer = matchingCustomers[0] ?? null;
@@ -779,6 +801,7 @@ export const appointmentService = {
         // Só valida horário/conflito quando algo muda de fato: repetir a mesma
         // chamada continua sendo idempotente, mesmo perto do horário.
         await assertLeadTime(tx, tenantId, startAt, now);
+        await assertWithinSchedule(tx, professional?.id ?? null, startAt, endAt);
         await assertSlotFree(tx, tenantId, professional?.id ?? null, startAt, endAt, buffer, existing.id);
         await tx.appointment.update({
           where: { id: existing.id },

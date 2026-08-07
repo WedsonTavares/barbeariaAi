@@ -60,6 +60,51 @@ export const professionalServiceInput = z.object({
 });
 export type ProfessionalServiceInput = z.infer<typeof professionalServiceInput>;
 
+export const weekday = z.enum([
+  "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
+]);
+
+const hhmmTime = z.string().trim().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, "Use o formato HH:mm");
+
+/**
+ * Expediente de UM dia de UM profissional. As pausas (almoço, intervalo) saem
+ * da janela: um atendimento não pode atravessá-las.
+ */
+export const workingScheduleInput = z
+  .object({
+    professionalId: z.string().uuid(),
+    dayOfWeek: weekday,
+    startTime: hhmmTime,
+    endTime: hhmmTime,
+    breaks: z.array(z.object({ start: hhmmTime, end: hhmmTime })).max(4).optional(),
+    /** Desmarcado = não trabalha nesse dia (o registro é removido). */
+    active: z.coerce.boolean().default(true),
+  })
+  .superRefine((d, ctx) => {
+    if (d.endTime <= d.startTime) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["endTime"], message: "O fim deve ser depois do início" });
+    }
+    for (const [i, pausa] of (d.breaks ?? []).entries()) {
+      if (pausa.end <= pausa.start) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["breaks", i, "end"], message: "A pausa termina antes de começar" });
+      } else if (pausa.start < d.startTime || pausa.end > d.endTime) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["breaks", i], message: "A pausa precisa estar dentro do expediente" });
+      }
+    }
+  });
+export type WorkingScheduleInput = z.infer<typeof workingScheduleInput>;
+
+/** Folga, férias ou bloqueio pontual de um profissional. */
+export const timeOffInput = z
+  .object({
+    professionalId: z.string().uuid(),
+    startAt: spDateTime,
+    endAt: spDateTime,
+    reason: z.string().trim().max(200).optional(),
+  })
+  .refine((d) => d.endAt > d.startAt, { message: "O fim deve ser depois do início", path: ["endAt"] });
+export type TimeOffInput = z.infer<typeof timeOffInput>;
+
 export const customerInput = z.object({
   name: z.string().trim().min(2),
   phone: z

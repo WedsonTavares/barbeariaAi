@@ -44,3 +44,62 @@ export async function setProfessionalStatusAction(formData: FormData) {
   }
   revalidatePath(BASE);
 }
+
+/**
+ * Expediente de um dia. O formulário manda um dia por vez: é o que permite
+ * "sábado até 14h" sem reenviar a semana inteira.
+ */
+export async function saveScheduleAction(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  let dest = `${BASE}?ok=expediente`;
+  try {
+    const pausaInicio = String(formData.get("breakStart") ?? "").trim();
+    const pausaFim = String(formData.get("breakEnd") ?? "").trim();
+    const data = schemas.workingScheduleInput.parse({
+      professionalId: formData.get("professionalId"),
+      dayOfWeek: formData.get("dayOfWeek"),
+      startTime: formData.get("startTime"),
+      endTime: formData.get("endTime"),
+      breaks: pausaInicio && pausaFim ? [{ start: pausaInicio, end: pausaFim }] : undefined,
+      active: formData.get("active") === "on",
+    });
+    await services.scheduleService.setDay(tenant.id, data);
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error;
+    dest = `${BASE}?erro=${encodeURIComponent(error.issues[0]?.message ?? "expediente")}`;
+  }
+  revalidatePath(BASE);
+  redirect(dest);
+}
+
+export async function addTimeOffAction(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  let dest = `${BASE}?ok=folga`;
+  try {
+    const data = schemas.timeOffInput.parse({
+      professionalId: formData.get("professionalId"),
+      startAt: formData.get("startAt"),
+      endAt: formData.get("endAt"),
+      reason: formData.get("reason") || undefined,
+    });
+    await services.scheduleService.addTimeOff(tenant.id, data);
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error;
+    dest = `${BASE}?erro=${encodeURIComponent(error.issues[0]?.message ?? "folga")}`;
+  }
+  revalidatePath(BASE);
+  redirect(dest);
+}
+
+export async function removeTimeOffAction(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+  try {
+    await services.scheduleService.removeTimeOff(tenant.id, schemas.idInput.parse(formData.get("id")));
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error;
+  }
+  revalidatePath(BASE);
+}

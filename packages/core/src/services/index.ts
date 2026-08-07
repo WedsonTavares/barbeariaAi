@@ -2,6 +2,7 @@ export { eventPhotoService } from "./event-photo-service";
 export { calendarService } from "./calendar-service";
 export { serviceCatalogService } from "./service-catalog-service";
 export { professionalService } from "./professional-service";
+export { scheduleService, trabalhaNoIntervalo, workingWindowsIn } from "./schedule-service";
 export {
   customerService,
   CustomerDuplicateError,

@@ -3,6 +3,7 @@ import { UserRoundCog } from "lucide-react";
 import { services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { createProfessionalAction, setProfessionalStatusAction } from "./actions";
+import { ExpedienteEditor } from "./ExpedienteEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,11 @@ export default async function ProfissionaisPage({
 }) {
   const { tenant } = await requireTenant();
   const sp = await searchParams;
-  const professionals = await services.professionalService.list(tenant.id);
+  const [professionals, expedientes, folgas] = await Promise.all([
+    services.professionalService.list(tenant.id),
+    services.scheduleService.listAll(tenant.id),
+    services.scheduleService.listTimeOff(tenant.id),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-5">
@@ -27,14 +32,14 @@ export default async function ProfissionaisPage({
         </div>
       </header>
 
-      {sp.ok === "criado" && (
+      {sp.ok && (
         <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
-          Profissional criado.
+          {sp.ok === "expediente" ? "Expediente salvo." : sp.ok === "folga" ? "Folga registrada." : "Profissional criado."}
         </p>
       )}
       {sp.erro && (
         <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">
-          Não salvou. Confira os campos.
+          {sp.erro === "validacao" ? "Não salvou. Confira os campos." : sp.erro}
         </p>
       )}
 
@@ -51,7 +56,7 @@ export default async function ProfissionaisPage({
         </form>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2">
+      <section className="grid gap-3 xl:grid-cols-2">
         {professionals.map((professional) => (
           <article key={professional.id} className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
@@ -86,6 +91,12 @@ export default async function ProfissionaisPage({
                 ))
               )}
             </div>
+
+            <ExpedienteEditor
+              professionalId={professional.id}
+              expediente={expedientes.filter((e) => e.professionalId === professional.id)}
+              folgas={folgas.filter((f) => f.professionalId === professional.id)}
+            />
           </article>
         ))}
         {professionals.length === 0 && (

@@ -97,7 +97,12 @@ export async function POST(req: Request) {
   // Uma leitura só do dia inteiro; as janelas já vêm com a folga aplicada.
   const dayStart = input.date;
   const dayEnd = new Date(dayStart.getTime() + DAY_MS);
-  const busy = await services.appointmentService.occupiedWindows(tenant.id, dayStart, dayEnd);
+  const [busy, expediente] = await Promise.all([
+    services.appointmentService.occupiedWindows(tenant.id, dayStart, dayEnd),
+    // Expediente por profissional (com pausas, menos folgas). Quem não tem
+    // expediente cadastrado não é restringido — ver schedule-service.
+    services.scheduleService.workingWindows(tenant.id, dayStart, dayEnd),
+  ]);
   const busyByResource = new Map<string, BusyWindow[]>();
   for (const window of busy) {
     const key = window.professionalId ?? SEM_PROFISSIONAL;
@@ -115,8 +120,13 @@ export async function POST(req: Request) {
   const semProfissional = activeProfessionals.length === 0;
   const recursos = semProfissional ? [SEM_PROFISSIONAL] : activeProfessionals.map((professional) => professional.id);
 
-  const livre = (recurso: string, wanted: BusyWindow) =>
-    !(busyByResource.get(recurso) ?? []).some((window) => windowsOverlap(window, wanted));
+  /** Livre = dentro do expediente dele E sem atendimento sobreposto. */
+  const livre = (recurso: string, wanted: BusyWindow) => {
+    if (recurso !== SEM_PROFISSIONAL && !services.trabalhaNoIntervalo(expediente.get(recurso), wanted)) {
+      return false;
+    }
+    return !(busyByResource.get(recurso) ?? []).some((window) => windowsOverlap(window, wanted));
+  };
 
   if (input.startTime && input.endTime) {
     const startAt = parseLocalDateTime(`${date}T${input.startTime}`);

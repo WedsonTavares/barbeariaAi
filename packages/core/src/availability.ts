@@ -47,6 +47,94 @@ export function windowsOverlap(a: BusyWindow, b: BusyWindow): boolean {
   return a.from < b.to && a.to > b.from;
 }
 
+/** `wanted` cabe inteiro dentro de alguma das janelas? */
+export function windowContains(janelas: BusyWindow[], wanted: BusyWindow): boolean {
+  return janelas.some((janela) => janela.from <= wanted.from && janela.to >= wanted.to);
+}
+
+/* ───────────────────────── Expediente do profissional ───────────────────────── */
+
+/** Dia da semana do Prisma a partir do índice JS (0 = domingo). */
+export const WEEKDAY_BY_INDEX = [
+  "SUNDAY",
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+] as const;
+
+export type WeekdayName = (typeof WEEKDAY_BY_INDEX)[number];
+
+/** Minutos desde a meia-noite. Devolve null no que não for "HH:mm" válido. */
+export function parseHhmm(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!m) return null;
+  const hora = Number(m[1]);
+  const minuto = Number(m[2]);
+  if (hora > 24 || minuto > 59 || (hora === 24 && minuto > 0)) return null;
+  return hora * 60 + minuto;
+}
+
+/** Intervalo em minutos desde a meia-noite do dia local. */
+export interface MinuteRange {
+  inicio: number;
+  fim: number;
+}
+
+/**
+ * Pausas gravadas em `WorkingSchedule.breaks` (Json livre).
+ *
+ * Lê de forma tolerante: o campo é Json e pode ter vindo de versões diferentes
+ * da tela. O que não parsear é ignorado, nunca derruba a agenda.
+ */
+export function parseBreaks(raw: unknown): MinuteRange[] {
+  if (!Array.isArray(raw)) return [];
+  const pausas: MinuteRange[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const inicio = parseHhmm(o.start ?? o.inicio);
+    const fim = parseHhmm(o.end ?? o.fim);
+    if (inicio === null || fim === null || fim <= inicio) continue;
+    pausas.push({ inicio, fim });
+  }
+  return pausas.sort((a, b) => a.inicio - b.inicio);
+}
+
+/**
+ * O expediente de um dia, já descontadas as pausas.
+ *
+ * Ex.: 09:00–18:00 com almoço 12:00–13:00 vira duas janelas,
+ * 09:00–12:00 e 13:00–18:00. Um atendimento não pode atravessar o almoço.
+ */
+export function scheduleRanges(
+  startTime: string,
+  endTime: string,
+  breaks: unknown
+): MinuteRange[] {
+  const inicio = parseHhmm(startTime);
+  const fim = parseHhmm(endTime);
+  if (inicio === null || fim === null || fim <= inicio) return [];
+
+  let janelas: MinuteRange[] = [{ inicio, fim }];
+  for (const pausa of parseBreaks(breaks)) {
+    const proximas: MinuteRange[] = [];
+    for (const janela of janelas) {
+      if (pausa.fim <= janela.inicio || pausa.inicio >= janela.fim) {
+        proximas.push(janela);
+        continue;
+      }
+      if (pausa.inicio > janela.inicio) proximas.push({ inicio: janela.inicio, fim: pausa.inicio });
+      if (pausa.fim < janela.fim) proximas.push({ inicio: pausa.fim, fim: janela.fim });
+    }
+    janelas = proximas;
+  }
+  return janelas;
+}
+
 export interface OccupiedResourceInterval {
   resourceId: string;
   startAt: Date;
