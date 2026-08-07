@@ -1,7 +1,7 @@
 import { Building2, CalendarDays, MessageCircle } from "lucide-react";
 
 import { requireTenant } from "@/lib/tenant";
-import { services, parseBusinessHours } from "@barbearia-ai/core";
+import { services, parseBusinessHours, currentRole } from "@barbearia-ai/core";
 import { getConnectionState, evolutionConfigured } from "@/lib/evolution";
 import { WhatsappConnect } from "./WhatsappConnect";
 import { SettingsSection, Field, TextArea, ColorField } from "./SettingsSection";
@@ -26,18 +26,27 @@ export default async function ConfiguracoesPage({
   searchParams: Promise<{ ok?: string; erro?: string; msg?: string; calendar?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenant } = await requireTenant();
+  const { tenant, ctx } = await requireTenant();
   const [settings, instance, calendarConnections, professionals] = await Promise.all([
     services.tenantService.getSettings(tenant.id),
     services.tenantService.evolutionInstance(tenant.id, tenant.slug),
     services.calendarService.listGoogleConnections(tenant.id),
     services.professionalService.active(tenant.id),
   ]);
-  // Segredo do agente DESTA empresa (cria no primeiro acesso). Vai para a tela
-  // porque é você quem configura o webhook no Evolution e no n8n — o sistema
-  // não escreve nada lá.
-  const agentSecret = await services.tenantService.ensureAgentSecret(tenant.id);
-  const inboundUrl = `https://${tenantHost(tenant.slug)}/api/whatsapp/inbound?token=${encodeURIComponent(agentSecret)}`;
+  /**
+   * Credenciais de integração só para quem manda na empresa.
+   *
+   * Esta página inteira renderiza para qualquer MEMBRO — só as actions exigem
+   * papel. Sem esta checagem, um profissional com papel STAFF abriria a URL e
+   * leria o segredo do agente, que dá acesso à agenda inteira pela API.
+   */
+  const podeVerCredenciais = ctx.isSuperAdmin || currentRole(ctx) === "OWNER";
+  const agentSecret = podeVerCredenciais
+    ? await services.tenantService.ensureAgentSecret(tenant.id)
+    : null;
+  const inboundUrl = agentSecret
+    ? `https://${tenantHost(tenant.slug)}/api/whatsapp/inbound?token=${encodeURIComponent(agentSecret)}`
+    : null;
   const googleConfig = services.calendarService.googleConfigStatus();
   const googleReady = googleConfig.clientId && googleConfig.clientSecret && googleConfig.redirectUri && googleConfig.tokenKey;
   const configured = evolutionConfigured();
@@ -382,14 +391,18 @@ export default async function ConfiguracoesPage({
         <div className="p-4 sm:p-5">
           <WhatsappConnect initialState={state} configurado={configured} />
 
+          {podeVerCredenciais && agentSecret && inboundUrl && (
           <details className="mt-4 rounded-xl border border-black/10 bg-[var(--color-surface)] p-3">
             <summary className="cursor-pointer text-xs font-bold">
               Dados para integrar (instância, webhook e segredo)
             </summary>
             <p className="mt-2 text-[11px] text-[var(--color-muted)]">
-              A instância é criada com estes dados ao conectar. O webhook <b>não</b> é
-              configurado automaticamente — aponte-o no Evolution para a URL abaixo (ou para
-              o seu fluxo no n8n). Sem webhook, o WhatsApp conecta e nenhuma mensagem chega.
+              Valores para <b>copiar</b>, não para preencher. Cole a URL abaixo no campo de
+              webhook <b>da instância no Evolution</b> — ela não é configurada
+              automaticamente, e sem ela o WhatsApp conecta e nenhuma mensagem chega.
+            </p>
+            <p className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+              Contém credenciais desta empresa. Visível apenas para o proprietário.
             </p>
             <dl className="mt-3 space-y-2 text-[11px]">
               <div>
@@ -410,6 +423,7 @@ export default async function ConfiguracoesPage({
               </div>
             </dl>
           </details>
+          )}
           <p className="mt-4 text-xs text-[var(--color-muted)]">
             Use o número dedicado ao atendimento — ao conectar, ele passa a ser gerenciado pela automação.
             Esta conexão é exclusiva da sua empresa: nenhuma outra enxerga nem desconecta este número.
