@@ -6,6 +6,13 @@
  * só. O binário nunca entra no banco: fica no bucket e o Postgres guarda a URL.
  *
  * Requer no servidor: bucket público criado + SUPABASE_SERVICE_ROLE_KEY.
+ *
+ * A chave vai no header `apikey`, não em `Authorization: Bearer`.
+ * Os dois funcionam com as chaves LEGADAS (JWT `eyJ...`), mas as chaves novas
+ * do Supabase (`sb_secret_...`) só são aceitas pelo Storage via `apikey` —
+ * com Bearer ele tenta parsear como JWT e devolve "Invalid Compact JWS".
+ * Como as legadas foram desabilitadas no projeto, `apikey` é o único header
+ * que atende os dois formatos.
  */
 
 export const MAX_PHOTO_BYTES = 4 * 1024 * 1024; // 4MB
@@ -86,7 +93,7 @@ export async function subirParaStorage(
     const res = await fetch(`${supabaseUrl}/storage/v1/object/${bucket}/${path}`, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
         "content-type": contentType,
         "x-upsert": "true",
       },
@@ -121,7 +128,7 @@ export async function apagarDoStorage(bucket: string, publicUrl: string) {
   try {
     await fetch(`${supabaseUrl}/storage/v1/object/${bucket}/${path}`, {
       method: "DELETE",
-      headers: { authorization: `Bearer ${serviceKey}` },
+      headers: { apikey: serviceKey },
     });
   } catch (error) {
     console.error("[foto] falha ao apagar do storage (arquivo órfão)", error);
