@@ -8,27 +8,16 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../db/prisma";
 import { withTenant } from "../db/withTenant";
 
-// Ref do projeto de PRODUÇÃO (Supabase) — os testes upsertam/criam linhas de
-// verdade; rodar isto contra produção cria tenants "test-a"/"test-b" e um
-// cliente fake lá. Trocar DATABASE_URL/DIRECT_URL em packages/core/.env para
-// um banco de teste antes de rodar `pnpm test`.
-const PRODUCTION_MARKERS = ["rzezilteejznqnmonhyi", "bfmhmmpkqgkjgrkpqjzv"];
-
-function assertNotProductionDatabase() {
-  const urls = [process.env.DATABASE_URL, process.env.DIRECT_URL].filter(Boolean).join(" ");
-  if (PRODUCTION_MARKERS.some((m) => urls.includes(m))) {
-    throw new Error(
-      "DATABASE_URL/DIRECT_URL apontam para o banco de PRODUÇÃO. " +
-      "Configure um banco de TESTE em packages/core/.env antes de rodar os testes de isolamento."
-    );
-  }
-}
+// A trava de "banco proibido" vive em `vitest.config.ts` (FORBIDDEN_DATABASES),
+// não aqui: ela precisa valer para TODOS os testes que tocam o banco, não só
+// para este arquivo. Havia uma segunda lista neste ponto e ela ficou
+// desatualizada — sem o projeto do Diny Festas —, então os testes escreviam
+// tenants "test-a"/"test-b" dentro do banco de outro produto.
 
 let a: string;
 let b: string;
 
 beforeAll(async () => {
-  assertNotProductionDatabase();
   const ta = await prisma.tenant.upsert({ where: { slug: "test-a" }, update: {}, create: { slug: "test-a", name: "Empresa A", clerkOrgId: "org_test_a" } });
   const tb = await prisma.tenant.upsert({ where: { slug: "test-b" }, update: {}, create: { slug: "test-b", name: "Empresa B", clerkOrgId: "org_test_b" } });
   a = ta.id;

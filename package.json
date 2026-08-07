@@ -8,6 +8,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:db": "pnpm --filter @barbearia-ai/core test:db",
     "db:generate": "pnpm --filter @barbearia-ai/core db:generate",
     "db:migrate": "pnpm --filter @barbearia-ai/core db:migrate",
     "db:deploy": "pnpm --filter @barbearia-ai/core db:deploy",

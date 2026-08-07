@@ -17,7 +17,8 @@
     "db:rls": "prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma",
     "db:seed": "tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:db": "vitest run --config vitest.db.config.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",
