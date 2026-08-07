@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services, schemas, ZodError } from "@barbearia-ai/core";
 
 /**
@@ -10,16 +10,12 @@ import { services, schemas, ZodError } from "@barbearia-ai/core";
  * funil) e notifica, mesma mecânica do /suporte e do /cancelamento. Alguém
  * precisa ligar pra essa pessoa, não pedir 5 estrelas dela.
  *
- * Tenant vem do host. Protegido por AGENT_API_SECRET.
+ * Tenant vem do host. Protegido pelo segredo deste tenant.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   let input;
   try {

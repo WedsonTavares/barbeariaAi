@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services, schemas, ZodError } from "@barbearia-ai/core";
 
 /**
  * Ferramenta pro agente de IA (n8n): registra o interesse do cliente como Lead pra
  * equipe confirmar — NUNCA cria agendamento, NUNCA processa pagamento.
- * Tenant vem do host (subdomínio). Sem AGENT_API_SECRET, toda chamada é rejeitada.
+ * Tenant vem do host (subdomínio); o segredo conferido é o DESTE tenant.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   let input;
   try {

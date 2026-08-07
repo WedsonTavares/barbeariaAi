@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services, schemas, spClock, ZodError } from "@barbearia-ai/core";
 import { APPOINTMENT_STATUS, label } from "@/lib/labels";
 
@@ -13,16 +13,12 @@ function spTimeLabel(d: Date | null) {
 /**
  * Ferramenta pro agente de IA (n8n): "quando é meu agendamento?".
  * Só leitura — devolve atendimentos ativos desse telefone.
- * Tenant vem do host. Protegido por AGENT_API_SECRET.
+ * Tenant vem do host. Protegido pelo segredo deste tenant.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   let input;
   try {

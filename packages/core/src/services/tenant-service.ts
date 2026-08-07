@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { prisma } from "../db/prisma";
 import { withTenant } from "../db/withTenant";
 import type { TenantSettingsInput } from "../schemas";
@@ -8,6 +10,11 @@ async function resolveInstance(tenantId: string, slug: string) {
     tx.tenantSettings.findUnique({ where: { tenantId }, select: { evolutionInstance: true } })
   );
   return s?.evolutionInstance?.trim() || slug;
+}
+
+/** Segredo do agente: 32 bytes em hex. Um por tenant, nunca reaproveitado. */
+export function novoSegredoDeAgente() {
+  return randomBytes(32).toString("hex");
 }
 
 /** Operações de plataforma (Tenant não tem RLS) + leitura de settings por tenant. */
@@ -45,6 +52,35 @@ export const tenantService = {
     return null;
   },
   /**
+   * Segredo do agente deste tenant, criando um se ainda não existir.
+   *
+   * Tenants criados antes desta coluna não têm segredo; em vez de exigir
+   * migração manual, o primeiro acesso gera o dele. Idempotente.
+   */
+  ensureAgentSecret: async (tenantId: string) => {
+    const atual = await withTenant(tenantId, (tx) =>
+      tx.tenantSettings.findUnique({ where: { tenantId }, select: { agentApiSecret: true } })
+    );
+    if (atual?.agentApiSecret) return atual.agentApiSecret;
+    const segredo = novoSegredoDeAgente();
+    await withTenant(tenantId, (tx) =>
+      tx.tenantSettings.upsert({
+        where: { tenantId },
+        update: { agentApiSecret: segredo },
+        create: { tenantId, agentApiSecret: segredo },
+      })
+    );
+    return segredo;
+  },
+
+  /** Só leitura — não cria. Usado na autenticação das rotas do agente. */
+  agentSecret: (tenantId: string) =>
+    withTenant(tenantId, async (tx) =>
+      (await tx.tenantSettings.findUnique({ where: { tenantId }, select: { agentApiSecret: true } }))
+        ?.agentApiSecret ?? null
+    ),
+
+  /**
    * Grava as configurações do painel. Recebe o objeto JÁ validado por
    * `schemas.tenantSettingsInput` — que é uma lista fechada de campos. Campos
    * sensíveis (como `evolutionInstance`, que amarra o WhatsApp do tenant) não
@@ -73,8 +109,10 @@ export const tenantService = {
     await withTenant(tenant.id, (tx) =>
       tx.tenantSettings.upsert({
         where: { tenantId: tenant.id },
+        // `update` vazio de propósito: reprocessar o webhook do Clerk não pode
+        // rotacionar o segredo de quem já está operando.
         update: {},
-        create: { tenantId: tenant.id },
+        create: { tenantId: tenant.id, agentApiSecret: novoSegredoDeAgente() },
       })
     );
     return tenant;

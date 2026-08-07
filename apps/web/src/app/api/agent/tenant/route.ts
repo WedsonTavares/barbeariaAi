@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { services } from "@barbearia-ai/core";
 import { tenantHost } from "@/lib/tenant-resolution";
+import { authenticatePlatform } from "@/lib/agent-auth";
 
 /**
  * Roteador multi-tenant do n8n: dada a INSTÂNCIA do Evolution que recebeu a
@@ -12,17 +13,16 @@ import { tenantHost } from "@/lib/tenant-resolution";
  * física, pertence a um tenant só e não pode ser forjada pelo cliente.
  *
  * Diferente das outras rotas de agente, esta NÃO depende do host: pode ser
- * chamada no domínio raiz. Protegida por AGENT_API_SECRET (header ou ?token=).
+ * chamada no domínio raiz. Protegida pelo segredo GLOBAL (header ou ?token=) — ver agent-auth.ts.
  *
  * GET /api/agent/tenant?instance=barbearia-central   (header x-barbearia-ai-secret)
  */
 export async function GET(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
+  // Segredo GLOBAL aqui de propósito: esta rota existe justamente para
+  // descobrir de quem é a instância, então não há tenant cujo segredo conferir.
+  const negado = authenticatePlatform(req);
+  if (negado) return negado;
   const url = new URL(req.url);
-  const token = req.headers.get("x-barbearia-ai-secret") ?? url.searchParams.get("token");
-  if (!secret || token !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
 
   const instance = (url.searchParams.get("instance") ?? "").trim();
   if (!instance) return NextResponse.json({ error: "instance obrigatório" }, { status: 400 });
@@ -35,6 +35,10 @@ export async function GET(req: Request) {
   }
 
   const host = tenantHost(tenant.slug);
+  // Devolve o segredo DESTE tenant: é com ele que o n8n chama as demais
+  // ferramentas. O global fica só aqui, no roteador, e nunca é exposto ao
+  // dono da loja — é isso que impede um tenant de operar a agenda de outro.
+  const agentSecret = await services.tenantService.ensureAgentSecret(tenant.id);
 
   return NextResponse.json({
     tenantId: tenant.id,
@@ -43,5 +47,6 @@ export async function GET(req: Request) {
     instance,
     host,
     apiBase: `https://${host}`,
+    agentSecret,
   });
 }

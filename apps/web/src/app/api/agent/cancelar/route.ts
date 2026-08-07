@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services, schemas, ZodError } from "@barbearia-ai/core";
 import { avisarEquipe } from "@/lib/aviso-interno";
 
@@ -8,13 +8,9 @@ import { avisarEquipe } from "@/lib/aviso-interno";
  * Mantém todo o histórico e não altera CRM, tags, notas ou dados financeiros.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   let input;
   try {

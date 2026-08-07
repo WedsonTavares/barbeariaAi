@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services } from "@barbearia-ai/core";
 import { sendText } from "@/lib/evolution";
 
 /**
  * O n8n chama aqui pra ENVIAR a resposta do bot: salva no inbox como "🤖 IA"
  * e manda no WhatsApp (via Evolution). Assim a resposta do workflow também
- * aparece em /admin/conversas. Autenticado por token na URL; tenant pelo host.
+ * aparece em /admin/conversas. Autenticado por token na URL (segredo do tenant); tenant pelo host.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  const token = new URL(req.url).searchParams.get("token");
-  if (!secret || token !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   const body = (await req.json().catch(() => ({}))) as { phone?: string; text?: string };
   const phone = String(body.phone ?? "").replace(/\D/g, "");

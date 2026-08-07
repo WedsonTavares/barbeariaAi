@@ -1,22 +1,19 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services } from "@barbearia-ai/core";
 import { sendText } from "@/lib/evolution";
 
 /**
  * Webhook do Evolution: mensagem recebida no WhatsApp → salva no inbox nativo.
- * Autenticado por token na URL (?token=AGENT_API_SECRET). Tenant vem do host
+ * Autenticado por token na URL (?token=segredo do tenant). Tenant vem do host
  * (o Evolution de cada empresa posta no subdomínio dela). Só ARMAZENA + notifica;
  * a resposta da IA/atendente é tratada em outro fluxo.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  const token = new URL(req.url).searchParams.get("token");
-  if (!secret || token !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const parsed = parseEvolution(body);

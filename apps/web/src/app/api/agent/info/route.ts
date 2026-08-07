@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services } from "@barbearia-ai/core";
 
 /**
  * Ferramenta pro agente de IA (n8n): informações da empresa pra tirar dúvidas —
  * horário, endereço/cidade, política de cancelamento, contatos e catálogo.
- * Só leitura. Tenant pelo host. Protegido por AGENT_API_SECRET.
+ * Só leitura. Tenant pelo host. Protegido pelo segredo deste tenant.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   const [settings, catalog, professionals] = await Promise.all([
     services.tenantService.getSettings(tenant.id),

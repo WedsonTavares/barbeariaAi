@@ -218,6 +218,11 @@ model TenantSettings {
   // Nome da instância do Evolution API deste tenant (multi-tenant: cada empresa
   // tem seu próprio número/instância). Se vazio, cai pro slug do tenant.
   evolutionInstance String?
+  /// Segredo que autentica as ferramentas do agente (/api/agent/*) DESTE tenant.
+  /// Um por empresa: o de uma não abre a porta da outra. O AGENT_API_SECRET
+  /// global continua existindo, mas só para /api/agent/tenant — a rota que
+  /// descobre o dono de uma instância antes de se saber qual tenant é.
+  agentApiSecret String?
   email          String?
   /// Razão social e CNPJ: aparecem em contrato/recibo, não no site.
   legalName      String?

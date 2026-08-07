@@ -1,21 +1,17 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services } from "@barbearia-ai/core";
 
 /**
  * Ferramenta pro agente de IA (n8n): grava um resumo do atendimento na conversa,
  * pra equipe abrir /admin/conversas e entender o contexto sem ler tudo.
  * Só escreve a nota — não muda tags, etapa nem o estado do bot.
- * Tenant pelo host. Protegido por AGENT_API_SECRET.
+ * Tenant pelo host. Protegido pelo segredo deste tenant.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   const body = (await req.json().catch(() => ({}))) as { phone?: string; note?: string; nota?: string };
   const phone = String(body.phone ?? "").replace(/\D/g, "");

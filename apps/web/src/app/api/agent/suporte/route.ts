@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveTenant } from "@/lib/tenant";
+import { authenticateAgent } from "@/lib/agent-auth";
 import { services, schemas, ZodError } from "@barbearia-ai/core";
 import { sendText } from "@/lib/evolution";
 
@@ -12,20 +12,16 @@ const AVISO_TRANSBORDO =
  * conversa com a tag "atendimento-humano" (pausa o bot) e notifica a equipe.
  * O n8n consulta essa tag a cada execução (buscar_tags → /api/agent/status),
  * então a próxima mensagem do cliente já não passa mais pela IA. Tenant pelo
- * host. Protegido por AGENT_API_SECRET.
+ * host. Protegido pelo segredo deste tenant.
  *
  * O aviso ao cliente sai DAQUI, antes de pausar o bot: `/api/whatsapp/send`
  * respeita o handoff, então a resposta que o n8n manda depois desta chamada
  * cai no `skipped` e o cliente nunca ficava sabendo que foi transferido.
  */
 export async function POST(req: Request) {
-  const secret = process.env.AGENT_API_SECRET;
-  if (!secret || req.headers.get("x-barbearia-ai-secret") !== secret) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const tenant = await resolveTenant();
-  if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+  const auth = await authenticateAgent(req);
+  if (!auth.ok) return auth.response;
+  const tenant = auth.tenant;
 
   let input;
   try {
