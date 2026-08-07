@@ -16,6 +16,25 @@ ALTER TABLE "Tenant" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_app_access ON "Tenant";
 CREATE POLICY tenant_app_access ON "Tenant" FOR ALL TO app_runtime USING (true) WITH CHECK (true);
 
+-- Metadados do Prisma. Não é tabela de tenant, mas fica em `public` e por isso
+-- é exposta ao PostgREST — o linter do Supabase acusa como crítico e está certo.
+-- Ninguém precisa lê-la pela API: as migrations rodam pelo DIRECT_URL como dono,
+-- e o dono ignora RLS (não usamos FORCE aqui de propósito, senão quebraríamos o
+-- próprio `prisma migrate`). Sem policy, qualquer outro papel enxerga 0 linhas.
+ALTER TABLE IF EXISTS "_prisma_migrations" ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON "_prisma_migrations" FROM PUBLIC';
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE 'REVOKE ALL ON "_prisma_migrations" FROM anon';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+      EXECUTE 'REVOKE ALL ON "_prisma_migrations" FROM authenticated';
+    END IF;
+  END IF;
+END $$;
+
 -- Demais tabelas: RLS FORCE + policy por tenant + grants.
 DO $$
 DECLARE t text;
