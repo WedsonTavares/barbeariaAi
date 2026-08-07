@@ -15,8 +15,60 @@ const PROXY_HEADER = process.env.EVOLUTION_PROXY_HEADER ?? "x-evolution-proxy";
 
 export type WhatsappState = "open" | "connecting" | "close" | "unknown";
 
+/**
+ * Servidores e instâncias de OUTRO produto (Diny Festas). Este app nunca pode
+ * falar com eles.
+ *
+ * O perigo é concreto e silencioso: `tenantService.evolutionInstance()` cai no
+ * SLUG do tenant quando `evolutionInstance` está vazio, e as ações do painel
+ * (`ensureInstance`, `getQrCode`, `logoutInstance`) mandam esse nome direto pro
+ * host configurado. Bastaria alguém reaproveitar a URL/API key do Evolution do
+ * Diny aqui para o botão "Desconectar" de Configurações derrubar o WhatsApp de
+ * produção do outro negócio.
+ */
+const HOSTS_PROIBIDOS = ["evo.dinyfestas.com.br", "dinyfestas.com.br"];
+const INSTANCIAS_PROIBIDAS = ["diny-festas", "diny", "evolution-diny", "dinyfestas"];
+
+function hostProibido(): string | null {
+  if (!API_URL) return null;
+  let hostname: string;
+  try {
+    hostname = new URL(API_URL).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  return HOSTS_PROIBIDOS.find((proibido) => hostname === proibido || hostname.endsWith(`.${proibido}`)) ?? null;
+}
+
+function instanciaProibida(instance: string): boolean {
+  return INSTANCIAS_PROIBIDAS.includes(instance.trim().toLowerCase());
+}
+
+/**
+ * Fail-closed: qualquer chamada para um host ou instância de outro produto é
+ * recusada aqui, antes de virar requisição.
+ */
+function bloqueado(instance?: string): boolean {
+  const host = hostProibido();
+  if (host) {
+    console.error(
+      `[evolution] BLOQUEADO: EVOLUTION_API_URL aponta para ${host}, que é do Diny Festas. ` +
+        "A Barbearia AI precisa de um Evolution próprio (container, banco, API key e domínio separados)."
+    );
+    return true;
+  }
+  if (instance && instanciaProibida(instance)) {
+    console.error(
+      `[evolution] BLOQUEADO: a instância "${instance}" é do Diny Festas. ` +
+        "Defina TenantSettings.evolutionInstance deste tenant com um nome próprio."
+    );
+    return true;
+  }
+  return false;
+}
+
 export function evolutionConfigured(): boolean {
-  return Boolean(API_URL && API_KEY && PROXY);
+  return Boolean(API_URL && API_KEY && PROXY) && !bloqueado();
 }
 
 function headers(): Record<string, string> {
@@ -25,7 +77,7 @@ function headers(): Record<string, string> {
 
 /** Estado da conexão: open = conectado, connecting = aguardando QR, close = desconectado. */
 export async function getConnectionState(instance: string): Promise<WhatsappState> {
-  if (!evolutionConfigured() || !instance) return "unknown";
+  if (!evolutionConfigured() || !instance || bloqueado(instance)) return "unknown";
   try {
     const res = await fetch(`${API_URL}/instance/connectionState/${instance}`, { headers: headers(), cache: "no-store" });
     if (!res.ok) return "unknown";
@@ -41,7 +93,7 @@ export async function getConnectionState(instance: string): Promise<WhatsappStat
  * primeira vez). Idempotente: se já existe, o Evolution devolve erro e seguimos.
  */
 export async function ensureInstance(instance: string, webhookUrl?: string): Promise<void> {
-  if (!evolutionConfigured() || !instance) return;
+  if (!evolutionConfigured() || !instance || bloqueado(instance)) return;
   try {
     const state = await getConnectionState(instance);
     if (state !== "unknown") return; // já existe
@@ -63,7 +115,7 @@ export async function ensureInstance(instance: string, webhookUrl?: string): Pro
 
 /** Dispara a conexão e devolve o QR (base64) e/ou código de pareamento. */
 export async function getQrCode(instance: string): Promise<{ base64?: string; pairingCode?: string; state: WhatsappState }> {
-  if (!evolutionConfigured() || !instance) return { state: "unknown" };
+  if (!evolutionConfigured() || !instance || bloqueado(instance)) return { state: "unknown" };
   try {
     const res = await fetch(`${API_URL}/instance/connect/${instance}`, { headers: headers(), cache: "no-store" });
     const j = await res.json().catch(() => ({}));
@@ -79,7 +131,7 @@ export async function getQrCode(instance: string): Promise<{ base64?: string; pa
 
 /** Envia uma mensagem de texto pra um número via WhatsApp (Evolution). */
 export async function sendText(instance: string, phone: string, text: string): Promise<boolean> {
-  if (!evolutionConfigured() || !instance) return false;
+  if (!evolutionConfigured() || !instance || bloqueado(instance)) return false;
   try {
     const res = await fetch(`${API_URL}/message/sendText/${instance}`, {
       method: "POST",
@@ -94,7 +146,7 @@ export async function sendText(instance: string, phone: string, text: string): P
 
 /** Desconecta o WhatsApp (logout) — a IA para de receber/responder até reconectar. */
 export async function logoutInstance(instance: string): Promise<boolean> {
-  if (!evolutionConfigured() || !instance) return false;
+  if (!evolutionConfigured() || !instance || bloqueado(instance)) return false;
   try {
     const res = await fetch(`${API_URL}/instance/logout/${instance}`, { method: "DELETE", headers: headers() });
     return res.ok;
