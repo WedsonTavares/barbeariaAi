@@ -374,7 +374,7 @@ export default async function ConfiguracoesPage({
           </p>
         </div>
         <div className="p-4 sm:p-5">
-          <WhatsappConnect initialState={state} />
+          <WhatsappConnect initialState={state} configurado={configured} />
           <p className="mt-4 text-xs text-[var(--color-muted)]">
             Use o número dedicado ao atendimento — ao conectar, ele passa a ser gerenciado pela automação.
             Esta conexão é exclusiva da sua empresa: nenhuma outra enxerga nem desconecta este número.

@@ -28,7 +28,14 @@ const INTERVALO_STATUS_MS = 3_000;
 /** Aba esquecida aberta para de consultar depois disso. */
 const LIMITE_STATUS_MS = 5 * 60_000;
 
-export function WhatsappConnect({ initialState }: { initialState: WhatsappState }) {
+export function WhatsappConnect({
+  initialState,
+  configurado = true,
+}: {
+  initialState: WhatsappState;
+  /** Há EVOLUTION_* no ambiente? Separa "falta configurar" de "está fora do ar". */
+  configurado?: boolean;
+}) {
   const [state, setState] = useState<WhatsappState>(initialState);
   const [qr, setQr] = useState<string | undefined>();
   const [pairing, setPairing] = useState<string | undefined>();
@@ -78,8 +85,24 @@ export function WhatsappConnect({ initialState }: { initialState: WhatsappState 
 
   useEffect(() => () => pararTimers(), [pararTimers]);
 
+  // Dois problemas diferentes, de pessoas diferentes: um é do dono do projeto
+  // (falta variável de ambiente), o outro é operacional (servidor caiu). A tela
+  // dizia a mesma coisa nos dois casos e isso já custou tempo num incidente.
+  if (!configurado) {
+    return (
+      <p className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800">
+        Integração de WhatsApp ainda não configurada neste ambiente. Fale com o suporte.
+      </p>
+    );
+  }
+
   if (state === "unknown") {
-    return <p className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800">Integração de WhatsApp ainda não configurada no ambiente. Fale com o suporte.</p>;
+    return (
+      <p className="rounded-lg bg-red-50 p-4 text-sm text-red-800">
+        Não foi possível falar com o servidor de WhatsApp. Ele pode estar fora do ar ou em
+        manutenção — a conexão não foi perdida, só não dá para consultá-la agora.
+      </p>
+    );
   }
 
   if (state === "open") {
