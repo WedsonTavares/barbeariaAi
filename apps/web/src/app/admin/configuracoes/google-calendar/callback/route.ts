@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { requireRole, services } from "@barbearia-ai/core";
-import { requireTenant } from "@/lib/tenant";
+import { requireTenantById } from "@/lib/tenant";
+import { tenantHost } from "@/lib/tenant-resolution";
 
 type TokenResponse = {
   access_token?: string;
@@ -20,8 +21,23 @@ type EventsListResponse = {
   nextSyncToken?: string;
 };
 
+const SETTINGS_PATH = "/admin/configuracoes";
+
 function settingsUrl(code: string) {
-  return `/admin/configuracoes?calendar=${code}#google-calendar`;
+  return `${SETTINGS_PATH}?calendar=${code}#google-calendar`;
+}
+
+/**
+ * De volta para as Configurações DA EMPRESA que iniciou a conexão.
+ *
+ * O Google sempre devolve no redirect URI registrado, que é um host só. Sem
+ * este desvio, o dono de outro tenant terminaria o fluxo no painel de outra
+ * empresa (onde ele nem tem acesso) em vez de no dele.
+ */
+function backToTenant(request: URL, slug: string, code: string) {
+  const target = new URL(settingsUrl(code), request.origin);
+  target.host = tenantHost(slug);
+  return NextResponse.redirect(target);
 }
 
 async function initialSyncToken(accessToken: string) {
@@ -42,23 +58,30 @@ async function initialSyncToken(accessToken: string) {
 }
 
 export async function GET(req: Request) {
-  const { tenant, ctx } = await requireTenant();
-  requireRole(ctx, ["OWNER", "ADMIN"]);
-
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const stateRaw = url.searchParams.get("state");
   if (!code || !stateRaw) return NextResponse.redirect(new URL(settingsUrl("invalid"), url.origin));
 
+  // O tenant vem do `state`, não do host: quem valida o acesso é a membership
+  // do usuário logado nessa empresa (ver requireTenantById).
+  let state: { tenantId?: string; professionalId?: string | null };
   try {
-    const state = JSON.parse(Buffer.from(stateRaw, "base64url").toString("utf8")) as { tenantId?: string };
-    if (state.tenantId !== tenant.id) return NextResponse.redirect(new URL(settingsUrl("invalid"), url.origin));
+    state = JSON.parse(Buffer.from(stateRaw, "base64url").toString("utf8"));
+  } catch {
+    return NextResponse.redirect(new URL(settingsUrl("invalid"), url.origin));
+  }
+  if (!state.tenantId) return NextResponse.redirect(new URL(settingsUrl("invalid"), url.origin));
 
+  const { tenant, ctx } = await requireTenantById(state.tenantId);
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+
+  try {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const redirectUri = process.env.GOOGLE_CALENDAR_REDIRECT_URI;
     if (!clientId || !clientSecret || !redirectUri || !process.env.CALENDAR_TOKEN_ENCRYPTION_KEY) {
-      return NextResponse.redirect(new URL(settingsUrl("missing_env"), url.origin));
+      return backToTenant(url, tenant.slug, "missing_env");
     }
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -73,7 +96,7 @@ export async function GET(req: Request) {
       }),
     });
     const tokens = (await tokenRes.json()) as TokenResponse;
-    if (!tokenRes.ok || !tokens.access_token) return NextResponse.redirect(new URL(settingsUrl("failed"), url.origin));
+    if (!tokenRes.ok || !tokens.access_token) return backToTenant(url, tenant.slug, "failed");
 
     const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
       headers: { authorization: `Bearer ${tokens.access_token}` },
@@ -88,6 +111,7 @@ export async function GET(req: Request) {
       scope: tokens.scope,
       googleAccountEmail: userInfo.email,
       calendarId: "primary",
+      professionalId: state.professionalId ?? null,
     });
 
     await services.calendarService.startGoogleSubscription(tenant.id, {
@@ -97,9 +121,9 @@ export async function GET(req: Request) {
       syncToken,
     });
 
-    return NextResponse.redirect(new URL(settingsUrl("connected"), url.origin));
+    return backToTenant(url, tenant.slug, "connected");
   } catch (error) {
     console.error("[google-calendar] callback failed", error);
-    return NextResponse.redirect(new URL(settingsUrl("failed"), url.origin));
+    return backToTenant(url, tenant.slug, "failed");
   }
 }

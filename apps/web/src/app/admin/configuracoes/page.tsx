@@ -26,10 +26,11 @@ export default async function ConfiguracoesPage({
 }) {
   const sp = await searchParams;
   const { tenant } = await requireTenant();
-  const [settings, instance, calendarConnections] = await Promise.all([
+  const [settings, instance, calendarConnections, professionals] = await Promise.all([
     services.tenantService.getSettings(tenant.id),
     services.tenantService.evolutionInstance(tenant.id, tenant.slug),
     services.calendarService.listGoogleConnections(tenant.id),
+    services.professionalService.active(tenant.id),
   ]);
   const googleConfig = services.calendarService.googleConfigStatus();
   const googleReady = googleConfig.clientId && googleConfig.clientSecret && googleConfig.redirectUri && googleConfig.tokenKey;
@@ -302,15 +303,32 @@ export default async function ConfiguracoesPage({
                   : "Defina GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALENDAR_REDIRECT_URI e CALENDAR_TOKEN_ENCRYPTION_KEY."}
               </p>
             </div>
-            <a
-              href="/admin/configuracoes/google-calendar/connect"
-              aria-disabled={!googleReady}
-              className={`rounded-full px-4 py-2 text-sm font-bold ${
-                googleReady ? "bg-[var(--color-primary)] text-white" : "pointer-events-none bg-slate-200 text-slate-500"
-              }`}
-            >
-              Conectar Google
-            </a>
+            {/* Formulário GET: o profissional escolhido viaja como querystring
+                pro /connect, que valida o id antes de assiná-lo no state. */}
+            <form action="/admin/configuracoes/google-calendar/connect" method="get" className="flex shrink-0 gap-2">
+              {professionals.length > 0 && (
+                <select
+                  name="professionalId"
+                  defaultValue=""
+                  aria-label="Agenda de qual profissional"
+                  disabled={!googleReady}
+                  className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Agenda da casa</option>
+                  {professionals.map((professional) => (
+                    <option key={professional.id} value={professional.id}>{professional.name}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                disabled={!googleReady}
+                className={`rounded-full px-4 py-2 text-sm font-bold ${
+                  googleReady ? "bg-[var(--color-primary)] text-white" : "cursor-not-allowed bg-slate-200 text-slate-500"
+                }`}
+              >
+                Conectar Google
+              </button>
+            </form>
           </div>
 
           {calendarConnections.length === 0 ? (
@@ -324,7 +342,8 @@ export default async function ConfiguracoesPage({
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold">{connection.googleAccountEmail ?? "Conta Google"}</div>
                     <div className="text-xs text-[var(--color-muted)]">
-                      Calendário {connection.calendarId ?? "primary"} · {connection.status}
+                      {connection.professional?.name ?? "Agenda da casa"} · calendário{" "}
+                      {connection.calendarId ?? "primary"} · {connection.status}
                     </div>
                   </div>
                   <form action={disconnectGoogleCalendarAction}>

@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { requireTenantAccess, type AuthContext } from "@barbearia-ai/core";
+import { AccessError, requireTenantAccess, services, type AuthContext } from "@barbearia-ai/core";
 import { tenantFromHost } from "./tenant-resolution";
 
 /** Monta o AuthContext a partir da sessão do Clerk (executa no servidor). */
@@ -29,21 +29,38 @@ export const resolveTenant = cache(async function resolveTenant() {
  */
 export const requireTenant = cache(async function requireTenant() {
   const tenant = await resolveTenant();
-  let ctx = await getAuthContext();
-
-  // Multi-tenant por subdomínio: o tenant já vem do host. Basta o usuário ser MEMBRO
-  // da organização do tenant — não precisa ser a "organização ativa" do Clerk (que é um
-  // estado global e conflita com abas de tenants diferentes). Se a org ativa não bater,
-  // resolvemos pela membership (alinhado ao CLAUDE.md, regra 5: subdomínio + membership).
-  if (tenant && ctx.userId && !ctx.isSuperAdmin && ctx.orgId !== tenant.clerkOrgId) {
-    const client = await clerkClient();
-    const { data } = await client.users.getOrganizationMembershipList({ userId: ctx.userId });
-    const membership = data.find((m) => m.organization.id === tenant.clerkOrgId);
-    if (membership) {
-      ctx = { ...ctx, orgId: tenant.clerkOrgId, orgRole: membership.role };
-    }
-  }
-
+  const ctx = await withMembership(await getAuthContext(), tenant?.clerkOrgId);
   requireTenantAccess(tenant, ctx);
   return { tenant, ctx };
 });
+
+/**
+ * Multi-tenant por subdomínio: o tenant vem do host. Basta o usuário ser MEMBRO
+ * da organização do tenant — não precisa ser a "organização ativa" do Clerk (que é um
+ * estado global e conflita com abas de tenants diferentes). Se a org ativa não bater,
+ * resolvemos pela membership (alinhado ao CLAUDE.md, regra 5: subdomínio + membership).
+ */
+async function withMembership(ctx: AuthContext, clerkOrgId?: string | null): Promise<AuthContext> {
+  if (!clerkOrgId || !ctx.userId || ctx.isSuperAdmin || ctx.orgId === clerkOrgId) return ctx;
+  const client = await clerkClient();
+  const { data } = await client.users.getOrganizationMembershipList({ userId: ctx.userId });
+  const membership = data.find((m) => m.organization.id === clerkOrgId);
+  return membership ? { ...ctx, orgId: clerkOrgId, orgRole: membership.role } : ctx;
+}
+
+/**
+ * Mesma garantia de `requireTenant`, mas com o tenant vindo de um id confiável
+ * em vez do host.
+ *
+ * Existe para o retorno do OAuth do Google: o redirect URI registrado é um só,
+ * então o Google devolve o usuário sempre no MESMO host, que pode não ser o
+ * subdomínio da empresa que iniciou a conexão. Resolvendo pelo host, só o
+ * primeiro tenant conseguia conectar — os demais batiam em "sem acesso".
+ */
+export async function requireTenantById(tenantId: string) {
+  const tenant = await services.tenantService.get(tenantId);
+  if (!tenant?.active) throw new AccessError("Empresa não encontrada");
+  const ctx = await withMembership(await getAuthContext(), tenant.clerkOrgId);
+  requireTenantAccess(tenant, ctx);
+  return { tenant, ctx };
+}

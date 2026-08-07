@@ -60,6 +60,15 @@ type StoredConnection = {
   calendarId: string | null;
 };
 
+/** Campos mínimos para falar com o Google em nome de uma conexão. */
+const CONNECTION_SELECT = {
+  id: true,
+  accessTokenEncrypted: true,
+  refreshTokenEncrypted: true,
+  expiresAt: true,
+  calendarId: true,
+} as const;
+
 async function accessTokenFor(tenantId: string, connection: StoredConnection) {
   const current = decrypt(connection.accessTokenEncrypted);
   const freshEnough = connection.expiresAt && connection.expiresAt.getTime() > Date.now() + 60_000;
@@ -199,11 +208,37 @@ export const calendarService = {
       })
     ),
 
-  disconnect: (tenantId: string, id: string) =>
-    withTenant(tenantId, async (tx) => {
+  disconnect: async (tenantId: string, id: string) => {
+    const connection = await withTenant(tenantId, (tx) =>
+      tx.calendarConnection.findFirst({
+        where: { id },
+        select: {
+          ...CONNECTION_SELECT,
+          subscriptions: { where: { active: true }, select: { channelId: true, resourceId: true } },
+        },
+      })
+    );
+    if (!connection) return null;
+
+    // Avisa o Google ANTES de esquecer a conexão: sem o channels/stop ele segue
+    // empurrando push notification pro nosso webhook até o canal expirar
+    // sozinho (dias), com um token que já não conseguimos usar.
+    try {
+      const token = await accessTokenFor(tenantId, connection);
+      if (token) {
+        for (const subscription of connection.subscriptions) {
+          await stopGoogleWatch(token, subscription.channelId, subscription.resourceId);
+        }
+      }
+    } catch (error) {
+      console.error("[google-calendar] não foi possível encerrar o canal no Google", error);
+    }
+
+    return withTenant(tenantId, async (tx) => {
       await tx.calendarSubscription.updateMany({ where: { connectionId: id }, data: { active: false } });
       return tx.calendarConnection.update({ where: { id }, data: { status: "REVOKED" } });
-    }),
+    });
+  },
 
   saveGoogleTokens: (
     tenantId: string,
@@ -214,6 +249,8 @@ export const calendarService = {
       scope?: string | null;
       googleAccountEmail?: string | null;
       calendarId?: string | null;
+      /** Agenda de um profissional específico; `null` = agenda da casa. */
+      professionalId?: string | null;
     }
   ) =>
     withTenant(tenantId, (tx) =>
@@ -221,6 +258,7 @@ export const calendarService = {
         data: {
           tenantId,
           provider: GOOGLE_PROVIDER,
+          professionalId: data.professionalId ?? null,
           googleAccountEmail: data.googleAccountEmail ?? null,
           calendarId: data.calendarId ?? "primary",
           accessTokenEncrypted: encrypt(data.accessToken),
@@ -343,28 +381,34 @@ export const calendarService = {
 
   syncAppointment: async (tenantId: string, appointmentId: string) => {
     const data = await withTenant(tenantId, async (tx) => {
-      const [appointment, connection] = await Promise.all([
-        tx.appointment.findFirst({
-          where: { id: appointmentId },
-          include: {
-            customer: true,
-            professional: true,
-            services: true,
-          },
-        }),
+      const appointment = await tx.appointment.findFirst({
+        where: { id: appointmentId },
+        include: {
+          customer: true,
+          professional: true,
+          services: true,
+        },
+      });
+      if (!appointment) return null;
+
+      /**
+       * Agenda do profissional que vai atender, quando ele tem uma conectada;
+       * senão a agenda da casa. Antes era sempre a conexão mais recente do
+       * tenant — com três barbeiros, tudo caía num calendário só.
+       */
+      const pick = (where: { professionalId?: string | null }) =>
         tx.calendarConnection.findFirst({
-          where: { provider: GOOGLE_PROVIDER, status: "ACTIVE" },
+          where: { provider: GOOGLE_PROVIDER, status: "ACTIVE", ...where },
           orderBy: { updatedAt: "desc" },
-          select: {
-            id: true,
-            accessTokenEncrypted: true,
-            refreshTokenEncrypted: true,
-            expiresAt: true,
-            calendarId: true,
-          },
-        }),
-      ]);
-      return appointment && connection ? { appointment, connection } : null;
+          select: CONNECTION_SELECT,
+        });
+      const connection =
+        (appointment.professionalId ? await pick({ professionalId: appointment.professionalId }) : null) ??
+        (await pick({ professionalId: null })) ??
+        // Instalação que conectou uma agenda só, antes de existir vínculo por
+        // profissional: continua valendo em vez de virar "não configurado".
+        (await pick({}));
+      return connection ? { appointment, connection } : null;
     });
     if (!data) return { synced: false as const, reason: "not_configured" as const };
 
