@@ -4,7 +4,7 @@ import { CalendarPlus } from "lucide-react";
 import { services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { brl, fmtDateTime } from "@/lib/format";
-import { APPOINTMENT_STATUS, label } from "@/lib/labels";
+import { APPOINTMENT_STATUS, ERRO_AGENDAMENTO, label } from "@/lib/labels";
 import { createAppointmentAction, setAppointmentStatusAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +49,7 @@ export default async function AgendamentosPage({
       )}
       {sp.erro && (
         <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700">
-          Não salvou. Confira cliente, horário e serviços.
+          {label(ERRO_AGENDAMENTO, sp.erro)}
         </p>
       )}
 

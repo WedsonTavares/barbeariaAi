@@ -49,8 +49,11 @@ export async function createAppointmentAction(formData: FormData) {
     const appointment = await services.appointmentService.create(tenant.id, data);
     await services.calendarService.syncAppointment(tenant.id, appointment.id).catch(() => {});
   } catch (error) {
-    if (error instanceof ZodError || error instanceof Error) dest = `${BASE}?erro=validacao`;
-    else throw error;
+    // Conflito de agenda não é "dado inválido": quem preencheu acertou tudo e
+    // o horário é que está ocupado. Misturar os dois deixava o usuário
+    // conferindo campo por campo atrás de um erro que não existia.
+    dest = `${BASE}?erro=${erroDe(error)}`;
+    if (!(error instanceof ZodError) && !(error instanceof Error)) throw error;
   }
 
   revalidatePath(BASE);
@@ -61,14 +64,26 @@ export async function createAppointmentAction(formData: FormData) {
 export async function setAppointmentStatusAction(formData: FormData) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
+  let dest = BASE;
   try {
     const id = schemas.idInput.parse(formData.get("id"));
     const status = schemas.appointmentStatus.parse(formData.get("status"));
     await services.appointmentService.setStatus(tenant.id, id, status);
     await services.calendarService.syncAppointment(tenant.id, id).catch(() => {});
   } catch (error) {
-    if (!(error instanceof ZodError)) throw error;
+    // Reabrir um cancelado pode esbarrar em outro cliente que pegou o horário.
+    // Isso precisa aparecer na tela — antes virava erro 500 sem explicação.
+    if (!(error instanceof ZodError) && !(error instanceof Error)) throw error;
+    dest = `${BASE}?erro=${erroDe(error)}`;
   }
   revalidatePath(BASE);
   revalidatePath("/admin/agenda");
+  redirect(dest);
+}
+
+/** Traduz a exceção no código que a página sabe transformar em mensagem. */
+function erroDe(error: unknown): string {
+  if (error instanceof services.AppointmentConflictError) return "conflito";
+  if (error instanceof services.AppointmentStateError) return "estado";
+  return "validacao";
 }

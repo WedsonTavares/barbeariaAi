@@ -46,4 +46,15 @@ export const EXPENSE_CATEGORY: Record<string, string> = {
   OTHER: "Outro",
 };
 
+/**
+ * Motivos de recusa ao salvar um agendamento. Separados porque exigem ações
+ * diferentes de quem está na tela: conflito é escolher outro horário, validação
+ * é conferir os campos.
+ */
+export const ERRO_AGENDAMENTO: Record<string, string> = {
+  conflito: "Esse horário já está ocupado. Escolha outro horário ou outro profissional.",
+  estado: "Não é possível fazer essa mudança neste agendamento.",
+  validacao: "Não salvou. Confira cliente, horário e serviços.",
+};
+
 export const label = (map: Record<string, string>, key: string) => map[key] ?? key;
