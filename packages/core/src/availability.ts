@@ -2,6 +2,51 @@ const MINUTES_PER_DAY = 24 * 60;
 
 export const AVAILABILITY_SLOT_MINUTES = 30;
 
+/** Folga de preparo/limpeza, em minutos, exigida antes e depois do atendimento. */
+export interface ServiceBuffer {
+  before: number;
+  after: number;
+}
+
+export const NO_BUFFER: ServiceBuffer = { before: 0, after: 0 };
+
+/** Intervalo ocupado, em milissegundos desde a época. */
+export interface BusyWindow {
+  from: number;
+  to: number;
+}
+
+/**
+ * Folga exigida por um conjunto de serviços.
+ *
+ * Usa o MAIOR valor do conjunto, não a soma: o intervalo acontece uma vez antes
+ * e uma vez depois do atendimento inteiro, não a cada serviço encadeado.
+ */
+export function serviceBufferOf(
+  services: { bufferBeforeMinutes: number; bufferAfterMinutes: number }[]
+): ServiceBuffer {
+  return {
+    before: Math.max(0, ...services.map((service) => service.bufferBeforeMinutes)),
+    after: Math.max(0, ...services.map((service) => service.bufferAfterMinutes)),
+  };
+}
+
+/** O atendimento esticado pela folga — é isto que de fato ocupa a agenda. */
+export function bufferedWindow(startAt: Date, endAt: Date, buffer: ServiceBuffer = NO_BUFFER): BusyWindow {
+  return {
+    from: startAt.getTime() - buffer.before * 60_000,
+    to: endAt.getTime() + buffer.after * 60_000,
+  };
+}
+
+/**
+ * Intervalos meio-abertos: quem termina às 14:00 libera o horário que começa às
+ * 14:00. Encostar não é conflitar.
+ */
+export function windowsOverlap(a: BusyWindow, b: BusyWindow): boolean {
+  return a.from < b.to && a.to > b.from;
+}
+
 export interface OccupiedResourceInterval {
   resourceId: string;
   startAt: Date;
