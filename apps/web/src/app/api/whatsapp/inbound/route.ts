@@ -27,6 +27,7 @@ export async function POST(req: Request) {
   const tenantId = tenant.id;
   const { phone, text, name } = parsed;
   const n8nUrl = process.env.N8N_AGENT_WEBHOOK_URL;
+  const tenantHost = req.headers.get("host");
 
   // Só aciona o cérebro (n8n ou bot nativo) se o bot pode responder (respeita tags/handoff).
   after(async () => {
@@ -35,12 +36,33 @@ export async function POST(req: Request) {
 
       if (n8nUrl) {
         // HÍBRIDO: o n8n é o cérebro (você controla o workflow). Ele responde chamando
-        // /api/whatsapp/send (que salva no inbox + envia). Passamos o subdomínio do tenant
-        // pra ele saber pra onde devolver a resposta.
+        // /api/whatsapp/send (que salva no inbox + envia).
+        //
+        // Mandamos a identidade COMPLETA do tenant, e não só o host: desde que
+        // cada empresa tem o seu segredo, o n8n não teria como descobri-lo a
+        // partir do host (o /api/agent/tenant resolve por INSTÂNCIA). Sem isto
+        // as ferramentas do agente voltariam 401.
+        //
+        // O segredo trafega numa chamada servidor-a-servidor, por HTTPS, para o
+        // n8n que é seu. É a mesma confiança que o workflow já precisa ter.
+        const [agentSecret, instance] = await Promise.all([
+          services.tenantService.ensureAgentSecret(tenantId),
+          services.tenantService.evolutionInstance(tenantId, tenant.slug),
+        ]);
         await fetch(n8nUrl, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ phone, message: text, name, tenantHost: req.headers.get("host") }),
+          body: JSON.stringify({
+            phone,
+            message: text,
+            name,
+            tenantHost,
+            tenantId,
+            tenantSlug: tenant.slug,
+            instance,
+            apiBase: `https://${tenantHost}`,
+            agentSecret,
+          }),
           signal: AbortSignal.timeout(8_000),
         });
       } else {
