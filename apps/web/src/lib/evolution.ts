@@ -80,6 +80,11 @@ export async function getConnectionState(instance: string): Promise<WhatsappStat
   if (!evolutionConfigured() || !instance || bloqueado(instance)) return "unknown";
   try {
     const res = await fetch(`${API_URL}/instance/connectionState/${instance}`, { headers: headers(), cache: "no-store" });
+    // 404 = a instância ainda não existe no Evolution. É o estado NORMAL de uma
+    // empresa nova, não uma falha: ela só é criada por `ensureInstance`, que roda
+    // ao pedir o primeiro QR. Tratar isso como "unknown" travava o cadastro —
+    // a tela mostrava erro e escondia justamente o botão que criaria a instância.
+    if (res.status === 404) return "close";
     if (!res.ok) return "unknown";
     const j = await res.json();
     return (j?.instance?.state as WhatsappState) ?? "unknown";
