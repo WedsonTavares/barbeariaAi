@@ -24,12 +24,21 @@ const GROUPS = [
       { href: "/admin/galeria", label: "Galeria", icon: Images },
       { href: "/admin/financeiro", label: "Financeiro", icon: Wallet },
       { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
-      { href: "/admin/api-docs", label: "API", icon: Braces },
     ],
   },
 ];
 
-const ALL_LINKS = GROUPS.flatMap((g) => g.links);
+/**
+ * Ferramentas de operador, não do cliente. A documentação da API tem "Try it
+ * out" que dispara requisição REAL em produção — não é algo para uma barbearia
+ * encontrar no menu por acidente.
+ */
+const GRUPOS_SUPER_ADMIN = [
+  {
+    label: "Plataforma",
+    links: [{ href: "/admin/api-docs", label: "API", icon: Braces }],
+  },
+];
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -43,8 +52,16 @@ function isActive(pathname: string, href: string) {
  * de que dava pra rolar — quem abria no telefone achava que o painel tinha
  * três telas. O botão mostra tudo de uma vez, com os agrupamentos.
  */
-export function AdminSidebar({ tenantName }: { tenantName: string }) {
+export function AdminSidebar({
+  tenantName,
+  superAdmin = false,
+}: {
+  tenantName: string;
+  superAdmin?: boolean;
+}) {
   const pathname = usePathname() ?? "";
+  const grupos = superAdmin ? [...GROUPS, ...GRUPOS_SUPER_ADMIN] : GROUPS;
+  const todosOsLinks = grupos.flatMap((g) => g.links);
   const [aberto, setAberto] = useState(false);
   const painelRef = useRef<HTMLDivElement>(null);
   const inicial = tenantName.trim().charAt(0).toUpperCase() || "D";
@@ -75,7 +92,7 @@ export function AdminSidebar({ tenantName }: { tenantName: string }) {
         : "text-[var(--color-ink)] hover:bg-[var(--color-surface)]"
     }`;
 
-  const atual = ALL_LINKS.find((l) => isActive(pathname, l.href));
+  const atual = todosOsLinks.find((l) => isActive(pathname, l.href));
 
   return (
     <>
@@ -133,7 +150,7 @@ export function AdminSidebar({ tenantName }: { tenantName: string }) {
             </div>
 
             <nav className="flex flex-col gap-1 p-3" aria-label="Menu do painel">
-              {GROUPS.map((group) => (
+              {grupos.map((group) => (
                 <div key={group.label} className="mt-3 flex flex-col gap-1 first:mt-0">
                   <span className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
                     {group.label}
@@ -163,7 +180,7 @@ export function AdminSidebar({ tenantName }: { tenantName: string }) {
         </div>
 
         <nav className="flex flex-col" aria-label="Menu do painel">
-          {GROUPS.map((group) => (
+          {grupos.map((group) => (
             <div key={group.label} className="mt-4 flex flex-col gap-1 first:mt-1">
               <span className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
                 {group.label}

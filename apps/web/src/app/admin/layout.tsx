@@ -23,9 +23,11 @@ export const metadata: Metadata = {
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   let tenantName = "";
   let unreadCount = 0;
+  let superAdmin = false;
   try {
-    const { tenant } = await requireTenant();
+    const { tenant, ctx } = await requireTenant();
     tenantName = tenant.name;
+    superAdmin = Boolean(ctx.isSuperAdmin);
     unreadCount = await services.notificationService.unreadCount(tenant.id).catch(() => 0);
   } catch (e) {
     if (e instanceof AccessError && e.message.includes("autenticado")) redirect("/sign-in");
@@ -41,7 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <AdminSidebar tenantName={tenantName} />
+      <AdminSidebar tenantName={tenantName} superAdmin={superAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <AdminTopbar unreadCount={unreadCount} />
         <main className="flex-1 p-4 md:p-6">{children}</main>
