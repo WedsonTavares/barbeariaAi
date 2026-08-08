@@ -94,14 +94,37 @@ export async function getConnectionState(instance: string): Promise<WhatsappStat
 }
 
 /**
+ * A instância existe no Evolution?
+ *
+ * Pergunta diferente de "está conectada" — e foi confundi-las que quebrou a
+ * criação: `getConnectionState` traduz 404 para "close" (a tela precisa disso,
+ * senão mostra erro em vez do botão de conectar), e o `ensureInstance` lia esse
+ * "close" como "já existe" e não criava nada.
+ *
+ * `null` = não deu para saber (rede fora, host bloqueado). Nesse caso não se
+ * cria nada: melhor não agir do que criar instância duplicada às cegas.
+ */
+async function instanciaExiste(instance: string): Promise<boolean | null> {
+  if (!evolutionConfigured() || !instance || bloqueado(instance)) return null;
+  try {
+    const res = await fetch(`${API_URL}/instance/connectionState/${instance}`, { headers: headers(), cache: "no-store" });
+    if (res.status === 404) return false;
+    if (!res.ok) return null;
+    return true;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Cria a instância no Evolution se ainda não existir (tenant novo conectando pela
  * primeira vez). Idempotente: se já existe, o Evolution devolve erro e seguimos.
  */
 export async function ensureInstance(instance: string, webhookUrl?: string): Promise<void> {
   if (!evolutionConfigured() || !instance || bloqueado(instance)) return;
   try {
-    const state = await getConnectionState(instance);
-    if (state !== "unknown") return; // já existe
+    const existe = await instanciaExiste(instance);
+    if (existe !== false) return; // já existe, ou não deu para confirmar
     await fetch(`${API_URL}/instance/create`, {
       method: "POST",
       headers: headers(),
