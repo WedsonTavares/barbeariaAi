@@ -15,14 +15,16 @@ export const DB_TESTS = ["**/isolation.test.ts", "**/customer-service.test.ts"];
  * `test-a`/`test-b` e criam clientes. Rodar contra um banco de verdade escreve
  * lixo dentro dele.
  *
- * `bfmhmmpkqgkjgrkpqjzv` é a produção da Barbearia AI. `lgiyjpivujmhzjgkkflq` é
- * o projeto do **Diny Festas** — outro produto, outro cliente, que só continuava
- * apontado aqui por herança do fork e chegou a receber essas escritas.
+ * Além da própria produção, a lista inclui os bancos do **Diny Festas** — outro
+ * produto. O de teste dele (`lgiyjpivujmhzjgkkflq`) continuava apontado aqui por
+ * herança do fork e chegou a receber os tenants `test-a`/`test-b` desta suíte;
+ * era também por isso que os testes de `customer-service` falhavam, já que
+ * aquele banco tem o schema antigo, sem `Appointment`.
  */
 const FORBIDDEN_DATABASES: Record<string, string> = {
   bfmhmmpkqgkjgrkpqjzv: "produção da Barbearia AI",
-  lgiyjpivujmhzjgkkflq: "projeto do Diny Festas (outro produto)",
-  rzezilteejznqnmonhyi: "produção antiga herdada do fork",
+  rzezilteejznqnmonhyi: "produção do Diny Festas (outro produto)",
+  lgiyjpivujmhzjgkkflq: "banco de teste do Diny Festas (outro produto)",
 };
 
 /**
