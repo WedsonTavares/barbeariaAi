@@ -9,7 +9,7 @@ export {
   type CustomerDirectoryEntry,
   type CustomerRemovalResult,
 } from "./customer-service";
-export { leadService } from "./lead-service";
+export { leadService, LEAD_ABERTO } from "./lead-service";
 export {
   appointmentService,
   AppointmentConflictError,

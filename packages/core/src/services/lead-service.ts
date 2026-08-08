@@ -3,9 +3,24 @@ import type { LeadInput, AgentLeadInput } from "../schemas";
 import type { LeadStatus } from "@prisma/client";
 import { pushNotification } from "./notification-service";
 
+/** Ainda esperando resposta da equipe. WON/LOST saíram do fluxo. */
+export const LEAD_ABERTO = ["NEW", "CONTACTED", "QUOTED"] as const satisfies readonly LeadStatus[];
+
 export const leadService = {
+  /**
+   * Leads do painel: em aberto primeiro, e dentro de cada grupo os mais novos
+   * no topo. Arquivados ficam de fora — sumir do painel sem apagar nada é a
+   * mesma convenção de Customer e Conversation.
+   */
   list: (tenantId: string) =>
-    withTenant(tenantId, (tx) => tx.lead.findMany({ orderBy: { createdAt: "desc" } })),
+    withTenant(tenantId, async (tx) => {
+      const todos = await tx.lead.findMany({
+        where: { archivedAt: null },
+        orderBy: { createdAt: "desc" },
+      });
+      const aberto = (l: { status: LeadStatus }) => LEAD_ABERTO.includes(l.status as never);
+      return { abertos: todos.filter(aberto), fechados: todos.filter((l) => !aberto(l)) };
+    }),
   create: (tenantId: string, data: LeadInput) =>
     withTenant(tenantId, (tx) => tx.lead.create({ data: { tenantId, ...data } })),
   setStatus: (tenantId: string, id: string, status: LeadStatus) =>

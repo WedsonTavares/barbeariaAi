@@ -16,6 +16,8 @@ export const leadSource = z.enum([
   "INSTAGRAM", "FACEBOOK", "GOOGLE", "INDICATION", "WHATSAPP", "WEBSITE", "PAID_ADS", "PARTNER", "OTHER",
 ]);
 
+export const leadStatus = z.enum(["NEW", "CONTACTED", "QUOTED", "WON", "LOST"]);
+
 export const serviceCategory = z.enum([
   "HAIR", "BEARD", "NAILS", "BROWS", "AESTHETICS", "TATTOO", "MASSAGE", "OTHER",
 ]);

@@ -57,4 +57,24 @@ export const ERRO_AGENDAMENTO: Record<string, string> = {
   validacao: "Não salvou. Confira cliente, horário e serviços.",
 };
 
+export const LEAD_STATUS: Record<string, string> = {
+  NEW: "Novo",
+  CONTACTED: "Em contato",
+  QUOTED: "Orçado",
+  WON: "Virou cliente",
+  LOST: "Perdido",
+};
+
+export const LEAD_SOURCE: Record<string, string> = {
+  INSTAGRAM: "Instagram",
+  FACEBOOK: "Facebook",
+  GOOGLE: "Google",
+  INDICATION: "Indicação",
+  WHATSAPP: "WhatsApp",
+  WEBSITE: "Site",
+  PAID_ADS: "Anúncio",
+  PARTNER: "Parceiro",
+  OTHER: "Outro",
+};
+
 export const label = (map: Record<string, string>, key: string) => map[key] ?? key;
