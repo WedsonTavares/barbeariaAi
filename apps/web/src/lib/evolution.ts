@@ -113,11 +113,25 @@ export async function ensureInstance(instance: string, webhookUrl?: string): Pro
   }
 }
 
-/** Dispara a conexão e devolve o QR (base64) e/ou código de pareamento. */
-export async function getQrCode(instance: string): Promise<{ base64?: string; pairingCode?: string; state: WhatsappState }> {
+/**
+ * Dispara a conexão e devolve o QR (base64) e/ou o código de pareamento.
+ *
+ * Passando `phone`, o Evolution devolve um CÓDIGO de 8 caracteres em vez de
+ * exigir a câmera. Isso importa mais do que parece: o dono da barbearia abre o
+ * painel no próprio celular (ele é instalável como app), e ninguém escaneia um
+ * QR exibido na mesma tela em que precisaria apontar a câmera. Com o código, o
+ * fluxo inteiro acontece num aparelho só.
+ */
+export async function getQrCode(
+  instance: string,
+  phone?: string
+): Promise<{ base64?: string; pairingCode?: string; state: WhatsappState }> {
   if (!evolutionConfigured() || !instance || bloqueado(instance)) return { state: "unknown" };
   try {
-    const res = await fetch(`${API_URL}/instance/connect/${instance}`, { headers: headers(), cache: "no-store" });
+    const numero = phone?.replace(/\D/g, "");
+    const url = new URL(`${API_URL}/instance/connect/${instance}`);
+    if (numero) url.searchParams.set("number", numero);
+    const res = await fetch(url, { headers: headers(), cache: "no-store" });
     const j = await res.json().catch(() => ({}));
     return {
       base64: j?.base64 ?? j?.qrcode?.base64,

@@ -4,29 +4,28 @@ import type { WhatsappState } from "@/lib/evolution";
 import { fetchQrAction, fetchStatusAction, disconnectAction } from "./actions";
 
 /**
- * Fluxo de conexão do WhatsApp: clica "Conectar" → mostra o QR → a tela fica
- * checando o status a cada 3s → quando conecta, mostra ✅ e para.
+ * Conexão do WhatsApp: escolhe o modo, gera UM pedido, e a tela acompanha o
+ * status até conectar.
  *
- * O QR NÃO se renova sozinho, de propósito.
+ * Cada geração é um pedido de vinculação ao WhatsApp, e o excesso derruba a
+ * conexão por horas. Por isso há três freios, e nenhum deles sozinho basta:
  *
- * Cada renovação é um pedido de pareamento ao WhatsApp (`GET /instance/connect`),
- * e o WhatsApp bloqueia temporariamente a vinculação de novos dispositivos quando
- * recebe muitos seguidos. A versão anterior renovava a cada 30s sem limite nenhum:
- * uma aba esquecida aberta disparava 120 pedidos por hora sozinha, sem ninguém
- * clicar em nada. Foi assim que, em 07/08/2026, uma queda de sessão de 1 segundo
- * virou horas de WhatsApp fora do ar — 11 pedidos em 5 minutos a partir de um
- * único clique.
+ *  1. o pedido só sai de um CLIQUE — nunca de `setInterval` (era esse o bug que
+ *     em 07/08/2026 disparou 11 pedidos em 5 minutos a partir de um clique só);
+ *  2. o botão fica travado com contagem regressiva entre um pedido e outro;
+ *  3. o SERVIDOR recusa acima do limite — as duas travas acima são de
+ *     navegador, e navegador não é lugar de guardar regra de segurança.
  *
- * A consulta de STATUS continua automática: ela é só leitura, não pareia nada.
- * Mesmo assim ela se encerra sozinha depois de LIMITE_STATUS_MS, para uma aba
- * abandonada não ficar batendo no servidor para sempre.
+ * A consulta de STATUS continua automática: é só leitura, não pareia nada.
  */
 
-/** Tempo que o QR do WhatsApp costuma durar. Passou disso, pede um novo — com clique. */
-const VALIDADE_QR_MS = 50_000;
+/** Tempo que o QR/código costuma durar antes de o WhatsApp descartá-lo. */
+const VALIDADE_MS = 50_000;
 const INTERVALO_STATUS_MS = 3_000;
 /** Aba esquecida aberta para de consultar depois disso. */
 const LIMITE_STATUS_MS = 5 * 60_000;
+
+type Modo = "qr" | "codigo";
 
 export function WhatsappConnect({
   initialState,
@@ -37,34 +36,72 @@ export function WhatsappConnect({
   configurado?: boolean;
 }) {
   const [state, setState] = useState<WhatsappState>(initialState);
+  const [modo, setModo] = useState<Modo>("qr");
+  const [telefone, setTelefone] = useState("");
   const [qr, setQr] = useState<string | undefined>();
   const [pairing, setPairing] = useState<string | undefined>();
   const [expirado, setExpirado] = useState(false);
+  const [espera, setEspera] = useState(0);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const statusTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const expiraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const esperaTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const pararTimers = useCallback(() => {
-    if (statusTimer.current) clearInterval(statusTimer.current);
-    if (expiraTimer.current) clearTimeout(expiraTimer.current);
-    statusTimer.current = null;
-    expiraTimer.current = null;
+    for (const t of [statusTimer, expiraTimer]) {
+      if (t.current) clearInterval(t.current as ReturnType<typeof setInterval>);
+      t.current = null;
+    }
   }, []);
 
-  /**
-   * ÚNICO caminho que pede um QR — e só é chamado a partir de um clique.
-   * Nenhum `setInterval` pode apontar para cá.
-   */
-  const gerarQr = useCallback(() => {
+  useEffect(
+    () => () => {
+      pararTimers();
+      if (esperaTimer.current) clearInterval(esperaTimer.current);
+    },
+    [pararTimers]
+  );
+
+  /** Trava o botão e conta o tempo para baixo, em segundos. */
+  const contarEspera = useCallback((segundos: number) => {
+    setEspera(segundos);
+    if (esperaTimer.current) clearInterval(esperaTimer.current);
+    esperaTimer.current = setInterval(() => {
+      setEspera((s) => {
+        if (s <= 1 && esperaTimer.current) clearInterval(esperaTimer.current);
+        return Math.max(0, s - 1);
+      });
+    }, 1000);
+  }, []);
+
+  /** ÚNICO caminho que pede vinculação — e só é chamado de um clique. */
+  const gerar = useCallback(() => {
+    setAviso(null);
     startTransition(async () => {
-      const r = await fetchQrAction();
+      const r = await fetchQrAction(modo === "codigo" ? telefone : undefined);
+
+      if (!r.ok) {
+        // O servidor recusou: é o freio de verdade. A tela só traduz.
+        contarEspera(r.aguardeSegundos);
+        setAviso(
+          `Para proteger a conexão, aguarde antes de gerar de novo. ` +
+            `Pedir muitos seguidos faz o WhatsApp bloquear a vinculação por horas.`
+        );
+        return;
+      }
+
       setQr(r.base64);
       setPairing(r.pairingCode);
       setExpirado(false);
-      if (r.state) setState(r.state);
+      if (r.state) setState(r.state as WhatsappState);
+      if (!r.base64 && !r.pairingCode) {
+        setAviso("O servidor de WhatsApp não devolveu o código. Tente de novo em instantes.");
+      }
 
       pararTimers();
-      expiraTimer.current = setTimeout(() => setExpirado(true), VALIDADE_QR_MS);
+      contarEspera(20);
+      expiraTimer.current = setTimeout(() => setExpirado(true), VALIDADE_MS);
 
       const ateQuando = Date.now() + LIMITE_STATUS_MS;
       statusTimer.current = setInterval(async () => {
@@ -81,13 +118,8 @@ export function WhatsappConnect({
         }
       }, INTERVALO_STATUS_MS);
     });
-  }, [pararTimers]);
+  }, [contarEspera, modo, pararTimers, telefone]);
 
-  useEffect(() => () => pararTimers(), [pararTimers]);
-
-  // Dois problemas diferentes, de pessoas diferentes: um é do dono do projeto
-  // (falta variável de ambiente), o outro é operacional (servidor caiu). A tela
-  // dizia a mesma coisa nos dois casos e isso já custou tempo num incidente.
   if (!configurado) {
     return (
       <p className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800">
@@ -121,58 +153,123 @@ export function WhatsappConnect({
     );
   }
 
+  const travado = pending || espera > 0 || (modo === "codigo" && telefone.replace(/\D/g, "").length < 10);
+  const rotuloBotao = pending
+    ? "Gerando..."
+    : espera > 0
+      ? `Aguarde ${espera}s`
+      : modo === "codigo"
+        ? "Gerar código"
+        : "Gerar QR";
+
   return (
     <div className="rounded-2xl border border-black/5 bg-white p-6">
       <div className="font-bold">WhatsApp desconectado</div>
-      <p className="mt-1 text-sm text-[var(--color-muted)]">
-        Deixe o celular em mãos antes de gerar: abra o WhatsApp do número do negócio →{" "}
-        <b>Aparelhos conectados</b> → <b>Conectar aparelho</b> e escaneie na hora.
-      </p>
 
-      {!qr && (
-        <button onClick={gerarQr} disabled={pending} className="mt-4 rounded-full bg-[var(--color-primary)] px-6 py-2 font-semibold text-white disabled:opacity-60">
-          {pending ? "Gerando..." : "Gerar QR e conectar"}
+      {/* O modo vem antes do botão de propósito: escolher depois de gerar
+          desperdiçaria um pedido de vinculação. */}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(
+          [
+            { v: "qr", t: "Ler QR com a câmera", d: "Painel no computador" },
+            { v: "codigo", t: "Código de 8 dígitos", d: "Painel no próprio celular" },
+          ] as const
+        ).map((op) => (
+          <button
+            key={op.v}
+            type="button"
+            onClick={() => setModo(op.v)}
+            aria-pressed={modo === op.v}
+            className={`rounded-xl border px-3 py-2 text-left text-xs ${
+              modo === op.v ? "border-[var(--color-primary)] bg-blue-50" : "border-black/10 hover:bg-[var(--color-surface)]"
+            }`}
+          >
+            <span className="block font-bold">{op.t}</span>
+            <span className="text-[var(--color-muted)]">{op.d}</span>
+          </button>
+        ))}
+      </div>
+
+      {modo === "codigo" ? (
+        <div className="mt-3">
+          <label className="block text-xs font-bold text-[var(--color-muted)]" htmlFor="wa-num">
+            Número que será conectado (com DDD)
+          </label>
+          <input
+            id="wa-num"
+            value={telefone}
+            onChange={(e) => setTelefone(e.target.value)}
+            inputMode="numeric"
+            placeholder="5516999999999"
+            className="mt-1 w-full max-w-xs rounded-xl border border-black/10 px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            No WhatsApp: <b>Aparelhos conectados</b> → <b>Conectar aparelho</b> →{" "}
+            <b>Conectar com número de telefone</b>.
+          </p>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-[var(--color-muted)]">
+          Deixe o celular em mãos: <b>Aparelhos conectados</b> → <b>Conectar aparelho</b>, e
+          escaneie assim que o QR aparecer.
+        </p>
+      )}
+
+      {aviso && (
+        <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {aviso}
+        </p>
+      )}
+
+      {!qr && !pairing && (
+        <button
+          onClick={gerar}
+          disabled={travado}
+          className="mt-4 rounded-full bg-[var(--color-primary)] px-6 py-2 font-semibold text-white disabled:opacity-60"
+        >
+          {rotuloBotao}
         </button>
       )}
 
-      {qr && (
+      {(qr || pairing) && (
         <div className="mt-5 flex flex-col items-center gap-3">
-          <div className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={qr}
-              alt="QR code do WhatsApp"
-              className={`h-64 w-64 rounded-lg border border-black/10 ${expirado ? "opacity-20" : ""}`}
-            />
-            {expirado && (
-              <div className="absolute inset-0 grid place-items-center rounded-lg bg-white/70">
-                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white">QR expirado</span>
+          {pairing && (
+            <div className={`text-center ${expirado ? "opacity-30" : ""}`}>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-muted)]">
+                Digite no WhatsApp
               </div>
-            )}
-          </div>
-
-          {expirado ? (
-            <p className="max-w-xs text-center text-xs text-[var(--color-muted)]">
-              O QR expirou. Gere outro só quando estiver com o celular pronto para escanear —
-              cada QR é um pedido de pareamento, e pedir muitos seguidos faz o WhatsApp
-              bloquear a conexão por horas.
-            </p>
-          ) : (
-            <p className="text-xs text-[var(--color-muted)]">
-              Escaneie agora. Assim que você escanear, esta tela atualiza para “conectado”.
-            </p>
+              <div className="mt-1 font-mono text-3xl font-black tracking-[0.2em]">{pairing}</div>
+            </div>
           )}
 
-          {pairing && !expirado && (
-            <p className="text-sm">Ou use o código de pareamento: <b className="tracking-widest">{pairing}</b></p>
+          {qr && !pairing && (
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qr}
+                alt="QR code do WhatsApp"
+                className={`h-64 w-64 rounded-lg border border-black/10 ${expirado ? "opacity-20" : ""}`}
+              />
+              {expirado && (
+                <div className="absolute inset-0 grid place-items-center rounded-lg bg-white/70">
+                  <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white">Expirado</span>
+                </div>
+              )}
+            </div>
           )}
+
+          <p className="max-w-xs text-center text-xs text-[var(--color-muted)]">
+            {expirado
+              ? "Expirou. Gere outro só quando estiver com o celular pronto."
+              : "Assim que você confirmar no celular, esta tela muda para “conectado”."}
+          </p>
 
           <button
-            onClick={gerarQr}
-            disabled={pending}
+            onClick={gerar}
+            disabled={travado}
             className="rounded-full border border-black/10 px-4 py-1.5 text-xs font-bold hover:bg-[var(--color-surface)] disabled:opacity-60"
           >
-            {pending ? "Gerando..." : "Gerar um QR novo"}
+            {espera > 0 ? `Aguarde ${espera}s` : "Gerar outro"}
           </button>
         </div>
       )}

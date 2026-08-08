@@ -15,11 +15,58 @@ async function tenantInstance() {
   return services.tenantService.evolutionInstance(tenant.id, tenant.slug);
 }
 
-export async function fetchQrAction() {
+/**
+ * Quantos pedidos de pareamento uma empresa pode fazer, e com que espaçamento.
+ *
+ * Cada QR (ou código) é um pedido de vinculação ao WhatsApp, e o excesso faz o
+ * WhatsApp bloquear a conexão por HORAS. A tela já só gera no clique, mas isso
+ * é regra de navegador: quem clicar rápido, ou tiver o JavaScript quebrado,
+ * ainda dispararia um pedido por clique. A trava de verdade é aqui.
+ *
+ * Os números são conservadores de propósito. A regra da Meta não é pública; o
+ * que se sabe do incidente de 07/08/2026 é que 30 pedidos em 21 minutos geraram
+ * um bloqueio de 5 horas. Como não dá para saber se a janela é de minutos, de
+ * horas ou do dia, o limite fica bem abaixo de qualquer leitura razoável dela.
+ */
+const INTERVALO_MINIMO_MS = 20_000;
+const MAXIMO_POR_JANELA = 3;
+const JANELA_MS = 15 * 60_000;
+
+/** Histórico por instância. Some quando a função hiberna — e tudo bem: o
+ *  objetivo é conter a rajada de cliques, não auditar. */
+const pedidos = new Map<string, number[]>();
+
+function podePedirQr(instance: string, agora = Date.now()): { ok: true } | { ok: false; aguardeSegundos: number } {
+  const recentes = (pedidos.get(instance) ?? []).filter((t) => agora - t < JANELA_MS);
+  const ultimo = recentes.at(-1);
+  if (ultimo && agora - ultimo < INTERVALO_MINIMO_MS) {
+    return { ok: false, aguardeSegundos: Math.ceil((INTERVALO_MINIMO_MS - (agora - ultimo)) / 1000) };
+  }
+  if (recentes.length >= MAXIMO_POR_JANELA) {
+    return { ok: false, aguardeSegundos: Math.ceil((JANELA_MS - (agora - recentes[0]!)) / 1000) };
+  }
+  pedidos.set(instance, [...recentes, agora]);
+  return { ok: true };
+}
+
+export type ResultadoQr =
+  | { ok: true; base64?: string; pairingCode?: string; state: string }
+  | { ok: false; aguardeSegundos: number };
+
+/**
+ * Gera UM pedido de conexão. Com `phone`, devolve código de pareamento em vez
+ * de QR — o caminho para quem está no próprio celular.
+ */
+export async function fetchQrAction(phone?: string): Promise<ResultadoQr> {
   const instance = await tenantInstance();
+
+  const permitido = podePedirQr(instance);
+  if (!permitido.ok) return permitido;
+
   // tenant novo: cria a instância dele antes de pedir o QR
   await ensureInstance(instance);
-  return getQrCode(instance);
+  const r = await getQrCode(instance, phone);
+  return { ok: true, ...r };
 }
 
 export async function fetchStatusAction() {
