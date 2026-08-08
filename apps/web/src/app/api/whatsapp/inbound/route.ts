@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { authenticateAgent } from "@/lib/agent-auth";
-import { services } from "@barbearia-ai/core";
+import { parseEvolution, services } from "@barbearia-ai/core";
 import { sendText } from "@/lib/evolution";
 
 /**
@@ -17,15 +17,16 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const parsed = parseEvolution(body);
-  // Ignora: mensagens nossas (fromMe), grupos, e vazias.
-  if (!parsed || parsed.fromMe || parsed.isGroup || !parsed.text) {
+  // Ignora: mensagens nossas, grupo/canal/status, e o que não é texto nem
+  // mídia que o agente saiba tratar.
+  if (!parsed || parsed.fromMe || parsed.ignorado || !parsed.text) {
     return NextResponse.json({ ignored: true });
   }
 
   await services.conversationService.recordInbound(tenant.id, parsed.phone, parsed.text, parsed.name);
 
   const tenantId = tenant.id;
-  const { phone, text, name } = parsed;
+  const { phone, text, name, messageType, data: rawData } = parsed;
   const n8nUrl = process.env.N8N_AGENT_WEBHOOK_URL;
   const tenantHost = req.headers.get("host");
 
@@ -62,6 +63,12 @@ export async function POST(req: Request) {
             instance,
             apiBase: `https://${tenantHost}`,
             agentSecret,
+            // O payload ORIGINAL do Evolution, sob a mesma chave `data` que ele
+            // usa. É o que permite o workflow classificar mídia por
+            // `data.messageType` e baixá-la por `data.key.id` — informação que
+            // não existe no resumo acima e que não dá para reconstruir.
+            messageType,
+            data: rawData,
           }),
           signal: AbortSignal.timeout(8_000),
         });
@@ -80,18 +87,4 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ ok: true });
-}
-
-/** Extrai { phone, text, fromMe, isGroup, name } do payload do Evolution API v2. */
-function parseEvolution(body: Record<string, unknown>): { phone: string; text: string; fromMe: boolean; isGroup: boolean; name?: string } | null {
-  const data = (body?.data ?? body) as Record<string, unknown> | undefined;
-  const key = data?.key as Record<string, unknown> | undefined;
-  if (!key) return null;
-  const jid = String(key.remoteJid ?? "");
-  const isGroup = jid.endsWith("@g.us");
-  const phone = jid.replace("@s.whatsapp.net", "").replace("@g.us", "").replace(/\D/g, "");
-  const msg = data?.message as Record<string, unknown> | undefined;
-  const ext = msg?.extendedTextMessage as Record<string, unknown> | undefined;
-  const text = String(msg?.conversation ?? ext?.text ?? "").trim();
-  return { phone, text, fromMe: key.fromMe === true, isGroup, name: (data?.pushName as string) || undefined };
 }

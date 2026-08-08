@@ -14,6 +14,7 @@ export * from "./availability";
 export * from "./time";
 export * from "./phone";
 export * from "./text";
+export * from "./whatsapp";
 export * as schemas from "./schemas";
 export * as services from "./services";
 // Tipos que a UI precisa nomear (props de componentes da Visão Geral).
