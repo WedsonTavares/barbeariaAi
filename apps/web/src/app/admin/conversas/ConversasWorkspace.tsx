@@ -364,7 +364,7 @@ export function ConversasWorkspace({
                 <button
                   key={c.id}
                   onClick={() => abrir(c.id)}
-                  className={`flex w-full items-start gap-2.5 border-b border-black/5 px-3 py-2.5 text-left transition ${
+                  className={`flex w-full items-start gap-2.5 border-b border-black/5 py-2.5 pl-3 pr-1.5 text-left transition ${
                     active
                       ? "bg-[var(--color-surface)]"
                       : "hover:bg-black/[0.02]"
@@ -397,7 +397,7 @@ export function ConversasWorkspace({
                           <ico.Icon className={`size-3.5 ${ico.cor}`} aria-hidden />
                           <span className="sr-only">{s.label}</span>
                         </span>
-                        <span className="ml-0.5 min-w-6 text-right text-[10px] text-[var(--color-muted)]">
+                        <span className="text-right text-[10px] tabular-nums text-[var(--color-muted)]">
                           {timeAgo(c.lastMessageAt)}
                         </span>
                       </span>
