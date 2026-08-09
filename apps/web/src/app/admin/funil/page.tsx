@@ -33,7 +33,7 @@ export default async function FunilPage() {
         </p>
       ) : (
         <div className="mt-5">
-          <FunilBoard initial={initial} />
+          <FunilBoard initial={initial} tenantId={tenant.id} />
         </div>
       )}
     </div>

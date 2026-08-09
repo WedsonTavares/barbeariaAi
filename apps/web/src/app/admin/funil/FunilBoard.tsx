@@ -28,6 +28,8 @@ const COLUMNS = [
   { key: "POS_ATENDIMENTO",      label: "Pós-atendimento",        head: "bg-violet-100 text-violet-900",   hint: "Acompanhamento" },
 ] as const;
 
+type ColumnKey = (typeof COLUMNS)[number]["key"];
+
 
 const fmtActivity = (iso: string) => {
   const elapsed = Math.max(0, Date.now() - new Date(iso).getTime());
@@ -82,7 +84,7 @@ const fmtAppointment = (iso: string) => {
   const minute = timeParts.find((part) => part.type === "minute")?.value ?? "";
   return `${day} ${month} · ${minute === "00" ? `${hour}h` : `${hour}:${minute}`}`;
 };
-export function FunilBoard({ initial }: { initial: Board }) {
+export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: string }) {
   const [board, setBoard] = useState<Board>(initial);
   // `useState(initial)` só lê o valor inicial UMA vez — sem isto, um
   // `router.refresh()` (ex.: o botão de recarregar) buscaria dado novo no
@@ -94,11 +96,44 @@ export function FunilBoard({ initial }: { initial: Board }) {
   const [tagging, setTagging] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const collapsedStorageKey = `barbearia-ai:funil:collapsed:v1:${tenantId}`;
   const [, startTransition] = useTransition();
   const [tagPending, startTagTransition] = useTransition();
   const [refreshing, startRefresh] = useTransition();
   const router = useRouter();
   const prev = useRef<Board | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(collapsedStorageKey);
+      if (!raw) return;
+      const stored = JSON.parse(raw) as unknown;
+      if (!stored || typeof stored !== "object" || Array.isArray(stored)) return;
+
+      const restored: Record<string, boolean> = {};
+      for (const column of COLUMNS) {
+        if ((stored as Record<string, unknown>)[column.key] === true) restored[column.key] = true;
+      }
+      setCollapsed(restored);
+    } catch {
+      // A preferência é opcional; o funil continua utilizável sem storage.
+    }
+  }, [collapsedStorageKey]);
+
+  function setColumnCollapsed(column: ColumnKey, value: boolean) {
+    setCollapsed((current) => {
+      const next = { ...current };
+      if (value) next[column] = true;
+      else delete next[column];
+
+      try {
+        window.localStorage.setItem(collapsedStorageKey, JSON.stringify(next));
+      } catch {
+        // A preferência é opcional; o clique ainda deve funcionar sem storage.
+      }
+      return next;
+    });
+  }
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -226,7 +261,7 @@ export function FunilBoard({ initial }: { initial: Board }) {
             return (
               <section key={col.key} className="flex w-12 shrink-0 flex-col">
                 <button
-                  onClick={() => setCollapsed((s) => ({ ...s, [col.key]: false }))}
+                  onClick={() => setColumnCollapsed(col.key, false)}
                   className={`flex h-full min-h-32 flex-col items-center gap-2 rounded-lg px-2 py-3 ${col.head}`}
                   aria-label={`Expandir ${col.label}`}
                 >
@@ -256,7 +291,7 @@ export function FunilBoard({ initial }: { initial: Board }) {
                 <div className="flex items-center gap-2">
                   <h2 className="truncate text-sm font-bold">{col.label}</h2>
                   <button
-                    onClick={() => setCollapsed((s) => ({ ...s, [col.key]: true }))}
+                    onClick={() => setColumnCollapsed(col.key, true)}
                     aria-label={`Recolher ${col.label}`}
                     className="ml-auto rounded p-0.5 hover:bg-black/10"
                   >
