@@ -3,6 +3,7 @@ import { Building2, CalendarDays, CalendarPlus, MessageCircle } from "lucide-rea
 import { requireTenant } from "@/lib/tenant";
 import { services, parseBusinessHours } from "@barbearia-ai/core";
 import { getConnectionState, evolutionConfigured } from "@/lib/evolution";
+import { SubmitButton } from "@/components/SubmitButton";
 import { WhatsappConnect } from "./WhatsappConnect";
 import { SettingsSection, Field, TextArea, ColorField } from "./SettingsSection";
 import { connectServiceAccountCalendarAction, disconnectGoogleCalendarAction } from "./actions";
@@ -349,12 +350,13 @@ export default async function ConfiguracoesPage({
                     <option key={professional.id} value={professional.id}>{professional.name}</option>
                   ))}
                 </select>
-                <button
+                <SubmitButton
                   disabled={professionals.length === 0}
+                  pendingText="Conectando..."
                   className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Conectar
-                </button>
+                </SubmitButton>
               </form>
             </details>
           ) : googleReady ? (
