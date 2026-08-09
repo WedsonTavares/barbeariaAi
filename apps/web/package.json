@@ -9,14 +9,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.9.0",
     "@barbearia-ai/core": "workspace:*",
+    "@clerk/nextjs": "^6.9.0",
+    "@fullcalendar/react": "7.0.2",
     "@vercel/analytics": "^2.0.1",
     "lucide-react": "^0.468.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "svix": "^1.40.0"
+    "svix": "^1.40.0",
+    "temporal-polyfill": "^1.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

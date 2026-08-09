@@ -20,7 +20,6 @@ const GROUPS = [
       { href: "/admin/clientes", label: "Clientes", icon: Users },
       { href: "/admin/servicos", label: "Serviços", icon: Scissors },
       { href: "/admin/profissionais", label: "Profissionais", icon: UserRoundCog },
-      { href: "/admin/agendamentos", label: "Agendamentos", icon: CalendarRange },
       { href: "/admin/galeria", label: "Galeria", icon: Images },
       { href: "/admin/financeiro", label: "Financeiro", icon: Wallet },
       { href: "/admin/configuracoes", label: "Configurações", icon: Settings },

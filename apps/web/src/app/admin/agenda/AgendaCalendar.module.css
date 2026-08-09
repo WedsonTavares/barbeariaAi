@@ -1,0 +1,53 @@
+.calendar {
+  --fc-classic-primary: #2563eb;
+  --fc-classic-primary-foreground: #ffffff;
+  --fc-classic-border: #e2e8f0;
+  --fc-classic-today: #dbeafe66;
+  --fc-classic-now: #dc2626;
+}
+
+.fullCalendar {
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.8125rem;
+}
+
+.event {
+  border-radius: 4px !important;
+  border-inline-start-width: 3px !important;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.eventContent {
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 4px;
+}
+
+.eventTitle,
+.eventMeta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eventTitle {
+  font-weight: 700;
+}
+
+.eventMeta {
+  font-size: 0.6875rem;
+  opacity: 0.78;
+}
+
+@media (max-width: 639px) {
+  .fullCalendar {
+    font-size: 0.75rem;
+  }
+
+  .eventContent {
+    padding-inline: 2px;
+  }
+}

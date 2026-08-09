@@ -11,7 +11,8 @@ const BASE = "/admin/agendamentos";
 export async function createAppointmentAction(formData: FormData) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
-  let dest = `${BASE}?ok=criado`;
+  const returnTo = formData.get("returnTo") === "/admin/agenda" ? "/admin/agenda" : BASE;
+  let dest = `${returnTo}?ok=criado`;
 
   try {
     const serviceIds = formData.getAll("serviceIds").filter((value): value is string => typeof value === "string" && value.length > 0);
@@ -52,7 +53,7 @@ export async function createAppointmentAction(formData: FormData) {
     // Conflito de agenda não é "dado inválido": quem preencheu acertou tudo e
     // o horário é que está ocupado. Misturar os dois deixava o usuário
     // conferindo campo por campo atrás de um erro que não existia.
-    dest = `${BASE}?erro=${erroDe(error)}`;
+    dest = `${returnTo}?erro=${erroDe(error)}`;
     if (!(error instanceof ZodError) && !(error instanceof Error)) throw error;
   }
 
