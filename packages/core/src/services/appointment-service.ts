@@ -28,6 +28,7 @@ const BLOCKING = new Set<string>(BLOCKING_STATUSES);
 const AGENT_MUTABLE_STATUSES = new Set(["REQUESTED", "CONFIRMED"]);
 
 const UNASSIGNED_CONFLICT_MESSAGE = "Já existe um atendimento sem profissional nesse horário";
+const BLOCKED_MESSAGE = "Esse horário está bloqueado na agenda";
 
 export class AppointmentConflictError extends Error {
   conflicts: string[];
@@ -196,6 +197,36 @@ async function hasUnassignedConflict(
  * profissional) e recusa se já houver alguém ali. Um único lugar para as duas
  * formas de ocupar a agenda — antes só a primeira era conferida.
  */
+/**
+ * Existe bloqueio de agenda cobrindo o intervalo? Folga, férias, ou um
+ * compromisso que veio do Google Calendar do profissional.
+ *
+ * Bloqueio com `professionalId` nulo é da CASA e fecha para todo mundo. Um
+ * atendimento sem profissional (a "cadeira única") só é barrado por bloqueio da
+ * casa: a folga de um barbeiro específico não fecha a cadeira de outro.
+ *
+ * Precisa existir aqui, e não só na rota de disponibilidade: sem isso o backend
+ * aceitaria gravar num horário que a própria disponibilidade não ofereceu, e a
+ * divergência apareceria com o cliente esperando.
+ */
+async function blockingTimeOff(
+  tx: Tx,
+  professionalId: string | null,
+  startAt: Date,
+  endAt: Date,
+  buffer: ServiceBuffer
+) {
+  const wanted = bufferedWindow(startAt, endAt, buffer);
+  return tx.timeOff.findFirst({
+    where: {
+      startAt: { lt: new Date(wanted.to) },
+      endAt: { gt: new Date(wanted.from) },
+      OR: professionalId ? [{ professionalId: null }, { professionalId }] : [{ professionalId: null }],
+    },
+    select: { reason: true },
+  });
+}
+
 async function assertSlotFree(
   tx: Tx,
   tenantId: string,
@@ -205,6 +236,11 @@ async function assertSlotFree(
   buffer: ServiceBuffer,
   excludeAppointmentId?: string
 ) {
+  const blocked = await blockingTimeOff(tx, professionalId, startAt, endAt, buffer);
+  if (blocked) {
+    throw new AppointmentConflictError([], blocked.reason ? `${BLOCKED_MESSAGE}: ${blocked.reason}` : BLOCKED_MESSAGE);
+  }
+
   if (professionalId) {
     await lockProfessionals(tx, [professionalId]);
     const conflicts = await findConflicts(tx, [professionalId], startAt, endAt, excludeAppointmentId, buffer);
@@ -457,22 +493,45 @@ export const appointmentService = {
   occupiedWindows: (tenantId: string, from: Date, to: Date) =>
     withTenant(tenantId, async (tx) => {
       const slack = await catalogSlack(tx);
-      const rows = await tx.appointment.findMany({
-        where: {
-          status: { in: [...BLOCKING_STATUSES] },
-          startAt: { lt: new Date(to.getTime() + slack * 60_000) },
-          endAt: { gt: new Date(from.getTime() - slack * 60_000) },
-        },
-        select: OCCUPANCY_SELECT,
-      });
-      return rows.map((row) => {
-        const window = occupiedWindow(row);
-        return {
-          professionalId: row.professionalId,
-          startAt: new Date(window.from),
-          endAt: new Date(window.to),
-        };
-      });
+      const de = new Date(from.getTime() - slack * 60_000);
+      const ate = new Date(to.getTime() + slack * 60_000);
+      const [rows, blocks] = await Promise.all([
+        tx.appointment.findMany({
+          where: {
+            status: { in: [...BLOCKING_STATUSES] },
+            startAt: { lt: ate },
+            endAt: { gt: de },
+          },
+          select: OCCUPANCY_SELECT,
+        }),
+        // Bloqueios entram como OCUPAÇÃO, e não como recorte do expediente:
+        // quem não tem `WorkingSchedule` cadastrado não é restringido por
+        // expediente nenhum, e ali um recorte simplesmente não teria efeito.
+        tx.timeOff.findMany({
+          where: { startAt: { lt: ate }, endAt: { gt: de } },
+          select: { professionalId: true, startAt: true, endAt: true },
+        }),
+      ]);
+
+      return [
+        ...rows.map((row) => {
+          const window = occupiedWindow(row);
+          return {
+            professionalId: row.professionalId,
+            startAt: new Date(window.from),
+            endAt: new Date(window.to),
+            blocksAll: false,
+          };
+        }),
+        // Bloqueio não é atendimento: não carrega folga de serviço em volta.
+        ...blocks.map((block) => ({
+          professionalId: block.professionalId,
+          startAt: block.startAt,
+          endAt: block.endAt,
+          // Sem profissional = compromisso da casa: fecha todas as cadeiras.
+          blocksAll: block.professionalId === null,
+        })),
+      ];
     }),
 
   create: (tenantId: string, input: AppointmentInput) =>

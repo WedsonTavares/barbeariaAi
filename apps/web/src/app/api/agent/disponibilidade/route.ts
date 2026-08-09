@@ -100,10 +100,20 @@ export async function POST(req: Request) {
     services.scheduleService.workingWindows(tenant.id, dayStart, dayEnd),
   ]);
   const busyByResource = new Map<string, BusyWindow[]>();
+  /**
+   * Bloqueio da CASA (compromisso na agenda sem profissional): fecha todas as
+   * cadeiras de uma vez, então não cabe no balde de um recurso só.
+   */
+  const busyForAll: BusyWindow[] = [];
   for (const window of busy) {
+    const janela = { from: window.startAt.getTime(), to: window.endAt.getTime() };
+    if (window.blocksAll) {
+      busyForAll.push(janela);
+      continue;
+    }
     const key = window.professionalId ?? SEM_PROFISSIONAL;
     const current = busyByResource.get(key) ?? [];
-    current.push({ from: window.startAt.getTime(), to: window.endAt.getTime() });
+    current.push(janela);
     busyByResource.set(key, current);
   }
 
@@ -121,6 +131,7 @@ export async function POST(req: Request) {
     if (recurso !== SEM_PROFISSIONAL && !services.trabalhaNoIntervalo(expediente.get(recurso), wanted)) {
       return false;
     }
+    if (busyForAll.some((window) => windowsOverlap(window, wanted))) return false;
     return !(busyByResource.get(recurso) ?? []).some((window) => windowsOverlap(window, wanted));
   };
 

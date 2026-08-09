@@ -408,19 +408,29 @@ model WorkingSchedule {
   @@index([tenantId, professionalId, dayOfWeek])
 }
 
+/// Tempo em que a cadeira NÃO pode ser vendida: folga, férias, almoço, ou um
+/// compromisso que o profissional marcou direto no Google Calendar dele.
+///
+/// `professionalId` nulo bloqueia a casa inteira — a mesma convenção que
+/// `Appointment.professionalId` nulo já usa para a "cadeira única".
 model TimeOff {
-  id             String       @id @default(uuid())
+  id             String        @id @default(uuid())
   tenantId       String
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  professionalId String
-  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professionalId String?
+  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade)
   startAt        DateTime
   endAt          DateTime
   reason         String?
-  createdAt      DateTime     @default(now())
+  /// Evento que originou o bloqueio quando ele veio do Google Calendar. É por
+  /// ele que reencontramos a linha quando o evento é movido ou apagado lá.
+  googleEventId  String?
+  createdAt      DateTime      @default(now())
 
+  @@unique([tenantId, googleEventId])
   @@index([tenantId])
   @@index([tenantId, professionalId, startAt])
+  @@index([tenantId, startAt, endAt])
 }
 
 model Appointment {

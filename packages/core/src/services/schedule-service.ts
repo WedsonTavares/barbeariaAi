@@ -151,9 +151,17 @@ export async function workingWindowsIn(
 }
 
 /** Remove das janelas de trabalho os períodos de folga do profissional. */
+/**
+ * Recorta do expediente as folgas DAQUELE profissional.
+ *
+ * Bloqueio da casa (`professionalId` nulo) não entra aqui: ele fecha todas as
+ * cadeiras e por isso é tratado como OCUPAÇÃO em `occupiedWindows`, não como
+ * recorte de expediente — assim vale também para quem não tem expediente
+ * cadastrado, que é a maioria.
+ */
 function subtrairFolgas(
   janelas: BusyWindow[],
-  timeOffs: { professionalId: string; startAt: Date; endAt: Date }[],
+  timeOffs: { professionalId: string | null; startAt: Date; endAt: Date }[],
   professionalId: string
 ): BusyWindow[] {
   let atuais = janelas;

@@ -135,6 +135,7 @@ async function refreshAccessToken(refreshToken: string) {
 type StoredConnection = {
   id: string;
   provider: string;
+  professionalId: string | null;
   accessTokenEncrypted: string | null;
   refreshTokenEncrypted: string | null;
   expiresAt: Date | null;
@@ -145,6 +146,7 @@ type StoredConnection = {
 const CONNECTION_SELECT = {
   id: true,
   provider: true,
+  professionalId: true,
   accessTokenEncrypted: true,
   refreshTokenEncrypted: true,
   expiresAt: true,
@@ -186,6 +188,7 @@ type GoogleEventResponse = {
 type GoogleChangedEvent = {
   id?: string;
   status?: string;
+  summary?: string;
   htmlLink?: string;
   start?: { dateTime?: string };
   end?: { dateTime?: string };
@@ -646,7 +649,39 @@ export const calendarService = {
     await withTenant(tenantId, async (tx) => {
       for (const event of changes.items) {
         const appointmentId = event.extendedProperties?.private?.appointmentId;
-        if (!appointmentId) continue;
+
+        /**
+         * Compromisso que NÃO saiu daqui — o barbeiro marcou direto no Google
+         * ("almoço", "dentista"). Vira bloqueio de agenda, senão a IA marcaria
+         * um cliente por cima e só o barbeiro descobriria, na hora.
+         *
+         * O `professionalId` é o dono da conexão: agenda de um barbeiro bloqueia
+         * ele, agenda da casa bloqueia todo mundo (professionalId nulo).
+         */
+        if (!appointmentId) {
+          if (!event.id) continue;
+          const chave = { tenantId_googleEventId: { tenantId, googleEventId: event.id } };
+          if (event.status === "cancelled") {
+            await tx.timeOff.deleteMany({ where: { tenantId, googleEventId: event.id } });
+            touched++;
+            continue;
+          }
+          // Evento de dia inteiro não traz `dateTime`; sem início e fim não há
+          // janela para bloquear, e chutar 24h fecharia o dia por engano.
+          if (!event.start?.dateTime || !event.end?.dateTime) continue;
+          const dados = {
+            tenantId,
+            professionalId: subscription.connection.professionalId ?? null,
+            startAt: new Date(event.start.dateTime),
+            endAt: new Date(event.end.dateTime),
+            reason: (event.summary ?? "Compromisso no Google Calendar").slice(0, 200),
+            googleEventId: event.id,
+          };
+          await tx.timeOff.upsert({ where: chave, create: dados, update: dados });
+          touched++;
+          continue;
+        }
+
         if (event.extendedProperties?.private?.tenantId && event.extendedProperties.private.tenantId !== tenantId) continue;
 
         const update =
