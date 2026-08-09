@@ -86,18 +86,6 @@ export default async function ConfiguracoesPage({
           Não salvou{sp.erro ? ` — campo “${sp.erro}”` : ""}: {sp.msg || "confira os dados."}
         </p>
       )}
-      {sp.calendar === "connected" && (
-        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
-          Google Calendar conectado.
-        </p>
-      )}
-      {sp.calendar && sp.calendar !== "connected" && (
-        <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800">
-          {CALENDAR_ERROS[sp.calendar] ??
-            "Google Calendar não conectado: verifique as variáveis de ambiente e tente novamente."}
-        </p>
-      )}
-
       {/* ─────────── Empresa ─────────── */}
       <SettingsSection
         id="empresa"
@@ -317,6 +305,18 @@ export default async function ConfiguracoesPage({
           </p>
         </div>
         <div className="space-y-4 p-4 sm:p-5">
+          {sp.calendar === "connected" && (
+            <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
+              Google Calendar conectado.
+            </p>
+          )}
+          {sp.calendar && sp.calendar !== "connected" && (
+            <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800">
+              {CALENDAR_ERROS[sp.calendar] ??
+                "Google Calendar não conectado: verifique as variáveis de ambiente e tente novamente."}
+            </p>
+          )}
+
           {/* Caminho recomendado: compartilhar a agenda com a conta de serviço.
               Não expira, não pede login e não depende da verificação do Google. */}
           {serviceAccountEmail ? (
