@@ -319,7 +319,7 @@ export default async function ConfiguracoesPage({
         <div className="space-y-4 p-4 sm:p-5">
           {/* Caminho recomendado: compartilhar a agenda com a conta de serviço.
               Não expira, não pede login e não depende da verificação do Google. */}
-          {serviceAccountEmail && (
+          {serviceAccountEmail ? (
             <div className="space-y-3 rounded-xl border border-black/5 bg-[var(--color-surface)] p-3">
               <div>
                 <div className="text-sm font-bold">Conectar compartilhando a sua agenda</div>
@@ -359,44 +359,41 @@ export default async function ConfiguracoesPage({
                 </button>
               </form>
             </div>
-          )}
-
-          <div className="flex flex-col gap-3 rounded-xl bg-[var(--color-surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-sm font-bold">{googleReady ? "OAuth configurado" : "OAuth pendente"}</div>
-              <p className="text-xs text-[var(--color-muted)]">
-                {googleReady
-                  ? "A conta pode ser conectada por aqui."
-                  : "Defina GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALENDAR_REDIRECT_URI e CALENDAR_TOKEN_ENCRYPTION_KEY."}
+          ) : googleReady ? (
+            <div className="flex flex-col gap-3 rounded-xl bg-[var(--color-surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-bold">Conectar por login Google</div>
+                <p className="text-xs text-[var(--color-muted)]">A conexão OAuth está disponível neste ambiente.</p>
+              </div>
+              {/* Formulário GET: o profissional escolhido viaja como querystring
+                  pro /connect, que valida o id antes de assiná-lo no state. */}
+              <form action="/admin/configuracoes/google-calendar/connect" method="get" className="flex shrink-0 gap-2">
+                {professionals.length > 0 && (
+                  <select
+                    name="professionalId"
+                    defaultValue=""
+                    aria-label="Agenda de qual profissional"
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Agenda da casa</option>
+                    {professionals.map((professional) => (
+                      <option key={professional.id} value={professional.id}>{professional.name}</option>
+                    ))}
+                  </select>
+                )}
+                <button className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white">
+                  Conectar Google
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <div className="text-sm font-bold text-amber-950">Conta de serviço pendente</div>
+              <p className="mt-0.5 text-xs text-amber-900">
+                A credencial GOOGLE_SERVICE_ACCOUNT_JSON ainda não está disponível no ambiente de produção.
               </p>
             </div>
-            {/* Formulário GET: o profissional escolhido viaja como querystring
-                pro /connect, que valida o id antes de assiná-lo no state. */}
-            <form action="/admin/configuracoes/google-calendar/connect" method="get" className="flex shrink-0 gap-2">
-              {professionals.length > 0 && (
-                <select
-                  name="professionalId"
-                  defaultValue=""
-                  aria-label="Agenda de qual profissional"
-                  disabled={!googleReady}
-                  className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Agenda da casa</option>
-                  {professionals.map((professional) => (
-                    <option key={professional.id} value={professional.id}>{professional.name}</option>
-                  ))}
-                </select>
-              )}
-              <button
-                disabled={!googleReady}
-                className={`rounded-full px-4 py-2 text-sm font-bold ${
-                  googleReady ? "bg-[var(--color-primary)] text-white" : "cursor-not-allowed bg-slate-200 text-slate-500"
-                }`}
-              >
-                Conectar Google
-              </button>
-            </form>
-          </div>
+          )}
 
           {calendarConnections.length === 0 ? (
             <p className="rounded-xl border border-dashed border-black/10 p-3 text-sm text-[var(--color-muted)]">
