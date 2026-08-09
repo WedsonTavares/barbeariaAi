@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import FullCalendar, { type CalendarRef, type DatesSetInfo, type EventClickInfo, type EventInput } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
@@ -49,6 +49,12 @@ const SP_LONG_DAY = new Intl.DateTimeFormat("pt-BR", {
   month: "long",
   timeZone: "America/Sao_Paulo",
 });
+const SP_DATE_KEY = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "America/Sao_Paulo",
+});
 
 const VIEWS: Array<{ value: CalendarView; label: string }> = [
   { value: "dayGridMonth", label: "Mês" },
@@ -60,17 +66,28 @@ function isCalendarView(value: string | null): value is CalendarView {
   return VIEWS.some((view) => view.value === value);
 }
 
+function dateKey(value: Date) {
+  const parts = SP_DATE_KEY.formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 export function AgendaCalendar({
   events,
   initialDate,
   storageKey,
+  toolbarAction,
 }: {
   events: AgendaEvent[];
   initialDate?: string;
   storageKey: string;
+  toolbarAction?: ReactNode;
 }) {
   const calendarRef = useRef<CalendarRef>(null);
+  const calendarHostRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLDialogElement>(null);
+  const preferencesReady = useRef(false);
   const router = useRouter();
   const [view, setView] = useState<CalendarView>("dayGridMonth");
   const [title, setTitle] = useState("");
@@ -82,26 +99,38 @@ export function AgendaCalendar({
 
   useEffect(() => {
     const resize = () => {
-      const reserved = window.innerWidth < 640 ? 300 : 250;
       setCompact(window.innerWidth < 640);
-      setHeight(Math.max(500, Math.min(840, window.innerHeight - reserved)));
+      const top = calendarHostRef.current?.getBoundingClientRect().top ?? 220;
+      setHeight(Math.max(500, Math.floor(window.innerHeight - top)));
     };
     resize();
     window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    if (toolbarRef.current) observer?.observe(toolbarRef.current);
+    return () => {
+      window.removeEventListener("resize", resize);
+      observer?.disconnect();
+    };
   }, []);
 
   useEffect(() => {
+    const api = calendarRef.current?.getApi();
     try {
+      const savedDate = window.localStorage.getItem(`${storageKey}:date`);
+      if (!initialDate && savedDate && /^\d{4}-\d{2}-\d{2}$/.test(savedDate)) {
+        api?.gotoDate(savedDate);
+      }
       const saved = window.localStorage.getItem(storageKey);
       if (isCalendarView(saved)) {
         setView(saved);
-        calendarRef.current?.getApi().changeView(saved === "timeGridWeek" && window.innerWidth < 640 ? "listWeek" : saved);
+        api?.changeView(saved === "timeGridWeek" && window.innerWidth < 640 ? "listWeek" : saved);
       }
     } catch {
       // A agenda continua funcional quando o navegador bloqueia preferências locais.
+    } finally {
+      preferencesReady.current = true;
     }
-  }, [storageKey]);
+  }, [initialDate, storageKey]);
 
   useEffect(() => {
     if (view === "timeGridWeek") {
@@ -149,6 +178,14 @@ export function AgendaCalendar({
     }
     if (info.view.type === "listWeek") setView("timeGridWeek");
     else if (isCalendarView(info.view.type)) setView(info.view.type);
+    if (preferencesReady.current) {
+      try {
+        const currentDate = calendarRef.current?.getApi().getDate() ?? info.start;
+        window.localStorage.setItem(`${storageKey}:date`, dateKey(currentDate));
+      } catch {
+        // Navegar pela agenda não depende da persistência local.
+      }
+    }
   }
 
   function openEvent(info: EventClickInfo) {
@@ -163,16 +200,16 @@ export function AgendaCalendar({
   }
 
   return (
-    <section className="overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm" aria-label="Calendário de agendamentos">
-      <div className="flex flex-col gap-3 border-b border-black/10 px-3 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-4">
-        <div className="flex min-w-0 items-center justify-between gap-2 sm:justify-start">
+    <section className="min-w-0 overflow-hidden border-y border-black/10 bg-white" aria-label="Calendário de agendamentos">
+      <div ref={toolbarRef} className="flex flex-wrap items-center gap-2 border-b border-black/10 px-2 py-2 sm:px-3">
+        <div className="flex min-w-0 flex-1 basis-64 items-center gap-2">
           <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={() => move("prev")}
               aria-label="Período anterior"
               title="Período anterior"
-              className="grid size-9 place-items-center rounded-lg border border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
+              className="grid size-8 place-items-center rounded-lg text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
             >
               <ChevronLeft className="size-4" aria-hidden />
             </button>
@@ -181,7 +218,7 @@ export function AgendaCalendar({
               onClick={() => move("today")}
               aria-label="Ir para hoje"
               title="Hoje"
-              className="grid size-9 place-items-center rounded-lg border border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
+              className="grid size-8 place-items-center rounded-lg border border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
             >
               <CalendarDays className="size-4" aria-hidden />
             </button>
@@ -190,37 +227,23 @@ export function AgendaCalendar({
               onClick={() => move("next")}
               aria-label="Próximo período"
               title="Próximo período"
-              className="grid size-9 place-items-center rounded-lg border border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
+              className="grid size-8 place-items-center rounded-lg text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
             >
               <ChevronRight className="size-4" aria-hidden />
             </button>
           </div>
-          <h2 className="min-w-0 truncate text-sm font-extrabold sm:text-base">{title || "Agenda"}</h2>
+          <h2 className="min-w-0 truncate text-sm font-bold">{title || "Agenda"}</h2>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={reload}
-            disabled={refreshing}
-            title={refreshError ? "Não foi possível sincronizar. Tente novamente." : "Sincronizar e recarregar a agenda"}
-            aria-label="Sincronizar e recarregar a agenda"
-            className={`grid size-9 shrink-0 place-items-center rounded-lg border bg-white transition disabled:opacity-50 ${
-              refreshError
-                ? "border-red-300 text-red-600"
-                : "border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
-            }`}
-          >
-            <RotateCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
-          </button>
-          <div className="grid min-w-0 flex-1 grid-cols-3 rounded-lg border border-black/10 bg-[var(--color-surface)] p-1" aria-label="Modo de visualização">
+        <div className="flex min-w-0 items-center gap-1.5 max-sm:w-full">
+          <div className="grid min-w-0 flex-1 grid-cols-3 rounded-lg border border-black/10 bg-[var(--color-surface)] p-0.5 sm:flex-none" aria-label="Modo de visualização">
             {VIEWS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => changeView(option.value)}
                 aria-pressed={view === option.value}
-                className={`min-h-8 px-3 text-xs font-bold transition sm:text-sm ${
+                className={`h-7 px-2 text-xs font-bold transition ${
                   view === option.value
                     ? "rounded-md bg-white text-[var(--color-ink)] shadow-sm"
                     : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
@@ -230,10 +253,25 @@ export function AgendaCalendar({
               </button>
             ))}
           </div>
+          {toolbarAction}
+          <button
+            type="button"
+            onClick={reload}
+            disabled={refreshing}
+            title={refreshError ? "Não foi possível sincronizar. Tente novamente." : "Sincronizar e recarregar a agenda"}
+            aria-label="Sincronizar e recarregar a agenda"
+            className={`grid size-8 shrink-0 place-items-center rounded-lg border bg-white transition disabled:opacity-50 ${
+              refreshError
+                ? "border-red-300 text-red-600"
+                : "border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
+            }`}
+          >
+            <RotateCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
+          </button>
         </div>
       </div>
 
-      <div className={styles.calendar}>
+      <div ref={calendarHostRef} className={styles.calendar}>
         <FullCalendar
           ref={calendarRef}
           class={styles.fullCalendar}
@@ -243,6 +281,7 @@ export function AgendaCalendar({
           initialDate={initialDate}
           timeZone="America/Sao_Paulo"
           headerToolbar={false}
+          expandRows
           views={{
             dayGridMonth: { dayHeaderFormat: { weekday: "short" } },
             timeGridWeek: {

@@ -9,7 +9,31 @@
 .fullCalendar {
   color: #0f172a;
   font-family: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
+}
+
+.fullCalendar :global(.fc-col-header-cell-cushion) {
+  padding: 5px 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.fullCalendar :global(.fc-daygrid-day-number) {
+  padding: 4px 6px;
+  font-size: 0.75rem;
+}
+
+.fullCalendar :global(.fc-timegrid-slot) {
+  height: 1.45rem;
+}
+
+.fullCalendar :global(.fc-timegrid-slot-label-cushion) {
+  font-size: 0.6875rem;
+}
+
+.fullCalendar :global(.fc-list-day-cushion) {
+  padding-block: 5px;
 }
 
 .event {
@@ -44,7 +68,7 @@
 
 @media (max-width: 639px) {
   .fullCalendar {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
   }
 
   .eventContent {

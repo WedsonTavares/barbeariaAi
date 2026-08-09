@@ -19,6 +19,7 @@ export function NewAppointmentDialog({
   errorMessage,
   initialOpen,
   returnTo = "/admin/agendamentos",
+  compact = false,
 }: {
   customers: CustomerOption[];
   services: ServiceOption[];
@@ -28,6 +29,7 @@ export function NewAppointmentDialog({
   errorMessage?: string;
   initialOpen: boolean;
   returnTo?: "/admin/agenda" | "/admin/agendamentos";
+  compact?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -77,10 +79,16 @@ export function NewAppointmentDialog({
         ref={triggerRef}
         type="button"
         onClick={openDialog}
-        className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white hover:brightness-95"
+        title="Novo agendamento"
+        aria-label="Novo agendamento"
+        className={`inline-flex shrink-0 items-center justify-center gap-2 bg-[var(--color-primary)] font-bold text-white hover:brightness-95 ${
+          compact
+            ? "h-8 rounded-lg px-2.5 text-xs sm:px-3"
+            : "rounded-full px-4 py-2 text-sm"
+        }`}
       >
         <CalendarPlus className="size-4" aria-hidden />
-        Novo agendamento
+        <span className={compact ? "hidden sm:inline" : undefined}>Novo agendamento</span>
       </button>
 
       <dialog

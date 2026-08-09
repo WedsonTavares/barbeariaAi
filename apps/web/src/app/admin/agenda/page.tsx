@@ -1,5 +1,3 @@
-import { CalendarRange } from "lucide-react";
-
 import { services } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
 import { brl } from "@/lib/format";
@@ -78,36 +76,10 @@ export default async function AgendaPage({
   const events = [...appointmentEvents, ...blockEvents];
 
   return (
-    <div className="w-full space-y-4">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-[var(--color-primary)]">
-            <CalendarRange className="size-5" aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-extrabold">Agenda</h1>
-            <p className="text-sm text-[var(--color-muted)]">Visualize os atendimentos por mês, semana ou dia.</p>
-          </div>
-        </div>
-        <NewAppointmentDialog
-          customers={customers.map((customer) => ({ id: customer.id, name: customer.name, phone: customer.phone }))}
-          services={catalog.map((service) => ({
-            id: service.id,
-            name: service.name,
-            durationMinutes: service.durationMinutes,
-            priceLabel: brl(service.defaultPrice),
-          }))}
-          professionals={professionals.map((professional) => ({ id: professional.id, name: professional.name }))}
-          defaultName=""
-          defaultPhone=""
-          errorMessage={sp.erro ? label(ERRO_AGENDAMENTO, sp.erro) : undefined}
-          initialOpen={Boolean(sp.erro)}
-          returnTo="/admin/agenda"
-        />
-      </header>
-
+    <div className="-m-4 flex min-w-0 flex-col md:-m-6">
+      <h1 className="sr-only">Agenda</h1>
       {sp.ok === "criado" && (
-        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
+        <p role="status" className="border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
           Agendamento criado.
         </p>
       )}
@@ -116,6 +88,24 @@ export default async function AgendaPage({
         events={events}
         initialDate={initialDate}
         storageKey={`agenda-view:${tenant.id}`}
+        toolbarAction={(
+          <NewAppointmentDialog
+            customers={customers.map((customer) => ({ id: customer.id, name: customer.name, phone: customer.phone }))}
+            services={catalog.map((service) => ({
+              id: service.id,
+              name: service.name,
+              durationMinutes: service.durationMinutes,
+              priceLabel: brl(service.defaultPrice),
+            }))}
+            professionals={professionals.map((professional) => ({ id: professional.id, name: professional.name }))}
+            defaultName=""
+            defaultPhone=""
+            errorMessage={sp.erro ? label(ERRO_AGENDAMENTO, sp.erro) : undefined}
+            initialOpen={Boolean(sp.erro)}
+            returnTo="/admin/agenda"
+            compact
+          />
+        )}
       />
     </div>
   );
