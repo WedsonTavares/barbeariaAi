@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, MessageCircle } from "lucide-react";
+import { Building2, CalendarDays, CalendarPlus, MessageCircle } from "lucide-react";
 
 import { requireTenant } from "@/lib/tenant";
 import { services, parseBusinessHours } from "@barbearia-ai/core";
@@ -320,19 +320,12 @@ export default async function ConfiguracoesPage({
           {/* Caminho recomendado: compartilhar a agenda com a conta de serviço.
               Não expira, não pede login e não depende da verificação do Google. */}
           {serviceAccountEmail ? (
-            <div className="space-y-3 rounded-xl border border-black/5 bg-[var(--color-surface)] p-3">
-              <div>
-                <div className="text-sm font-bold">Conectar compartilhando a sua agenda</div>
-                <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  No Google Agenda, abra <strong>Configurações e compartilhamento</strong> da agenda que você usa,
-                  vá em <strong>Compartilhar com pessoas específicas</strong>, adicione o e-mail abaixo com a permissão{" "}
-                  <strong>Fazer alterações nos eventos</strong> e depois informe aqui o endereço da sua agenda.
-                </p>
-              </div>
-              <code className="block truncate rounded-lg border border-black/10 bg-white px-3 py-2 text-xs">
-                {serviceAccountEmail}
-              </code>
-              <form action={connectServiceAccountCalendarAction} className="flex flex-col gap-2 sm:flex-row">
+            <details className="group" open={sp.calendar ? sp.calendar !== "connected" : undefined}>
+              <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white [&::-webkit-details-marker]:hidden">
+                <CalendarPlus className="size-4" aria-hidden />
+                Conectar agenda
+              </summary>
+              <form action={connectServiceAccountCalendarAction} className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <input
                   name="calendarId"
                   type="email"
@@ -341,24 +334,29 @@ export default async function ConfiguracoesPage({
                   placeholder="e-mail da sua agenda"
                   className="min-w-0 flex-1 rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
                 />
-                {professionals.length > 0 && (
-                  <select
-                    name="professionalId"
-                    defaultValue=""
-                    aria-label="Agenda de qual profissional"
-                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
-                  >
-                    <option value="">Agenda da casa</option>
-                    {professionals.map((professional) => (
-                      <option key={professional.id} value={professional.id}>{professional.name}</option>
-                    ))}
-                  </select>
-                )}
-                <button className="shrink-0 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white">
-                  Conectar agenda
+                <select
+                  name="professionalId"
+                  defaultValue=""
+                  required
+                  disabled={professionals.length === 0}
+                  aria-label="Agenda de qual profissional"
+                  className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="" disabled>
+                    {professionals.length > 0 ? "Selecione o profissional" : "Nenhum profissional cadastrado"}
+                  </option>
+                  {professionals.map((professional) => (
+                    <option key={professional.id} value={professional.id}>{professional.name}</option>
+                  ))}
+                </select>
+                <button
+                  disabled={professionals.length === 0}
+                  className="shrink-0 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Conectar
                 </button>
               </form>
-            </div>
+            </details>
           ) : googleReady ? (
             <div className="flex flex-col gap-3 rounded-xl bg-[var(--color-surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -372,16 +370,21 @@ export default async function ConfiguracoesPage({
                   <select
                     name="professionalId"
                     defaultValue=""
+                    required
+                    disabled={professionals.length === 0}
                     aria-label="Agenda de qual profissional"
                     className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
                   >
-                    <option value="">Agenda da casa</option>
+                    <option value="" disabled>Selecione o profissional</option>
                     {professionals.map((professional) => (
                       <option key={professional.id} value={professional.id}>{professional.name}</option>
                     ))}
                   </select>
                 )}
-                <button className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white">
+                <button
+                  disabled={professionals.length === 0}
+                  className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   Conectar Google
                 </button>
               </form>
@@ -406,7 +409,7 @@ export default async function ConfiguracoesPage({
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold">{connection.googleAccountEmail ?? "Conta Google"}</div>
                     <div className="text-xs text-[var(--color-muted)]">
-                      {connection.professional?.name ?? "Agenda da casa"} · calendário{" "}
+                      {connection.professional?.name ?? "Sem profissional vinculado"} · calendário{" "}
                       {connection.calendarId ?? "primary"} · {connection.status}
                     </div>
                   </div>
@@ -420,9 +423,6 @@ export default async function ConfiguracoesPage({
               ))}
             </div>
           )}
-          <p className="text-xs text-[var(--color-muted)]">
-            Para sincronização ao vivo em produção, configure também GOOGLE_CALENDAR_WEBHOOK_URL apontando para /api/calendar/google/webhook.
-          </p>
         </div>
       </section>
 
