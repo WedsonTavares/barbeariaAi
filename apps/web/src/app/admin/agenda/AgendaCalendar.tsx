@@ -11,9 +11,16 @@ import classicThemePlugin from "@fullcalendar/react/themes/classic";
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, RotateCw, Scissors, UserRound, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 
 import { reloadAgendaAction } from "./actions";
+import {
+  AgendaEventDialog,
+  type AgendaEventDetails,
+  type AgendaEventSelection,
+  type AgendaProfessionalOption,
+  type AgendaServiceOption,
+} from "./AgendaEventDialog";
 import styles from "./AgendaCalendar.module.css";
 
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
@@ -23,25 +30,8 @@ export type AgendaEvent = EventInput & {
   title: string;
   start: string;
   end: string;
-  extendedProps: {
-    customer: string;
-    professional: string;
-    services: string;
-    status: string;
-  };
+  extendedProps: AgendaEventDetails;
 };
-
-type SelectedEvent = AgendaEvent["extendedProps"] & {
-  start: Date | null;
-  end: Date | null;
-  color: string;
-};
-
-const SP_DATE_TIME = new Intl.DateTimeFormat("pt-BR", {
-  dateStyle: "short",
-  timeStyle: "short",
-  timeZone: "America/Sao_Paulo",
-});
 const SP_DAY = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
 const SP_LONG_DAY = new Intl.DateTimeFormat("pt-BR", {
   weekday: "long",
@@ -77,16 +67,19 @@ export function AgendaCalendar({
   initialDate,
   storageKey,
   toolbarAction,
+  services,
+  professionals,
 }: {
   events: AgendaEvent[];
   initialDate?: string;
   storageKey: string;
   toolbarAction?: ReactNode;
+  services: AgendaServiceOption[];
+  professionals: AgendaProfessionalOption[];
 }) {
   const calendarRef = useRef<CalendarRef>(null);
   const calendarHostRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const detailsRef = useRef<HTMLDialogElement>(null);
   const preferencesReady = useRef(false);
   const initialRefreshStarted = useRef(false);
   const refreshInFlight = useRef(false);
@@ -96,7 +89,7 @@ export function AgendaCalendar({
   const [title, setTitle] = useState("");
   const [height, setHeight] = useState(680);
   const [compact, setCompact] = useState(false);
-  const [selected, setSelected] = useState<SelectedEvent | null>(null);
+  const [selected, setSelected] = useState<AgendaEventSelection | null>(null);
   const [refreshError, setRefreshError] = useState(false);
   const [refreshing, startRefresh] = useTransition();
 
@@ -230,12 +223,12 @@ export function AgendaCalendar({
   function openEvent(info: EventClickInfo) {
     info.jsEvent.preventDefault();
     setSelected({
-      ...(info.event.extendedProps as AgendaEvent["extendedProps"]),
+      ...(info.event.extendedProps as AgendaEventDetails),
+      id: info.event.id,
       start: info.event.start,
       end: info.event.end,
       color: info.event.color,
     });
-    detailsRef.current?.showModal();
   }
 
   return (
@@ -359,58 +352,12 @@ export function AgendaCalendar({
         />
       </div>
 
-      <dialog
-        ref={detailsRef}
+      <AgendaEventDialog
+        selection={selected}
+        services={services}
+        professionals={professionals}
         onClose={() => setSelected(null)}
-        onClick={(event) => {
-          if (event.target === detailsRef.current) detailsRef.current?.close();
-        }}
-        aria-labelledby="agenda-event-title"
-        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border-0 bg-white p-0 text-[var(--color-ink)] shadow-2xl backdrop:bg-slate-950/45"
-      >
-        {selected && (
-          <div style={{ borderTopColor: selected.color }} className="border-t-4">
-            <div className="flex items-start justify-between gap-4 border-b border-black/5 px-4 py-3">
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-[var(--color-muted)]">{selected.status}</div>
-                <h3 id="agenda-event-title" className="truncate font-extrabold">{selected.customer}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => detailsRef.current?.close()}
-                aria-label="Fechar detalhes"
-                title="Fechar"
-                className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--color-muted)] hover:bg-[var(--color-surface)]"
-              >
-                <X className="size-4" aria-hidden />
-              </button>
-            </div>
-            <dl className="space-y-3 px-4 py-4 text-sm">
-              <div className="flex gap-3">
-                <Clock3 className="mt-0.5 size-4 shrink-0 text-[var(--color-muted)]" aria-hidden />
-                <div>
-                  <dt className="sr-only">Horário</dt>
-                  <dd>{selected.start ? SP_DATE_TIME.format(selected.start) : "Horário indisponível"}{selected.end ? ` até ${SP_DATE_TIME.format(selected.end).split(" ").at(-1)}` : ""}</dd>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <UserRound className="mt-0.5 size-4 shrink-0 text-[var(--color-muted)]" aria-hidden />
-                <div>
-                  <dt className="sr-only">Profissional</dt>
-                  <dd>{selected.professional}</dd>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <Scissors className="mt-0.5 size-4 shrink-0 text-[var(--color-muted)]" aria-hidden />
-                <div>
-                  <dt className="sr-only">Serviços</dt>
-                  <dd>{selected.services}</dd>
-                </div>
-              </div>
-            </dl>
-          </div>
-        )}
-      </dialog>
+      />
     </section>
   );
 }

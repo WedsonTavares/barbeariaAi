@@ -53,10 +53,16 @@ export default async function AgendaPage({
         color: colors.color,
         contrastColor: colors.contrastColor,
         extendedProps: {
+          kind: "appointment",
           customer: appointment.customer.name,
+          customerPhone: appointment.customer.phone,
           professional: appointment.professional?.name ?? "Sem profissional",
+          professionalId: appointment.professionalId ?? "",
           services: serviceNames.join(", ") || "Serviço",
+          serviceIds: appointment.services.map((item) => item.serviceId),
           status: label(APPOINTMENT_STATUS, appointment.status),
+          statusCode: appointment.status,
+          notes: appointment.notes ?? "",
         },
       };
     });
@@ -69,13 +75,26 @@ export default async function AgendaPage({
     color: block.googleEventId ? "#475569" : "#d97706",
     contrastColor: "#ffffff",
     extendedProps: {
+      kind: "block",
       customer: block.reason || (block.googleEventId ? "Ocupado no Google" : "Horário bloqueado"),
+      customerPhone: "",
       professional: block.professionalId ? professionalNames.get(block.professionalId) ?? "Profissional" : "Toda a equipe",
+      professionalId: block.professionalId ?? "",
       services: block.googleEventId ? "Compromisso sincronizado" : "Bloqueio interno",
+      serviceIds: [],
       status: block.googleEventId ? "Ocupado no Google" : "Horário bloqueado",
+      statusCode: "BLOCKED",
+      notes: block.reason ?? "",
     },
   }));
   const events = [...appointmentEvents, ...blockEvents];
+  const serviceOptions = catalog.map((service) => ({
+    id: service.id,
+    name: service.name,
+    durationMinutes: service.durationMinutes,
+    priceLabel: brl(service.defaultPrice),
+  }));
+  const professionalOptions = professionals.map((professional) => ({ id: professional.id, name: professional.name }));
 
   return (
     <div className="-m-4 flex min-w-0 flex-col md:-m-6">
@@ -90,16 +109,13 @@ export default async function AgendaPage({
         events={events}
         initialDate={initialDate}
         storageKey={`agenda-view:${tenant.id}`}
+        services={serviceOptions}
+        professionals={professionalOptions}
         toolbarAction={(
           <NewAppointmentDialog
             customers={customers.map((customer) => ({ id: customer.id, name: customer.name, phone: customer.phone }))}
-            services={catalog.map((service) => ({
-              id: service.id,
-              name: service.name,
-              durationMinutes: service.durationMinutes,
-              priceLabel: brl(service.defaultPrice),
-            }))}
-            professionals={professionals.map((professional) => ({ id: professional.id, name: professional.name }))}
+            services={serviceOptions}
+            professionals={professionalOptions}
             defaultName=""
             defaultPhone=""
             errorMessage={sp.erro ? label(ERRO_AGENDAMENTO, sp.erro) : undefined}
