@@ -49,6 +49,8 @@ export interface OverviewDay {
   leads: number;
   appointments: number;
   aiAppointments: number;
+  /** Bloqueios internos e compromissos sincronizados do Google. */
+  commitments: number;
 }
 
 export interface OverviewTrend {
@@ -202,14 +204,19 @@ export const overviewService = {
       const previousStart = new Date(now.getTime() - 2 * days * DAY_MS);
       // A série diária começa na meia-noite de SP do primeiro dia mostrado.
       const chartStart = spDayRange(new Date(now.getTime() - (chartDays - 1) * DAY_MS)).start;
+      const chartEnd = spDayRange(now).end;
       const since = new Date(Math.min(previousStart.getTime(), chartStart.getTime()));
 
-      const [settings, leadRows, appointmentRows, botConversations, conversations, newConversations] = await Promise.all([
+      const [settings, leadRows, appointmentRows, commitmentRows, botConversations, conversations, newConversations] = await Promise.all([
         tx.tenantSettings.findUnique({ where: { tenantId }, select: { businessHours: true } }),
         tx.lead.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } }),
         tx.appointment.findMany({
           where: { createdAt: { gte: since } },
           select: { createdAt: true, status: true, leadSource: true, total: true },
+        }),
+        tx.timeOff.findMany({
+          where: { startAt: { gte: chartStart, lt: chartEnd } },
+          select: { startAt: true },
         }),
         // Conversas em que a IA efetivamente respondeu no período.
         tx.message.groupBy({
@@ -264,7 +271,15 @@ export const overviewService = {
       for (let i = chartDays - 1; i >= 0; i--) {
         const { dayKey } = spClock(new Date(now.getTime() - i * DAY_MS));
         const [, month, day] = dayKey.split("-");
-        buckets.set(dayKey, { key: dayKey, label: `${day}/${month}`, contacts: 0, leads: 0, appointments: 0, aiAppointments: 0 });
+        buckets.set(dayKey, {
+          key: dayKey,
+          label: `${day}/${month}`,
+          contacts: 0,
+          leads: 0,
+          appointments: 0,
+          aiAppointments: 0,
+          commitments: 0,
+        });
       }
       for (const c of newConversations) {
         const b = buckets.get(spClock(c.createdAt).dayKey);
@@ -279,6 +294,10 @@ export const overviewService = {
         if (!b) continue;
         b.appointments++;
         if (appointment.leadSource === "WHATSAPP") b.aiAppointments++;
+      }
+      for (const commitment of commitmentRows) {
+        const bucket = buckets.get(spClock(commitment.startAt).dayKey);
+        if (bucket) bucket.commitments++;
       }
 
       return {

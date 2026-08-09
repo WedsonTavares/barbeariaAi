@@ -25,6 +25,9 @@ const pct = (n: number | null, digits = 0) =>
     ? "—"
     : `${n.toLocaleString("pt-BR", { maximumFractionDigits: digits })}%`;
 
+const quantidade = (value: number, singular: string, plural = `${singular}s`) =>
+  `${value} ${value === 1 ? singular : plural}`;
+
 function Delta({
   trend,
   periodDays,
@@ -208,6 +211,30 @@ export default async function VisaoGeralPage() {
   ]);
 
   const emNegociacao = funil.IA_ATENDENDO.length + funil.SUPORTE_HUMANO.length;
+  const agendaNoMes = m.appointmentsNoMes + m.compromissosAgendaNoMes;
+  const agendaHoje = s.appointmentsHoje + s.compromissosAgendaHoje;
+  const proximosAgenda = [
+    ...s.proximosAtendimentos.map((appointment) => ({
+      id: `appointment:${appointment.id}`,
+      title: appointment.customer.name,
+      subtitle: `${appointment.professional?.name ?? "Sem profissional"} · ${
+        appointment.services.map((item) => item.serviceNameSnapshot).join(", ") || "Serviço"
+      }`,
+      startAt: appointment.startAt,
+      total: appointment.total,
+      source: "Atendimento",
+    })),
+    ...s.proximosCompromissos.map((commitment) => ({
+      id: `time-off:${commitment.id}`,
+      title: commitment.reason || "Horário bloqueado",
+      subtitle: `${commitment.professional?.name ?? "Toda a equipe"} · ${
+        commitment.googleEventId ? "Google Calendar" : "Bloqueio interno"
+      }`,
+      startAt: commitment.startAt,
+      total: null,
+      source: "Compromisso",
+    })),
+  ].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
   const acoes = [
     {
       key: "conversas",
@@ -254,25 +281,27 @@ export default async function VisaoGeralPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Tile
-          label="Agendamentos no mês"
-          value={m.appointmentsNoMes}
-          hint="Marcados no mês atual"
+          label="Agenda no mês"
+          value={agendaNoMes}
+          hint="Atendimentos e compromissos sincronizados"
           icon={CalendarCheck}
           tint="bg-blue-50 text-blue-600"
         >
           <span className="text-xs font-semibold text-[var(--color-muted)]">
-            {s.appointmentsHoje} para hoje
+            {quantidade(m.appointmentsNoMes, "atendimento")} ·{" "}
+            {quantidade(m.compromissosAgendaNoMes, "compromisso")}
           </span>
         </Tile>
         <Tile
-          label="Atendimentos hoje"
-          value={s.appointmentsHoje}
-          hint="Agenda operacional do dia"
+          label="Hoje na agenda"
+          value={agendaHoje}
+          hint={`${quantidade(proximosAgenda.length, "item", "itens")} nas próximas 48h`}
           icon={Clock3}
           tint="bg-violet-50 text-violet-600"
         >
           <span className="text-xs font-semibold text-[var(--color-muted)]">
-            {s.proximosAtendimentos.length} nas próximas 48h
+            {quantidade(s.appointmentsHoje, "atendimento")} ·{" "}
+            {quantidade(s.compromissosAgendaHoje, "compromisso")}
           </span>
         </Tile>
         <Tile
@@ -304,7 +333,7 @@ export default async function VisaoGeralPage() {
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Card
           title="Movimento"
-          subtitle="Novos contatos e agendamentos por dia (últimos 14 dias)"
+          subtitle="Contatos, agendamentos e compromissos por dia (últimos 14 dias)"
         >
           <MovimentoChart days={o.daily} />
         </Card>
@@ -362,17 +391,17 @@ export default async function VisaoGeralPage() {
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <Card
           title="Próximas 48 horas"
-          subtitle="Atendimentos confirmados"
+          subtitle="Atendimentos e compromissos da agenda"
           href="/admin/agenda"
           linkLabel="Agenda"
         >
-          {s.proximosAtendimentos.length === 0 ? (
+          {proximosAgenda.length === 0 ? (
             <p className="text-sm text-[var(--color-muted)]">
               Nada nas próximas 48h.
             </p>
           ) : (
             <ul className="max-h-64 divide-y divide-black/5 overflow-y-auto">
-              {s.proximosAtendimentos.map((appointment) => (
+              {proximosAgenda.slice(0, 10).map((appointment) => (
                 <li key={appointment.id}>
                   <Link
                     href="/admin/agenda"
@@ -380,13 +409,10 @@ export default async function VisaoGeralPage() {
                   >
                     <span className="min-w-0">
                       <span className="block truncate font-semibold">
-                        {appointment.customer.name}
+                        {appointment.title}
                       </span>
                       <span className="block truncate text-xs text-[var(--color-muted)]">
-                        {appointment.professional?.name ?? "Sem profissional"} ·{" "}
-                        {appointment.services
-                          .map((item) => item.serviceNameSnapshot)
-                          .join(", ") || "Serviço"}
+                        {appointment.subtitle}
                       </span>
                     </span>
                     <span className="shrink-0 text-right">
@@ -394,7 +420,7 @@ export default async function VisaoGeralPage() {
                         {fmtDateTime(appointment.startAt)}
                       </span>
                       <span className="block text-xs text-[var(--color-muted)]">
-                        {brl(appointment.total)}
+                        {appointment.total === null ? appointment.source : brl(appointment.total)}
                       </span>
                     </span>
                   </Link>

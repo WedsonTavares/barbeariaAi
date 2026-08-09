@@ -18,6 +18,9 @@ export const financeService = {
         where: { startAt: { gte: start, lt: end }, status: { not: "CANCELED" } },
         include: { payments: true },
       });
+      const compromissosAgenda = await tx.timeOff.count({
+        where: { startAt: { lt: end }, endAt: { gt: start } },
+      });
       const faturamento = Number(payments._sum.amount ?? 0);
       const custos = Number(expenses._sum.amount ?? 0);
       const aReceber = appointments.reduce((sum, appointment) => {
@@ -32,6 +35,7 @@ export const financeService = {
         aReceber,
         ticketMedio: averageTicket(faturamento, pagas),
         appointmentsNoMes: appointments.length,
+        compromissosAgendaNoMes: compromissosAgenda,
       };
     }),
 
@@ -40,26 +44,50 @@ export const financeService = {
       const { start: startToday, end: endToday } = spDayRange(now);
       const in48h = new Date(now.getTime() + 48 * 3_600_000);
 
-      const [appointmentsHoje, proximosAtendimentos, pagamentosPendentes, servicosAtivos, profissionaisAtivos, orcamentosAbertos] =
-        await Promise.all([
-          tx.appointment.count({ where: { startAt: { gte: startToday, lt: endToday }, status: { not: "CANCELED" } } }),
-          tx.appointment.findMany({
-            where: { startAt: { gte: now, lt: in48h }, status: { in: ["REQUESTED", "CONFIRMED"] } },
-            include: { customer: true, professional: true, services: true },
-            orderBy: { startAt: "asc" },
-            take: 10,
-          }),
-          tx.appointment.count({
-            where: {
-              paymentStatus: { in: ["PENDING", "OVERDUE"] },
-              status: { in: ["REQUESTED", "CONFIRMED", "ARRIVED", "IN_SERVICE"] },
-            },
-          }),
-          tx.service.count({ where: { status: "ACTIVE" } }),
-          tx.professional.count({ where: { status: "ACTIVE" } }),
-          tx.lead.count({ where: { status: { in: ["NEW", "CONTACTED", "QUOTED"] } } }),
-        ]);
+      const [
+        appointmentsHoje,
+        proximosAtendimentos,
+        compromissosAgendaHoje,
+        proximosCompromissos,
+        pagamentosPendentes,
+        servicosAtivos,
+        profissionaisAtivos,
+        orcamentosAbertos,
+      ] = await Promise.all([
+        tx.appointment.count({ where: { startAt: { gte: startToday, lt: endToday }, status: { not: "CANCELED" } } }),
+        tx.appointment.findMany({
+          where: { startAt: { gte: now, lt: in48h }, status: { in: ["REQUESTED", "CONFIRMED"] } },
+          include: { customer: true, professional: true, services: true },
+          orderBy: { startAt: "asc" },
+        }),
+        tx.timeOff.count({
+          where: { startAt: { lt: endToday }, endAt: { gt: startToday } },
+        }),
+        tx.timeOff.findMany({
+          where: { startAt: { lt: in48h }, endAt: { gt: now } },
+          include: { professional: true },
+          orderBy: { startAt: "asc" },
+        }),
+        tx.appointment.count({
+          where: {
+            paymentStatus: { in: ["PENDING", "OVERDUE"] },
+            status: { in: ["REQUESTED", "CONFIRMED", "ARRIVED", "IN_SERVICE"] },
+          },
+        }),
+        tx.service.count({ where: { status: "ACTIVE" } }),
+        tx.professional.count({ where: { status: "ACTIVE" } }),
+        tx.lead.count({ where: { status: { in: ["NEW", "CONTACTED", "QUOTED"] } } }),
+      ]);
 
-      return { appointmentsHoje, proximosAtendimentos, pagamentosPendentes, servicosAtivos, profissionaisAtivos, orcamentosAbertos };
+      return {
+        appointmentsHoje,
+        proximosAtendimentos,
+        compromissosAgendaHoje,
+        proximosCompromissos,
+        pagamentosPendentes,
+        servicosAtivos,
+        profissionaisAtivos,
+        orcamentosAbertos,
+      };
     }),
 };

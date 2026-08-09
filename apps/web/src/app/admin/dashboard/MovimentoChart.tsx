@@ -10,11 +10,12 @@ import type { OverviewDay } from "@barbearia-ai/core";
 const SERIES = [
   { key: "contacts", label: "Novos contatos", color: "#d97706" },
   { key: "appointments", label: "Agendamentos", color: "#2563eb" },
+  { key: "commitments", label: "Compromissos", color: "#059669" },
 ] as const;
 
 export function MovimentoChart({ days }: { days: OverviewDay[] }) {
-  const max = Math.max(1, ...days.map((d) => Math.max(d.contacts, d.appointments)));
-  const vazio = days.every((d) => d.contacts === 0 && d.appointments === 0);
+  const max = Math.max(1, ...days.map((d) => Math.max(d.contacts, d.appointments, d.commitments)));
+  const vazio = days.every((d) => d.contacts === 0 && d.appointments === 0 && d.commitments === 0);
 
   return (
     <div>
@@ -48,7 +49,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                   key={d.key}
                   tabIndex={0}
                   className="group relative flex h-full flex-1 items-end justify-center gap-[2px] rounded-t outline-none focus-visible:bg-black/[0.03]"
-                  aria-label={`${d.label}: ${d.contacts} novos contatos, ${d.appointments} agendamentos`}
+                  aria-label={`${d.label}: ${d.contacts} novos contatos, ${d.appointments} agendamentos, ${d.commitments} compromissos`}
                 >
                   {SERIES.map((s) => {
                     const v = d[s.key];
@@ -56,7 +57,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                       <span
                         key={s.key}
                         aria-hidden
-                        className="w-[7px] rounded-t-[4px]"
+                        className="w-1 rounded-t-[4px] sm:w-1.5"
                         style={{
                           height: v === 0 ? 0 : `${Math.max(3, Math.round((v / max) * 100))}%`,
                           background: s.color,
@@ -66,6 +67,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                   })}
                   <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--color-ink)] px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block group-focus-visible:block">
                     {d.label} · {d.contacts} contato{d.contacts === 1 ? "" : "s"} · {d.appointments} agend.
+                    {` · ${d.commitments} compromisso${d.commitments === 1 ? "" : "s"}`}
                     {d.aiAppointments > 0 && ` (${d.aiAppointments} IA)`}
                   </div>
                 </div>
@@ -88,12 +90,13 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
           Ver números
         </summary>
         <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[320px] text-xs">
+          <table className="w-full min-w-[420px] text-xs">
             <thead className="text-left text-[var(--color-muted)]">
               <tr>
                 <th className="py-1 font-medium">Dia</th>
                 <th className="py-1 text-right font-medium">Contatos</th>
                 <th className="py-1 text-right font-medium">Agendamentos</th>
+                <th className="py-1 text-right font-medium">Compromissos</th>
                 <th className="py-1 text-right font-medium">Pela IA</th>
               </tr>
             </thead>
@@ -103,6 +106,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
                   <td className="py-1">{d.label}</td>
                   <td className="py-1 text-right tabular-nums">{d.contacts}</td>
                   <td className="py-1 text-right tabular-nums">{d.appointments}</td>
+                  <td className="py-1 text-right tabular-nums">{d.commitments}</td>
                   <td className="py-1 text-right tabular-nums">{d.aiAppointments}</td>
                 </tr>
               ))}
