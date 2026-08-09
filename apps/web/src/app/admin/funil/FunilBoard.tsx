@@ -225,7 +225,8 @@ export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: st
   return (
     <>
       {/* barra de ferramentas */}
-      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h1 className="shrink-0 text-2xl font-extrabold">Funil</h1>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -243,7 +244,7 @@ export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: st
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Pesquisar conversas"
-              className="w-full rounded-lg border border-black/10 bg-white py-2 pl-9 pr-3 text-sm sm:w-64"
+              className="w-40 rounded-lg border border-black/10 bg-white py-2 pl-9 pr-3 text-sm min-[420px]:w-56 sm:w-64"
             />
           </div>
         </div>

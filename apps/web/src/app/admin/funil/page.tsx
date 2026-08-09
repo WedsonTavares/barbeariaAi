@@ -23,18 +23,15 @@ export default async function FunilPage() {
 
   return (
     <div>
-      <div>
-        <h1 className="text-2xl font-extrabold">Funil</h1>
-      </div>
-
       {total === 0 ? (
-        <p className="mt-6 text-[var(--color-muted)]">
-          Nenhuma conversa ainda. Os cards aparecem aqui quando alguém manda mensagem no WhatsApp conectado.
-        </p>
+        <>
+          <h1 className="text-2xl font-extrabold">Funil</h1>
+          <p className="mt-6 text-[var(--color-muted)]">
+            Nenhuma conversa ainda. Os cards aparecem aqui quando alguém manda mensagem no WhatsApp conectado.
+          </p>
+        </>
       ) : (
-        <div className="mt-5">
-          <FunilBoard initial={initial} tenantId={tenant.id} />
-        </div>
+        <FunilBoard initial={initial} tenantId={tenant.id} />
       )}
     </div>
   );
