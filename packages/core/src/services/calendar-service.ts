@@ -4,6 +4,86 @@ import { prisma } from "../db/prisma";
 import { withTenant } from "../db/withTenant";
 
 const GOOGLE_PROVIDER = "GOOGLE" as const;
+const SERVICE_ACCOUNT_PROVIDER = "GOOGLE_SERVICE_ACCOUNT" as const;
+
+/** As duas formas de falar com o Google Calendar. Ver enum CalendarProvider. */
+const GOOGLE_PROVIDERS = [GOOGLE_PROVIDER, SERVICE_ACCOUNT_PROVIDER] as const;
+
+type ServiceAccountKey = { client_email: string; private_key: string };
+
+/**
+ * Chave da conta de serviço da PLATAFORMA (uma só, para todas as empresas).
+ *
+ * Aceita o JSON cru ou em base64: na Vercel o base64 evita o inferno das
+ * quebras de linha da chave privada dentro de uma variável de ambiente.
+ */
+function serviceAccountKey(): ServiceAccountKey | null {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+  if (!raw) return null;
+  try {
+    const text = raw.startsWith("{") ? raw : Buffer.from(raw, "base64").toString("utf8");
+    const parsed = JSON.parse(text) as Partial<ServiceAccountKey>;
+    if (!parsed.client_email || !parsed.private_key) return null;
+    return { client_email: parsed.client_email, private_key: parsed.private_key };
+  } catch {
+    console.error("[google-calendar] GOOGLE_SERVICE_ACCOUNT_JSON ilegível");
+    return null;
+  }
+}
+
+let serviceAccountCache: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Access token da conta de serviço: assina um JWT com a chave privada e troca
+ * por um token de 1h. Não existe refresh token aqui — é o que faz esta conexão
+ * nunca expirar.
+ *
+ * O token é cacheado em processo porque a credencial é a MESMA para todas as
+ * empresas. Isso é seguro justamente porque o isolamento não vem do token e sim
+ * do `calendarId`, que é lido por tenant dentro de `withTenant`.
+ */
+async function serviceAccountToken() {
+  if (serviceAccountCache && serviceAccountCache.expiresAt > Date.now() + 60_000) {
+    return serviceAccountCache.token;
+  }
+  const key = serviceAccountKey();
+  if (!key) return null;
+
+  const b64 = (value: string | Buffer) => Buffer.from(value).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claims = b64(
+    JSON.stringify({
+      iss: key.client_email,
+      scope: "https://www.googleapis.com/auth/calendar",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    })
+  );
+  const signature = crypto.createSign("RSA-SHA256").update(`${header}.${claims}`).sign(key.private_key);
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: `${header}.${claims}.${b64(signature)}`,
+    }),
+  });
+  if (!res.ok) {
+    console.error("[google-calendar] conta de serviço recusada", res.status, await res.text().catch(() => ""));
+    return null;
+  }
+  const data = (await res.json()) as { access_token?: string; expires_in?: number };
+  if (!data.access_token) return null;
+
+  serviceAccountCache = {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+  };
+  return data.access_token;
+}
 
 function encryptionKey() {
   const secret = process.env.CALENDAR_TOKEN_ENCRYPTION_KEY;
@@ -54,6 +134,7 @@ async function refreshAccessToken(refreshToken: string) {
 
 type StoredConnection = {
   id: string;
+  provider: string;
   accessTokenEncrypted: string | null;
   refreshTokenEncrypted: string | null;
   expiresAt: Date | null;
@@ -63,6 +144,7 @@ type StoredConnection = {
 /** Campos mínimos para falar com o Google em nome de uma conexão. */
 const CONNECTION_SELECT = {
   id: true,
+  provider: true,
   accessTokenEncrypted: true,
   refreshTokenEncrypted: true,
   expiresAt: true,
@@ -70,6 +152,10 @@ const CONNECTION_SELECT = {
 } as const;
 
 async function accessTokenFor(tenantId: string, connection: StoredConnection) {
+  // Conta de serviço não guarda token nenhum por empresa: a credencial é da
+  // plataforma e vale para todas as agendas compartilhadas com ela.
+  if (connection.provider === SERVICE_ACCOUNT_PROVIDER) return serviceAccountToken();
+
   const current = decrypt(connection.accessTokenEncrypted);
   const freshEnough = connection.expiresAt && connection.expiresAt.getTime() > Date.now() + 60_000;
   if (current && freshEnough) return current;
@@ -197,12 +283,71 @@ export const calendarService = {
     redirectUri: Boolean(process.env.GOOGLE_CALENDAR_REDIRECT_URI),
     tokenKey: Boolean(process.env.CALENDAR_TOKEN_ENCRYPTION_KEY),
     webhookUrl: Boolean(process.env.GOOGLE_CALENDAR_WEBHOOK_URL),
+    serviceAccount: Boolean(serviceAccountKey()),
   }),
+
+  /**
+   * E-mail da conta de serviço da plataforma, para a empresa compartilhar a
+   * agenda com ele. NÃO é segredo — existe para ser copiado e colado no Google
+   * Agenda do cliente. O segredo é a chave privada, que nunca sai daqui.
+   */
+  serviceAccountEmail: () => serviceAccountKey()?.client_email ?? null,
+
+  /**
+   * Conecta uma agenda pelo compartilhamento com a conta de serviço.
+   *
+   * Não há OAuth: a empresa já compartilhou a agenda dela com o nosso e-mail, e
+   * aqui só guardamos QUAL agenda é a dela. Como a credencial é a mesma para
+   * todas as empresas, o `calendarId` é o isolamento inteiro deste provider —
+   * por isso ele é obrigatório e sempre chega de dentro do tenant, nunca do
+   * cliente nem do agente de IA.
+   *
+   * Confere o acesso ANTES de gravar: sem isso ficaria salva uma conexão
+   * "ativa" com o e-mail errado, e o erro só apareceria no primeiro
+   * agendamento real — quando já tem cliente esperando.
+   */
+  connectServiceAccount: async (
+    tenantId: string,
+    data: { calendarId: string; professionalId?: string | null }
+  ) => {
+    const calendarId = data.calendarId.trim().toLowerCase();
+    if (!calendarId) return { ok: false as const, reason: "sem_agenda" as const };
+
+    const token = await serviceAccountToken();
+    if (!token) return { ok: false as const, reason: "sem_credencial" as const };
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) {
+      return {
+        ok: false as const,
+        reason: res.status === 404 ? ("nao_compartilhada" as const) : ("sem_acesso" as const),
+      };
+    }
+
+    const connection = await withTenant(tenantId, (tx) =>
+      tx.calendarConnection.create({
+        data: {
+          tenantId,
+          provider: SERVICE_ACCOUNT_PROVIDER,
+          professionalId: data.professionalId ?? null,
+          googleAccountEmail: calendarId,
+          calendarId,
+          scope: "https://www.googleapis.com/auth/calendar",
+          status: "ACTIVE",
+        },
+      })
+    );
+
+    return { ok: true as const, connection, accessToken: token };
+  },
 
   listGoogleConnections: (tenantId: string) =>
     withTenant(tenantId, (tx) =>
       tx.calendarConnection.findMany({
-        where: { provider: GOOGLE_PROVIDER },
+        where: { provider: { in: [...GOOGLE_PROVIDERS] } },
         include: { professional: true, subscriptions: { where: { active: true }, orderBy: { expiresAt: "desc" }, take: 1 } },
         orderBy: { updatedAt: "desc" },
       })
@@ -319,18 +464,10 @@ export const calendarService = {
           where: {
             active: true,
             expiresAt: { lte: cutoff },
-            connection: { is: { provider: GOOGLE_PROVIDER, status: "ACTIVE" } },
+            connection: { is: { provider: { in: [...GOOGLE_PROVIDERS] }, status: "ACTIVE" } },
           },
           include: {
-            connection: {
-              select: {
-                id: true,
-                accessTokenEncrypted: true,
-                refreshTokenEncrypted: true,
-                expiresAt: true,
-                calendarId: true,
-              },
-            },
+            connection: { select: CONNECTION_SELECT },
           },
           orderBy: { expiresAt: "asc" },
           take: 25,
@@ -398,7 +535,7 @@ export const calendarService = {
        */
       const pick = (where: { professionalId?: string | null }) =>
         tx.calendarConnection.findFirst({
-          where: { provider: GOOGLE_PROVIDER, status: "ACTIVE", ...where },
+          where: { provider: { in: [...GOOGLE_PROVIDERS] }, status: "ACTIVE", ...where },
           orderBy: { updatedAt: "desc" },
           select: CONNECTION_SELECT,
         });
@@ -415,7 +552,18 @@ export const calendarService = {
     const token = await accessTokenFor(tenantId, data.connection);
     if (!token) return { synced: false as const, reason: "no_token" as const };
 
-    const calendarId = encodeURIComponent(data.connection.calendarId || "primary");
+    /**
+     * "primary" é a agenda do DONO do token. No OAuth isso é a empresa; na conta
+     * de serviço seria a agenda da própria conta de serviço — o evento sumiria
+     * num calendário que ninguém abre, sem erro nenhum. Por isso a conta de
+     * serviço exige o `calendarId` (o e-mail da agenda que a empresa compartilhou).
+     */
+    const alvo =
+      data.connection.calendarId ||
+      (data.connection.provider === SERVICE_ACCOUNT_PROVIDER ? null : "primary");
+    if (!alvo) return { synced: false as const, reason: "no_calendar" as const };
+
+    const calendarId = encodeURIComponent(alvo);
     const eventId = data.appointment.googleCalendarEventId;
     if (data.appointment.status === "CANCELED") {
       if (eventId) {
@@ -472,15 +620,7 @@ export const calendarService = {
       tx.calendarSubscription.findFirst({
         where: { channelId, active: true, ...(resourceId ? { resourceId } : {}) },
         include: {
-          connection: {
-            select: {
-              id: true,
-              accessTokenEncrypted: true,
-              refreshTokenEncrypted: true,
-              expiresAt: true,
-              calendarId: true,
-            },
-          },
+          connection: { select: CONNECTION_SELECT },
         },
       })
     );

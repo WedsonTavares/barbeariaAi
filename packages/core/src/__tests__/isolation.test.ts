@@ -47,3 +47,59 @@ describe("isolamento por tenant (RLS)", () => {
     ).rejects.toThrow();
   });
 });
+
+/**
+ * Conexões de agenda com a conta de serviço da PLATAFORMA.
+ *
+ * No OAuth, o token era por empresa: um erro de código não alcançava a agenda
+ * de outra, porque faltaria a credencial. Com a conta de serviço a credencial é
+ * a mesma para todo mundo, e o que separa uma empresa da outra passa a ser o
+ * `calendarId`. Estes testes existem para que essa fronteira quebre o build se
+ * alguém a abrir — em vez de vazar agendamento de um cliente na agenda de outro.
+ */
+describe("isolamento das conexões de agenda", () => {
+  beforeAll(async () => {
+    await withTenant(a, (tx) =>
+      tx.calendarConnection.create({
+        data: {
+          tenantId: a,
+          provider: "GOOGLE_SERVICE_ACCOUNT",
+          calendarId: "agenda-da-empresa-a@example.com",
+          googleAccountEmail: "agenda-da-empresa-a@example.com",
+          status: "ACTIVE",
+        },
+      })
+    );
+  });
+
+  it("tenant B não enxerga o calendarId do tenant A", async () => {
+    const seen = await withTenant(b, (tx) => tx.calendarConnection.findMany());
+    expect(seen.every((c) => c.tenantId === b)).toBe(true);
+    expect(seen.find((c) => c.calendarId === "agenda-da-empresa-a@example.com")).toBeUndefined();
+  });
+
+  it("fail-closed: sem contexto de tenant, nenhuma conexão é retornada", async () => {
+    expect(await prisma.calendarConnection.findMany()).toHaveLength(0);
+  });
+
+  it("listGoogleConnections do tenant B não devolve a conexão do tenant A", async () => {
+    const { calendarService } = await import("../services/calendar-service");
+    const seen = await calendarService.listGoogleConnections(b);
+    expect(seen.every((c) => c.tenantId === b)).toBe(true);
+  });
+
+  it("WITH CHECK impede gravar uma conexão no tenant do outro", async () => {
+    await expect(
+      withTenant(b, (tx) =>
+        tx.calendarConnection.create({
+          data: {
+            tenantId: a,
+            provider: "GOOGLE_SERVICE_ACCOUNT",
+            calendarId: "sequestrada@example.com",
+            status: "ACTIVE",
+          },
+        })
+      )
+    ).rejects.toThrow();
+  });
+});

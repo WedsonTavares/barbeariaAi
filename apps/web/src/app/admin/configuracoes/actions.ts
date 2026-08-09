@@ -85,6 +85,49 @@ export async function disconnectGoogleCalendarAction(formData: FormData) {
   revalidatePath(BASE);
 }
 
+/**
+ * Conecta uma agenda pela conta de serviço da plataforma.
+ *
+ * Aqui não há OAuth: a empresa já compartilhou a agenda dela com o nosso
+ * e-mail no Google Agenda, e o que gravamos é QUAL agenda é a dela. Esse
+ * `calendarId` é o isolamento inteiro desse provider, então ele nasce do
+ * formulário de um OWNER/ADMIN autenticado NESTE tenant — nunca do agente de
+ * IA e nunca de um payload externo.
+ *
+ * O `professionalId` é conferido contra este tenant antes de ser usado, pelo
+ * mesmo motivo que o fluxo OAuth confere: nada que não tenha sido validado
+ * agora entra na conexão.
+ */
+export async function connectServiceAccountCalendarAction(formData: FormData) {
+  const { tenant, ctx } = await requireTenant();
+  requireRole(ctx, ["OWNER", "ADMIN"]);
+
+  const calendarId = String(formData.get("calendarId") ?? "").trim();
+  if (!calendarId) redirect(`${BASE}?calendar=sem_agenda#google-calendar`);
+
+  const pedido = String(formData.get("professionalId") ?? "").trim();
+  const profissional = pedido ? await services.professionalService.get(tenant.id, pedido) : null;
+  if (pedido && !profissional) redirect(`${BASE}?calendar=invalid#google-calendar`);
+
+  const resultado = await services.calendarService.connectServiceAccount(tenant.id, {
+    calendarId,
+    professionalId: profissional?.id ?? null,
+  });
+  if (!resultado.ok) redirect(`${BASE}?calendar=${resultado.reason}#google-calendar`);
+
+  // Push ao vivo é opcional: sem GOOGLE_CALENDAR_WEBHOOK_URL a conexão continua
+  // válida, só não recebe as mudanças feitas direto no Google.
+  await services.calendarService.startGoogleSubscription(tenant.id, {
+    connectionId: resultado.connection.id,
+    accessToken: resultado.accessToken,
+    calendarId,
+    syncToken: null,
+  });
+
+  revalidatePath(BASE);
+  redirect(`${BASE}?calendar=connected#google-calendar`);
+}
+
 /** Dias da semana marcados no formulário (0 = domingo). */
 function readDays(formData: FormData) {
   return formData

@@ -5,9 +5,27 @@ import { services, parseBusinessHours } from "@barbearia-ai/core";
 import { getConnectionState, evolutionConfigured } from "@/lib/evolution";
 import { WhatsappConnect } from "./WhatsappConnect";
 import { SettingsSection, Field, TextArea, ColorField } from "./SettingsSection";
-import { disconnectGoogleCalendarAction } from "./actions";
+import { connectServiceAccountCalendarAction, disconnectGoogleCalendarAction } from "./actions";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * O motivo da falha em linguagem de dono de barbearia. "Não conectou, veja as
+ * variáveis de ambiente" não diz a ninguém o que fazer a seguir — e as duas
+ * causas reais aqui (esqueceu de compartilhar, ou compartilhou só como leitura)
+ * têm conserto óbvio quando a tela diz qual é.
+ */
+const CALENDAR_ERROS: Record<string, string> = {
+  sem_agenda: "Informe o e-mail da agenda que você quer conectar.",
+  nao_compartilhada:
+    "Não encontramos essa agenda. Confira se o e-mail está certo e se você já compartilhou a agenda com o endereço mostrado na tela.",
+  sem_acesso:
+    "A agenda existe, mas ainda não temos permissão para alterar. No Google Agenda, o compartilhamento precisa ser “Fazer alterações nos eventos”.",
+  sem_credencial: "A conta de serviço não está configurada no servidor. Fale com o suporte.",
+  invalid: "Profissional inválido.",
+  missing_env: "Faltam variáveis de ambiente do Google no servidor.",
+  failed: "O Google recusou a conexão. Tente de novo em instantes.",
+};
 
 const DIAS = [
   { v: 0, label: "Dom" },
@@ -34,6 +52,10 @@ export default async function ConfiguracoesPage({
   ]);
   const googleConfig = services.calendarService.googleConfigStatus();
   const googleReady = googleConfig.clientId && googleConfig.clientSecret && googleConfig.redirectUri && googleConfig.tokenKey;
+  // Caminho alternativo ao OAuth: a empresa compartilha a agenda dela com o
+  // e-mail da nossa conta de serviço. Não expira e dispensa a verificação do
+  // Google — por isso é o que mostramos primeiro quando está disponível.
+  const serviceAccountEmail = services.calendarService.serviceAccountEmail();
   const configured = evolutionConfigured();
   const state = configured ? await getConnectionState(instance) : "unknown";
   // Mesma leitura que a API de disponibilidade usa — evita a tela mostrar um
@@ -71,7 +93,8 @@ export default async function ConfiguracoesPage({
       )}
       {sp.calendar && sp.calendar !== "connected" && (
         <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800">
-          Google Calendar não conectado: verifique as variáveis de ambiente e tente novamente.
+          {CALENDAR_ERROS[sp.calendar] ??
+            "Google Calendar não conectado: verifique as variáveis de ambiente e tente novamente."}
         </p>
       )}
 
@@ -294,6 +317,50 @@ export default async function ConfiguracoesPage({
           </p>
         </div>
         <div className="space-y-4 p-4 sm:p-5">
+          {/* Caminho recomendado: compartilhar a agenda com a conta de serviço.
+              Não expira, não pede login e não depende da verificação do Google. */}
+          {serviceAccountEmail && (
+            <div className="space-y-3 rounded-xl border border-black/5 bg-[var(--color-surface)] p-3">
+              <div>
+                <div className="text-sm font-bold">Conectar compartilhando a sua agenda</div>
+                <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                  No Google Agenda, abra <strong>Configurações e compartilhamento</strong> da agenda que você usa,
+                  vá em <strong>Compartilhar com pessoas específicas</strong>, adicione o e-mail abaixo com a permissão{" "}
+                  <strong>Fazer alterações nos eventos</strong> e depois informe aqui o endereço da sua agenda.
+                </p>
+              </div>
+              <code className="block truncate rounded-lg border border-black/10 bg-white px-3 py-2 text-xs">
+                {serviceAccountEmail}
+              </code>
+              <form action={connectServiceAccountCalendarAction} className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  name="calendarId"
+                  type="email"
+                  required
+                  aria-label="E-mail da sua agenda"
+                  placeholder="e-mail da sua agenda"
+                  className="min-w-0 flex-1 rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
+                />
+                {professionals.length > 0 && (
+                  <select
+                    name="professionalId"
+                    defaultValue=""
+                    aria-label="Agenda de qual profissional"
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Agenda da casa</option>
+                    {professionals.map((professional) => (
+                      <option key={professional.id} value={professional.id}>{professional.name}</option>
+                    ))}
+                  </select>
+                )}
+                <button className="shrink-0 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white">
+                  Conectar agenda
+                </button>
+              </form>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 rounded-xl bg-[var(--color-surface)] p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-sm font-bold">{googleReady ? "OAuth configurado" : "OAuth pendente"}</div>

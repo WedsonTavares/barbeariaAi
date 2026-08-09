@@ -95,7 +95,14 @@ enum CommissionStatus {
 }
 
 enum CalendarProvider {
+  /// OAuth por empresa: cada uma autoriza com a conta Google dela e o token
+  /// fica cifrado nesta tabela.
   GOOGLE
+  /// Conta de serviço da plataforma: a empresa só compartilha a agenda dela com
+  /// o e-mail da conta. Não expira e dispensa a verificação do Google — em
+  /// troca, a credencial deixa de ser fronteira entre empresas e o isolamento
+  /// passa a ser o `calendarId`. Por isso ele é OBRIGATÓRIO neste provider.
+  GOOGLE_SERVICE_ACCOUNT
 }
 
 enum CalendarConnectionStatus {
