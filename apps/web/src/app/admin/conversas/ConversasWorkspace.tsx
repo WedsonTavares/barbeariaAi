@@ -378,27 +378,31 @@ export function ConversasWorkspace({
                   </span>
 
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
+                    <span className="grid grid-cols-[minmax(0,1fr)_1rem_1rem_1.75rem] items-center gap-1">
                       <span
                         className={`min-w-0 truncate text-sm ${c.unread > 0 ? "font-extrabold" : "font-semibold"}`}
                       >
                         {c.contactName || c.phone}
                       </span>
-                      {/* Etapa vira símbolo logo depois do nome. */}
-                      <span className="shrink-0" title={s.label}>
-                        <ico.Icon className={`size-3.5 ${ico.cor}`} aria-hidden />
-                        <span className="sr-only">{s.label}</span>
-                      </span>
                       {/* A IA pode estar pausada sem o card estar em Suporte
                           (tag "desligar-ia"). Nesse caso o ⏸ entra à parte, pra
                           não perder o aviso que a linha antiga dava. */}
-                      {c.botPaused && c.stage !== "SUPORTE_HUMANO" && (
-                        <span className="shrink-0" title="IA pausada">
-                          <Pause className="size-3.5 text-rose-500" aria-hidden />
-                          <span className="sr-only">IA pausada</span>
-                        </span>
-                      )}
-                      <span className="ml-auto shrink-0 text-[10px] text-[var(--color-muted)]">
+                      <span
+                        className="grid size-4 place-items-center"
+                        title={c.botPaused && c.stage !== "SUPORTE_HUMANO" ? "IA pausada" : undefined}
+                      >
+                        {c.botPaused && c.stage !== "SUPORTE_HUMANO" && (
+                          <>
+                            <Pause className="size-3.5 text-rose-500" aria-hidden />
+                            <span className="sr-only">IA pausada</span>
+                          </>
+                        )}
+                      </span>
+                      <span className="grid size-4 place-items-center" title={s.label}>
+                        <ico.Icon className={`size-3.5 ${ico.cor}`} aria-hidden />
+                        <span className="sr-only">{s.label}</span>
+                      </span>
+                      <span className="shrink-0 text-right text-[10px] text-[var(--color-muted)]">
                         {timeAgo(c.lastMessageAt)}
                       </span>
                     </span>
