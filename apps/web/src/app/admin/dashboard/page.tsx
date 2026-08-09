@@ -21,24 +21,38 @@ import {
 export const dynamic = "force-dynamic";
 
 const pct = (n: number | null, digits = 0) =>
-  n === null ? "—" : `${n.toLocaleString("pt-BR", { maximumFractionDigits: digits })}%`;
+  n === null
+    ? "—"
+    : `${n.toLocaleString("pt-BR", { maximumFractionDigits: digits })}%`;
 
-function Delta({ trend, periodDays }: { trend: OverviewTrend; periodDays: number }) {
+function Delta({
+  trend,
+  periodDays,
+}: {
+  trend: OverviewTrend;
+  periodDays: number;
+}) {
   if (trend.changePct === null) {
     return (
       <span className="text-xs text-[var(--color-muted)]">
-        {trend.previous === 0 && trend.current > 0 ? "primeiros do período" : `nada nos ${periodDays} dias anteriores`}
+        {trend.previous === 0 && trend.current > 0
+          ? "primeiros do período"
+          : `nada nos ${periodDays} dias anteriores`}
       </span>
     );
   }
   const up = trend.changePct >= 0;
   const Icon = up ? TrendingUp : TrendingDown;
   return (
-    <span className={`flex items-center gap-1 text-xs font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>
+    <span
+      className={`flex items-center gap-1 text-xs font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}
+    >
       <Icon className="size-3.5" aria-hidden />
       {up ? "+" : ""}
       {pct(trend.changePct, 1)}
-      <span className="font-normal text-[var(--color-muted)]">vs. {periodDays}d anteriores</span>
+      <span className="font-normal text-[var(--color-muted)]">
+        vs. {periodDays}d anteriores
+      </span>
     </span>
   );
 }
@@ -63,16 +77,23 @@ function Tile({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm text-[var(--color-muted)]">{label}</div>
-          <div className="mt-1 text-3xl font-extrabold tabular-nums">{value}</div>
+          <div className="mt-1 text-3xl font-extrabold tabular-nums">
+            {value}
+          </div>
         </div>
-        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${tint}`} aria-hidden>
+        <span
+          className={`grid size-10 shrink-0 place-items-center rounded-xl ${tint}`}
+          aria-hidden
+        >
           <Icon className="size-5" />
         </span>
       </div>
       {/* Delta e detalhe ficam colados no rodapé pra os 4 cards baterem a linha. */}
       <div className="mt-auto pt-3">
         {children}
-        {hint && <div className="mt-1 text-xs text-[var(--color-muted)]">{hint}</div>}
+        {hint && (
+          <div className="mt-1 text-xs text-[var(--color-muted)]">{hint}</div>
+        )}
       </div>
     </div>
   );
@@ -96,7 +117,11 @@ function Card({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-bold">{title}</h2>
-          {subtitle && <p className="mt-0.5 text-xs text-[var(--color-muted)]">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+              {subtitle}
+            </p>
+          )}
         </div>
         {href && (
           <Link
@@ -113,7 +138,15 @@ function Card({
 }
 
 /** Linha "métrica: valor" do painel da IA. */
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Stat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-t border-black/5 py-2 first:border-t-0 first:pt-0">
       <span className="text-sm text-[var(--color-muted)]">
@@ -144,12 +177,18 @@ function Acao({
       href={href}
       className="flex items-center gap-3 rounded-xl border border-black/5 p-3 hover:bg-[var(--color-surface)]"
     >
-      <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${tint}`} aria-hidden>
+      <span
+        className={`grid size-9 shrink-0 place-items-center rounded-lg ${tint}`}
+        aria-hidden
+      >
         <Icon className="size-4" />
       </span>
       <span className="min-w-0 flex-1 text-sm font-semibold">{label}</span>
       <span className="text-lg font-extrabold tabular-nums">{count}</span>
-      <ChevronRight className="size-4 shrink-0 text-[var(--color-muted)]" aria-hidden />
+      <ChevronRight
+        className="size-4 shrink-0 text-[var(--color-muted)]"
+        aria-hidden
+      />
     </Link>
   );
 }
@@ -212,7 +251,7 @@ export default async function VisaoGeralPage() {
       <header>
         <h1 className="text-2xl font-extrabold">Visão Geral</h1>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          {tenant.name} · últimos {o.periodDays} dias · atualiza sozinho a cada minuto
+          últimos {o.periodDays} dias
         </p>
       </header>
 
@@ -232,7 +271,12 @@ export default async function VisaoGeralPage() {
         >
           <Delta trend={o.contacts} periodDays={o.periodDays} />
         </Tile>
-        <Tile label="Agendamentos" value={o.appointments.current} icon={CalendarCheck} tint="bg-blue-50 text-blue-600">
+        <Tile
+          label="Agendamentos"
+          value={o.appointments.current}
+          icon={CalendarCheck}
+          tint="bg-blue-50 text-blue-600"
+        >
           <Delta trend={o.appointments} periodDays={o.periodDays} />
         </Tile>
         <Tile
@@ -258,22 +302,38 @@ export default async function VisaoGeralPage() {
           tint="bg-violet-50 text-violet-600"
         >
           <Delta
-            trend={{ current: fora.atual, previous: fora.anterior, changePct: fora.changePct }}
+            trend={{
+              current: fora.atual,
+              previous: fora.anterior,
+              changePct: fora.changePct,
+            }}
             periodDays={fora.periodDays}
           />
         </Tile>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card title="Movimento" subtitle="Novos contatos e agendamentos por dia (últimos 14 dias)">
+        <Card
+          title="Movimento"
+          subtitle="Novos contatos e agendamentos por dia (últimos 14 dias)"
+        >
           <MovimentoChart days={o.daily} />
         </Card>
 
-        <Card title="Efetividade da IA" subtitle={`Nos últimos ${o.periodDays} dias`} href="/admin/conversas" linkLabel="Conversas">
+        <Card
+          title="Efetividade da IA"
+          subtitle={`Nos últimos ${o.periodDays} dias`}
+          href="/admin/conversas"
+          linkLabel="Conversas"
+        >
           <div>
             <div className="flex items-baseline justify-between">
-              <span className="text-sm text-[var(--color-muted)]">Conversas que viraram agendamento</span>
-              <span className="text-xl font-extrabold tabular-nums">{pct(o.ai.conversionPct, 1)}</span>
+              <span className="text-sm text-[var(--color-muted)]">
+                Conversas que viraram agendamento
+              </span>
+              <span className="text-xl font-extrabold tabular-nums">
+                {pct(o.ai.conversionPct, 1)}
+              </span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-surface)]">
               <div
@@ -283,14 +343,23 @@ export default async function VisaoGeralPage() {
               />
             </div>
             <p className="mt-1.5 text-xs text-[var(--color-muted)]">
-              {o.ai.appointments.current} agendamento{o.ai.appointments.current === 1 ? "" : "s"} em {o.ai.attended} conversa
+              {o.ai.appointments.current} agendamento
+              {o.ai.appointments.current === 1 ? "" : "s"} em {o.ai.attended}{" "}
+              conversa
               {o.ai.attended === 1 ? "" : "s"} atendidas
             </p>
           </div>
 
           <div className="mt-4">
-            <Stat label="Conversas atendidas pela IA" value={String(o.ai.attended)} />
-            <Stat label="Resolvidas sem humano" value={pct(o.ai.autonomyPct)} hint={`${o.ai.escalated} passaram para a equipe`} />
+            <Stat
+              label="Conversas atendidas pela IA"
+              value={String(o.ai.attended)}
+            />
+            <Stat
+              label="Resolvidas sem humano"
+              value={pct(o.ai.autonomyPct)}
+              hint={`${o.ai.escalated} passaram para a equipe`}
+            />
             <Stat label="Receita fechada pela IA" value={brl(o.ai.revenue)} />
             <Stat
               label="Fechados fora do horário"
@@ -302,9 +371,16 @@ export default async function VisaoGeralPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Próximas 48 horas" subtitle="Atendimentos confirmados" href="/admin/agenda" linkLabel="Agenda">
+        <Card
+          title="Próximas 48 horas"
+          subtitle="Atendimentos confirmados"
+          href="/admin/agenda"
+          linkLabel="Agenda"
+        >
           {s.proximosAtendimentos.length === 0 ? (
-            <p className="text-sm text-[var(--color-muted)]">Nada nas próximas 48h.</p>
+            <p className="text-sm text-[var(--color-muted)]">
+              Nada nas próximas 48h.
+            </p>
           ) : (
             <ul className="space-y-2">
               {s.proximosAtendimentos.map((appointment) => (
@@ -314,17 +390,23 @@ export default async function VisaoGeralPage() {
                     className="flex items-center justify-between gap-3 rounded-xl border border-black/5 p-3 hover:bg-[var(--color-surface)]"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold">{appointment.customer.name}</span>
+                      <span className="block truncate font-semibold">
+                        {appointment.customer.name}
+                      </span>
                       <span className="block truncate text-xs text-[var(--color-muted)]">
                         {appointment.professional?.name ?? "Sem profissional"} ·{" "}
-                        {appointment.services.map((item) => item.serviceNameSnapshot).join(", ") || "Serviço"}
+                        {appointment.services
+                          .map((item) => item.serviceNameSnapshot)
+                          .join(", ") || "Serviço"}
                       </span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="block text-sm font-semibold tabular-nums">
                         {fmtDateTime(appointment.startAt)}
                       </span>
-                      <span className="block text-xs text-[var(--color-muted)]">{brl(appointment.total)}</span>
+                      <span className="block text-xs text-[var(--color-muted)]">
+                        {brl(appointment.total)}
+                      </span>
                     </span>
                   </Link>
                 </li>
@@ -333,9 +415,14 @@ export default async function VisaoGeralPage() {
           )}
         </Card>
 
-        <Card title="Precisa de você" subtitle="O que está parado esperando uma ação">
+        <Card
+          title="Precisa de você"
+          subtitle="O que está parado esperando uma ação"
+        >
           {acoes.length === 0 ? (
-            <p className="text-sm text-[var(--color-muted)]">Nada pendente. Tudo em dia. 🎉</p>
+            <p className="text-sm text-[var(--color-muted)]">
+              Nada pendente. Tudo em dia. 🎉
+            </p>
           ) : (
             <div className="space-y-2">
               {acoes.map(({ key, ...a }) => (
@@ -346,7 +433,12 @@ export default async function VisaoGeralPage() {
         </Card>
       </div>
 
-      <Card title="Este mês" subtitle="Pagamentos recebidos, custos lançados e o que falta entrar" href="/admin/financeiro" linkLabel="Financeiro">
+      <Card
+        title="Este mês"
+        subtitle="Pagamentos recebidos, custos lançados e o que falta entrar"
+        href="/admin/financeiro"
+        linkLabel="Financeiro"
+      >
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
             { t: "Faturamento", v: brl(m.faturamentoBruto) },
@@ -356,7 +448,9 @@ export default async function VisaoGeralPage() {
           ].map((c) => (
             <div key={c.t}>
               <div className="text-xs text-[var(--color-muted)]">{c.t}</div>
-              <div className="mt-0.5 text-lg font-extrabold tabular-nums">{c.v}</div>
+              <div className="mt-0.5 text-lg font-extrabold tabular-nums">
+                {c.v}
+              </div>
             </div>
           ))}
         </div>
