@@ -10,6 +10,9 @@ const SERVICE_ACCOUNT_PROVIDER = "GOOGLE_SERVICE_ACCOUNT" as const;
 const GOOGLE_PROVIDERS = [GOOGLE_PROVIDER, SERVICE_ACCOUNT_PROVIDER] as const;
 
 type ServiceAccountKey = { client_email: string; private_key: string };
+type GoogleCalendarAccess = { accessRole?: string };
+
+const WRITABLE_CALENDAR_ROLES = new Set(["writer", "writerWithoutPrivateAccess", "owner"]);
 
 /**
  * Chave da conta de serviço da PLATAFORMA (uma só, para todas as empresas).
@@ -319,15 +322,21 @@ export const calendarService = {
     const token = await serviceAccountToken();
     if (!token) return { ok: false as const, reason: "sem_credencial" as const };
 
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`,
-      { headers: { authorization: `Bearer ${token}` } }
+    const accessUrl = new URL(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
     );
+    accessUrl.searchParams.set("maxResults", "1");
+    accessUrl.searchParams.set("fields", "accessRole");
+    const res = await fetch(accessUrl, { headers: { authorization: `Bearer ${token}` } });
     if (!res.ok) {
       return {
         ok: false as const,
         reason: res.status === 404 ? ("nao_compartilhada" as const) : ("sem_acesso" as const),
       };
+    }
+    const access = (await res.json()) as GoogleCalendarAccess;
+    if (!access.accessRole || !WRITABLE_CALENDAR_ROLES.has(access.accessRole)) {
+      return { ok: false as const, reason: "sem_acesso" as const };
     }
 
     const connection = await withTenant(tenantId, (tx) =>
