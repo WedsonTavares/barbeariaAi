@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import FullCalendar, { type CalendarRef, type DatesSetInfo, type EventClickInfo, type EventInput } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
@@ -88,6 +88,9 @@ export function AgendaCalendar({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLDialogElement>(null);
   const preferencesReady = useRef(false);
+  const initialRefreshStarted = useRef(false);
+  const refreshInFlight = useRef(false);
+  const mounted = useRef(false);
   const router = useRouter();
   const [view, setView] = useState<CalendarView>("dayGridMonth");
   const [title, setTitle] = useState("");
@@ -96,6 +99,56 @@ export function AgendaCalendar({
   const [selected, setSelected] = useState<SelectedEvent | null>(null);
   const [refreshError, setRefreshError] = useState(false);
   const [refreshing, startRefresh] = useTransition();
+
+  const refreshAgenda = useCallback(() => {
+    if (refreshInFlight.current) return;
+
+    refreshInFlight.current = true;
+    setRefreshError(false);
+    startRefresh(async () => {
+      try {
+        const result = await reloadAgendaAction();
+        if (mounted.current) setRefreshError(!result.ok);
+      } catch {
+        if (mounted.current) setRefreshError(true);
+      } finally {
+        refreshInFlight.current = false;
+        if (mounted.current) router.refresh();
+      }
+    });
+  }, [router, startRefresh]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let wasHidden = document.visibilityState === "hidden";
+
+    if (!initialRefreshStarted.current && !wasHidden) {
+      initialRefreshStarted.current = true;
+      refreshAgenda();
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        wasHidden = true;
+        return;
+      }
+
+      if (wasHidden) {
+        wasHidden = false;
+        initialRefreshStarted.current = true;
+        refreshAgenda();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [refreshAgenda]);
 
   useEffect(() => {
     const resize = () => {
@@ -150,20 +203,6 @@ export function AgendaCalendar({
 
   function move(direction: "prev" | "next" | "today") {
     calendarRef.current?.getApi()[direction]();
-  }
-
-  function reload() {
-    setRefreshError(false);
-    startRefresh(async () => {
-      try {
-        const result = await reloadAgendaAction();
-        setRefreshError(!result.ok);
-      } catch {
-        setRefreshError(true);
-      } finally {
-        router.refresh();
-      }
-    });
   }
 
   function updateRange(info: DatesSetInfo) {
@@ -236,6 +275,20 @@ export function AgendaCalendar({
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 max-sm:w-full">
+          <button
+            type="button"
+            onClick={refreshAgenda}
+            disabled={refreshing}
+            title={refreshError ? "Não foi possível sincronizar. Tente novamente." : "Sincronizar e recarregar a agenda"}
+            aria-label="Sincronizar e recarregar a agenda"
+            className={`grid size-8 shrink-0 place-items-center rounded-lg border bg-white transition disabled:opacity-50 ${
+              refreshError
+                ? "border-red-300 text-red-600"
+                : "border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
+            }`}
+          >
+            <RotateCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
+          </button>
           <div className="grid min-w-0 flex-1 grid-cols-3 rounded-lg border border-black/10 bg-[var(--color-surface)] p-0.5 sm:flex-none" aria-label="Modo de visualização">
             {VIEWS.map((option) => (
               <button
@@ -254,20 +307,6 @@ export function AgendaCalendar({
             ))}
           </div>
           {toolbarAction}
-          <button
-            type="button"
-            onClick={reload}
-            disabled={refreshing}
-            title={refreshError ? "Não foi possível sincronizar. Tente novamente." : "Sincronizar e recarregar a agenda"}
-            aria-label="Sincronizar e recarregar a agenda"
-            className={`grid size-8 shrink-0 place-items-center rounded-lg border bg-white transition disabled:opacity-50 ${
-              refreshError
-                ? "border-red-300 text-red-600"
-                : "border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
-            }`}
-          >
-            <RotateCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
-          </button>
         </div>
       </div>
 

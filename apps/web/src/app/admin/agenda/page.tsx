@@ -39,25 +39,27 @@ export default async function AgendaPage({
     services.customerService.list(tenant.id),
   ]);
 
-  const appointmentEvents: AgendaEvent[] = appointments.map((appointment) => {
-    const serviceNames = appointment.services.map((item) => item.serviceNameSnapshot);
-    const colors = EVENT_COLORS[appointment.status] ?? EVENT_COLORS.CONFIRMED!;
+  const appointmentEvents: AgendaEvent[] = appointments
+    .filter((appointment) => appointment.status !== "CANCELED")
+    .map((appointment) => {
+      const serviceNames = appointment.services.map((item) => item.serviceNameSnapshot);
+      const colors = EVENT_COLORS[appointment.status] ?? EVENT_COLORS.CONFIRMED!;
 
-    return {
-      id: appointment.id,
-      title: appointment.customer.name,
-      start: appointment.startAt.toISOString(),
-      end: appointment.endAt.toISOString(),
-      color: colors.color,
-      contrastColor: colors.contrastColor,
-      extendedProps: {
-        customer: appointment.customer.name,
-        professional: appointment.professional?.name ?? "Sem profissional",
-        services: serviceNames.join(", ") || "Serviço",
-        status: label(APPOINTMENT_STATUS, appointment.status),
-      },
-    };
-  });
+      return {
+        id: appointment.id,
+        title: appointment.customer.name,
+        start: appointment.startAt.toISOString(),
+        end: appointment.endAt.toISOString(),
+        color: colors.color,
+        contrastColor: colors.contrastColor,
+        extendedProps: {
+          customer: appointment.customer.name,
+          professional: appointment.professional?.name ?? "Sem profissional",
+          services: serviceNames.join(", ") || "Serviço",
+          status: label(APPOINTMENT_STATUS, appointment.status),
+        },
+      };
+    });
   const professionalNames = new Map(professionals.map((professional) => [professional.id, professional.name]));
   const blockEvents: AgendaEvent[] = blocks.map((block) => ({
     id: `block:${block.id}`,
