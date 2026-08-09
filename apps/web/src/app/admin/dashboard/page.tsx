@@ -10,7 +10,7 @@ import {
   Bot,
   CalendarCheck,
   ChevronRight,
-  Moon,
+  Clock3,
   MessagesSquare,
   TrendingDown,
   TrendingUp,
@@ -36,8 +36,8 @@ function Delta({
     return (
       <span className="text-xs text-[var(--color-muted)]">
         {trend.previous === 0 && trend.current > 0
-          ? "primeiros do período"
-          : `nada nos ${periodDays} dias anteriores`}
+          ? "Novo neste período"
+          : `Sem registros nos últimos ${periodDays} dias`}
       </span>
     );
   }
@@ -73,23 +73,22 @@ function Tile({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
+    <div className="flex h-full flex-col rounded-lg border border-black/5 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm text-[var(--color-muted)]">{label}</div>
-          <div className="mt-1 text-3xl font-extrabold tabular-nums">
+          <div className="text-xs font-semibold text-[var(--color-muted)]">{label}</div>
+          <div className="mt-0.5 text-2xl font-extrabold tabular-nums">
             {value}
           </div>
         </div>
         <span
-          className={`grid size-10 shrink-0 place-items-center rounded-xl ${tint}`}
+          className={`grid size-9 shrink-0 place-items-center rounded-lg ${tint}`}
           aria-hidden
         >
-          <Icon className="size-5" />
+          <Icon className="size-4" />
         </span>
       </div>
-      {/* Delta e detalhe ficam colados no rodapé pra os 4 cards baterem a linha. */}
-      <div className="mt-auto pt-3">
+      <div className="mt-auto pt-2.5">
         {children}
         {hint && (
           <div className="mt-1 text-xs text-[var(--color-muted)]">{hint}</div>
@@ -113,7 +112,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm">
+    <section className="h-full rounded-lg border border-black/5 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-bold">{title}</h2>
@@ -132,7 +131,7 @@ function Card({
           </Link>
         )}
       </div>
-      <div className="mt-4">{children}</div>
+      <div className="mt-3">{children}</div>
     </section>
   );
 }
@@ -148,8 +147,8 @@ function Stat({
   hint?: string;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-t border-black/5 py-2 first:border-t-0 first:pt-0">
-      <span className="text-sm text-[var(--color-muted)]">
+    <div className="flex items-baseline justify-between gap-3 border-t border-black/5 py-1.5 first:border-t-0 first:pt-0">
+      <span className="text-xs text-[var(--color-muted)]">
         {label}
         {hint && <span className="block text-[11px]">{hint}</span>}
       </span>
@@ -175,10 +174,10 @@ function Acao({
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-xl border border-black/5 p-3 hover:bg-[var(--color-surface)]"
+      className="flex items-center gap-2.5 border-b border-black/5 py-2.5 last:border-b-0 hover:bg-[var(--color-surface)]"
     >
       <span
-        className={`grid size-9 shrink-0 place-items-center rounded-lg ${tint}`}
+        className={`grid size-8 shrink-0 place-items-center rounded-lg ${tint}`}
         aria-hidden
       >
         <Icon className="size-4" />
@@ -245,17 +244,37 @@ export default async function VisaoGeralPage() {
   ].filter((a) => a.count > 0);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-4">
       <AutoRefresh seconds={60} />
 
-      <header>
-        <h1 className="text-2xl font-extrabold">Visão Geral</h1>
-        <p className="mt-1 text-sm text-[var(--color-muted)]">
-          últimos {o.periodDays} dias
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-2">
+        <h1 className="text-xl font-extrabold">Visão Geral</h1>
+        <p className="text-xs font-medium text-[var(--color-muted)]">Resumo dos últimos {o.periodDays} dias</p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Tile
+          label="Agendamentos no mês"
+          value={m.appointmentsNoMes}
+          hint="Marcados no mês atual"
+          icon={CalendarCheck}
+          tint="bg-blue-50 text-blue-600"
+        >
+          <span className="text-xs font-semibold text-[var(--color-muted)]">
+            {s.appointmentsHoje} para hoje
+          </span>
+        </Tile>
+        <Tile
+          label="Atendimentos hoje"
+          value={s.appointmentsHoje}
+          hint="Agenda operacional do dia"
+          icon={Clock3}
+          tint="bg-violet-50 text-violet-600"
+        >
+          <span className="text-xs font-semibold text-[var(--color-muted)]">
+            {s.proximosAtendimentos.length} nas próximas 48h
+          </span>
+        </Tile>
         <Tile
           label="Novos contatos"
           value={o.contacts.current}
@@ -272,14 +291,6 @@ export default async function VisaoGeralPage() {
           <Delta trend={o.contacts} periodDays={o.periodDays} />
         </Tile>
         <Tile
-          label="Agendamentos"
-          value={o.appointments.current}
-          icon={CalendarCheck}
-          tint="bg-blue-50 text-blue-600"
-        >
-          <Delta trend={o.appointments} periodDays={o.periodDays} />
-        </Tile>
-        <Tile
           label="Fechados pela IA"
           value={o.ai.appointments.current}
           hint={`${pct(o.ai.sharePct)} dos agendamentos · ${brl(o.ai.revenue)}`}
@@ -288,31 +299,9 @@ export default async function VisaoGeralPage() {
         >
           <Delta trend={o.ai.appointments} periodDays={o.periodDays} />
         </Tile>
-        {/*
-          Mede contra a JANELA DE MONTAGEM, não contra o expediente de
-          atendimento: com atendimento 24h nada nunca cai "fora" e o card
-          virava zero permanente. A régua passa a ser quando a equipe
-          trabalha (ver overviewService.foraDaJanelaDeTrabalho).
-        */}
-        <Tile
-          label="Fechados fora do horário"
-          value={fora.atual}
-          hint={`${brl(fora.receita)} que a IA fechou fora de ${fora.janela.inicio}–${fora.janela.fim}, quando ninguém estava trabalhando`}
-          icon={Moon}
-          tint="bg-violet-50 text-violet-600"
-        >
-          <Delta
-            trend={{
-              current: fora.atual,
-              previous: fora.anterior,
-              changePct: fora.changePct,
-            }}
-            periodDays={fora.periodDays}
-          />
-        </Tile>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Card
           title="Movimento"
           subtitle="Novos contatos e agendamentos por dia (últimos 14 dias)"
@@ -350,7 +339,7 @@ export default async function VisaoGeralPage() {
             </p>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-3">
             <Stat
               label="Conversas atendidas pela IA"
               value={String(o.ai.attended)}
@@ -370,7 +359,7 @@ export default async function VisaoGeralPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <Card
           title="Próximas 48 horas"
           subtitle="Atendimentos confirmados"
@@ -382,12 +371,12 @@ export default async function VisaoGeralPage() {
               Nada nas próximas 48h.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="max-h-64 divide-y divide-black/5 overflow-y-auto">
               {s.proximosAtendimentos.map((appointment) => (
                 <li key={appointment.id}>
                   <Link
                     href="/admin/agenda"
-                    className="flex items-center justify-between gap-3 rounded-xl border border-black/5 p-3 hover:bg-[var(--color-surface)]"
+                    className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--color-surface)]"
                   >
                     <span className="min-w-0">
                       <span className="block truncate font-semibold">
@@ -421,10 +410,10 @@ export default async function VisaoGeralPage() {
         >
           {acoes.length === 0 ? (
             <p className="text-sm text-[var(--color-muted)]">
-              Nada pendente. Tudo em dia. 🎉
+              Nada pendente. Tudo em dia.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div>
               {acoes.map(({ key, ...a }) => (
                 <Acao key={key} {...a} />
               ))}
@@ -433,28 +422,6 @@ export default async function VisaoGeralPage() {
         </Card>
       </div>
 
-      <Card
-        title="Este mês"
-        subtitle="Pagamentos recebidos, custos lançados e o que falta entrar"
-        href="/admin/financeiro"
-        linkLabel="Financeiro"
-      >
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { t: "Faturamento", v: brl(m.faturamentoBruto) },
-            { t: "Lucro estimado", v: brl(m.lucroEstimado) },
-            { t: "A receber", v: brl(m.aReceber) },
-            { t: "Ticket médio", v: brl(m.ticketMedio) },
-          ].map((c) => (
-            <div key={c.t}>
-              <div className="text-xs text-[var(--color-muted)]">{c.t}</div>
-              <div className="mt-0.5 text-lg font-extrabold tabular-nums">
-                {c.v}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }

@@ -27,14 +27,14 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
         ))}
       </div>
 
-      <div className="mt-4 flex gap-3">
-        <div className="flex h-40 w-5 shrink-0 flex-col justify-between text-right text-[10px] text-[var(--color-muted)]">
+      <div className="mt-3 flex gap-3">
+        <div className="flex h-32 w-5 shrink-0 flex-col justify-between text-right text-[10px] text-[var(--color-muted)]">
           <span>{max}</span>
           <span>0</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="relative h-40">
+          <div className="relative h-32">
             <div className="absolute inset-x-0 top-0 h-px bg-black/5" aria-hidden />
             <div className="absolute inset-x-0 bottom-0 h-px bg-black/10" aria-hidden />
             {vazio && (
@@ -83,7 +83,7 @@ export function MovimentoChart({ days }: { days: OverviewDay[] }) {
         </div>
       </div>
 
-      <details className="mt-4 text-sm">
+      <details className="mt-3 text-sm">
         <summary className="cursor-pointer text-xs font-semibold text-[var(--color-muted)] hover:text-[var(--color-ink)]">
           Ver números
         </summary>
