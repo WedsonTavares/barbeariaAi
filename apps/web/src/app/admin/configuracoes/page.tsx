@@ -26,6 +26,7 @@ const CALENDAR_ERROS: Record<string, string> = {
   invalid: "Profissional inválido.",
   missing_env: "Faltam variáveis de ambiente do Google no servidor.",
   failed: "O Google recusou a conexão. Tente de novo em instantes.",
+  sync_failed: "A agenda foi encontrada, mas a sincronização não iniciou. Tente novamente em instantes.",
 };
 
 const DIAS = [
@@ -308,7 +309,7 @@ export default async function ConfiguracoesPage({
         <div className="space-y-4 p-4 sm:p-5">
           {sp.calendar === "connected" && (
             <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">
-              Google Calendar conectado.
+              Google Calendar conectado e sincronizado.
             </p>
           )}
           {sp.calendar && sp.calendar !== "connected" && (

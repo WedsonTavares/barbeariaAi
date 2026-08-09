@@ -339,19 +339,31 @@ export const calendarService = {
       return { ok: false as const, reason: "sem_acesso" as const };
     }
 
-    const connection = await withTenant(tenantId, (tx) =>
-      tx.calendarConnection.create({
+    const professionalId = data.professionalId ?? null;
+    const connection = await withTenant(tenantId, async (tx) => {
+      const existing = await tx.calendarConnection.findFirst({
+        where: {
+          provider: SERVICE_ACCOUNT_PROVIDER,
+          professionalId,
+          calendarId,
+          status: "ACTIVE",
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (existing) return existing;
+
+      return tx.calendarConnection.create({
         data: {
           tenantId,
           provider: SERVICE_ACCOUNT_PROVIDER,
-          professionalId: data.professionalId ?? null,
+          professionalId,
           googleAccountEmail: calendarId,
           calendarId,
           scope: "https://www.googleapis.com/auth/calendar",
           status: "ACTIVE",
         },
-      })
-    );
+      });
+    });
 
     return { ok: true as const, connection, accessToken: token };
   },
@@ -427,37 +439,118 @@ export const calendarService = {
       })
     ),
 
-  recordSubscription: (
-    tenantId: string,
-    data: { connectionId: string; channelId: string; resourceId?: string | null; expiresAt: Date; syncToken?: string | null }
-  ) =>
-    withTenant(tenantId, (tx) =>
-      tx.calendarSubscription.create({
-        data: {
-          tenantId,
-          connectionId: data.connectionId,
-          channelId: data.channelId,
-          resourceId: data.resourceId ?? null,
-          expiresAt: data.expiresAt,
-          syncToken: data.syncToken ?? null,
-        },
-      })
-    ),
-
   startGoogleSubscription: async (
     tenantId: string,
     data: { connectionId: string; accessToken: string; calendarId?: string | null; syncToken?: string | null }
   ) => {
     const watch = await startGoogleWatch(data.accessToken, data.calendarId || "primary", tenantId);
     if (!watch) return { subscribed: false as const, reason: "google_watch_failed" as const };
-    const subscription = await calendarService.recordSubscription(tenantId, {
-      connectionId: data.connectionId,
-      channelId: watch.channelId,
-      resourceId: watch.resourceId,
-      expiresAt: watch.expiresAt,
-      syncToken: data.syncToken,
+
+    const previous = await withTenant(tenantId, (tx) =>
+      tx.calendarSubscription.findMany({
+        where: { connectionId: data.connectionId, active: true },
+        select: { channelId: true, resourceId: true },
+      })
+    );
+    const subscription = await withTenant(tenantId, async (tx) => {
+      await tx.calendarSubscription.updateMany({
+        where: { connectionId: data.connectionId, active: true },
+        data: { active: false },
+      });
+      return tx.calendarSubscription.create({
+        data: {
+          tenantId,
+          connectionId: data.connectionId,
+          channelId: watch.channelId,
+          resourceId: watch.resourceId,
+          expiresAt: watch.expiresAt,
+          syncToken: data.syncToken,
+        },
+      });
     });
+
+    await Promise.allSettled(
+      previous.map((item) => stopGoogleWatch(data.accessToken, item.channelId, item.resourceId))
+    );
     return { subscribed: true as const, subscription };
+  },
+
+  /**
+   * Garante um canal ativo e executa uma sincronização imediatamente.
+   * O push do Google é só um aviso; a leitura real continua acontecendo pela
+   * API autenticada e sempre dentro do tenant da conexão.
+   */
+  syncGoogleConnection: async (tenantId: string, connectionId: string) => {
+    const connection = await withTenant(tenantId, (tx) =>
+      tx.calendarConnection.findFirst({
+        where: {
+          id: connectionId,
+          provider: { in: [...GOOGLE_PROVIDERS] },
+          status: "ACTIVE",
+        },
+        select: {
+          ...CONNECTION_SELECT,
+          subscriptions: {
+            where: { active: true },
+            orderBy: { expiresAt: "desc" },
+            take: 1,
+          },
+        },
+      })
+    );
+    if (!connection) return { synced: false as const, reason: "connection_not_found" as const };
+
+    let subscription = connection.subscriptions[0];
+    if (!subscription || subscription.expiresAt.getTime() <= Date.now() + 60_000) {
+      const token = await accessTokenFor(tenantId, connection);
+      if (!token) return { synced: false as const, reason: "no_token" as const };
+
+      const started = await calendarService.startGoogleSubscription(tenantId, {
+        connectionId: connection.id,
+        accessToken: token,
+        calendarId: connection.calendarId,
+        syncToken: subscription?.syncToken ?? null,
+      });
+      if (!started.subscribed) return { synced: false as const, reason: started.reason };
+      subscription = started.subscription;
+    }
+
+    let result = await calendarService.processGooglePush(
+      tenantId,
+      subscription.channelId,
+      subscription.resourceId
+    );
+    if (!result.synced && result.reason === "sync_token_expired") {
+      result = await calendarService.processGooglePush(
+        tenantId,
+        subscription.channelId,
+        subscription.resourceId
+      );
+    }
+    return result;
+  },
+
+  syncGoogleConnections: async (tenantId: string) => {
+    const connections = await withTenant(tenantId, (tx) =>
+      tx.calendarConnection.findMany({
+        where: { provider: { in: [...GOOGLE_PROVIDERS] }, status: "ACTIVE" },
+        select: { id: true },
+      })
+    );
+
+    let synced = 0;
+    let failed = 0;
+    for (const connection of connections) {
+      try {
+        const result = await calendarService.syncGoogleConnection(tenantId, connection.id);
+        if (result.synced) synced++;
+        else failed++;
+      } catch (error) {
+        console.error("[google-calendar] sincronização manual falhou", error);
+        failed++;
+      }
+    }
+    return { synced, failed };
   },
 
   renewExpiringGoogleSubscriptions: async (withinMs = 12 * 60 * 60 * 1000) => {

@@ -115,16 +115,13 @@ export async function connectServiceAccountCalendarAction(formData: FormData) {
   });
   if (!resultado.ok) redirect(`${BASE}?calendar=${resultado.reason}#google-calendar`);
 
-  // Push ao vivo é opcional: sem GOOGLE_CALENDAR_WEBHOOK_URL a conexão continua
-  // válida, só não recebe as mudanças feitas direto no Google.
-  await services.calendarService.startGoogleSubscription(tenant.id, {
-    connectionId: resultado.connection.id,
-    accessToken: resultado.accessToken,
-    calendarId,
-    syncToken: null,
-  });
+  const sincronizacao = await services.calendarService
+    .syncGoogleConnection(tenant.id, resultado.connection.id)
+    .catch(() => ({ synced: false as const }));
+  if (!sincronizacao.synced) redirect(`${BASE}?calendar=sync_failed#google-calendar`);
 
   revalidatePath(BASE);
+  revalidatePath("/admin/agenda");
   redirect(`${BASE}?calendar=connected#google-calendar`);
 }
 

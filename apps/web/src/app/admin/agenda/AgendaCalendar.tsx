@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import FullCalendar, { type CalendarRef, type DatesSetInfo, type EventClickInfo, type EventInput } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import listPlugin from "@fullcalendar/react/list";
@@ -10,8 +11,9 @@ import classicThemePlugin from "@fullcalendar/react/themes/classic";
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Scissors, UserRound, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, RotateCw, Scissors, UserRound, X } from "lucide-react";
 
+import { reloadAgendaAction } from "./actions";
 import styles from "./AgendaCalendar.module.css";
 
 type CalendarView = "dayGridMonth" | "timeGridWeek" | "timeGridDay";
@@ -69,11 +71,14 @@ export function AgendaCalendar({
 }) {
   const calendarRef = useRef<CalendarRef>(null);
   const detailsRef = useRef<HTMLDialogElement>(null);
+  const router = useRouter();
   const [view, setView] = useState<CalendarView>("dayGridMonth");
   const [title, setTitle] = useState("");
   const [height, setHeight] = useState(680);
   const [compact, setCompact] = useState(false);
   const [selected, setSelected] = useState<SelectedEvent | null>(null);
+  const [refreshError, setRefreshError] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
 
   useEffect(() => {
     const resize = () => {
@@ -116,6 +121,20 @@ export function AgendaCalendar({
 
   function move(direction: "prev" | "next" | "today") {
     calendarRef.current?.getApi()[direction]();
+  }
+
+  function reload() {
+    setRefreshError(false);
+    startRefresh(async () => {
+      try {
+        const result = await reloadAgendaAction();
+        setRefreshError(!result.ok);
+      } catch {
+        setRefreshError(true);
+      } finally {
+        router.refresh();
+      }
+    });
   }
 
   function updateRange(info: DatesSetInfo) {
@@ -179,22 +198,38 @@ export function AgendaCalendar({
           <h2 className="min-w-0 truncate text-sm font-extrabold sm:text-base">{title || "Agenda"}</h2>
         </div>
 
-        <div className="grid grid-cols-3 rounded-lg border border-black/10 bg-[var(--color-surface)] p-1" aria-label="Modo de visualização">
-          {VIEWS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => changeView(option.value)}
-              aria-pressed={view === option.value}
-              className={`min-h-8 px-3 text-xs font-bold transition sm:text-sm ${
-                view === option.value
-                  ? "rounded-md bg-white text-[var(--color-ink)] shadow-sm"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={reload}
+            disabled={refreshing}
+            title={refreshError ? "Não foi possível sincronizar. Tente novamente." : "Sincronizar e recarregar a agenda"}
+            aria-label="Sincronizar e recarregar a agenda"
+            className={`grid size-9 shrink-0 place-items-center rounded-lg border bg-white transition disabled:opacity-50 ${
+              refreshError
+                ? "border-red-300 text-red-600"
+                : "border-black/10 text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-ink)]"
+            }`}
+          >
+            <RotateCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
+          </button>
+          <div className="grid min-w-0 flex-1 grid-cols-3 rounded-lg border border-black/10 bg-[var(--color-surface)] p-1" aria-label="Modo de visualização">
+            {VIEWS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => changeView(option.value)}
+                aria-pressed={view === option.value}
+                className={`min-h-8 px-3 text-xs font-bold transition sm:text-sm ${
+                  view === option.value
+                    ? "rounded-md bg-white text-[var(--color-ink)] shadow-sm"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
