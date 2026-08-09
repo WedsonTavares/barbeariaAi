@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, LayoutDashboard, Scissors, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Braces, Images, Menu, X, UserRoundCog } from "lucide-react";
+import { LayoutDashboard, Scissors, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Braces, Images, Menu, X, UserRoundCog } from "lucide-react";
 
 const GROUPS = [
   {
@@ -11,7 +11,6 @@ const GROUPS = [
       { href: "/admin/dashboard", label: "Visão Geral", icon: LayoutDashboard },
       { href: "/admin/funil", label: "Funil", icon: KanbanSquare },
       { href: "/admin/conversas", label: "Conversas", icon: MessagesSquare },
-      { href: "/admin/leads", label: "Leads", icon: Sparkles },
       { href: "/admin/agenda", label: "Agenda", icon: CalendarRange },
     ],
   },

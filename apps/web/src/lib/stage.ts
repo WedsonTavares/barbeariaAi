@@ -3,6 +3,7 @@ export const STAGE_UI: Record<string, { label: string; chip: string; dot: string
   NOVO_LEAD: { label: "Novo lead", chip: "bg-sky-100 text-sky-800", dot: "#0284C7" }, // legado
   IA_ATENDENDO: { label: "IA atendendo", chip: "bg-sky-100 text-sky-800", dot: "#0284C7" },
   SUPORTE_HUMANO: { label: "Suporte humano", chip: "bg-rose-100 text-rose-800", dot: "#E11D48" },
+  INTERESSADO: { label: "Interessado", chip: "bg-orange-100 text-orange-800", dot: "#EA580C" },
   AGENDADO: { label: "Agendado", chip: "bg-emerald-100 text-emerald-800", dot: "#059669" },
   POS_ATENDIMENTO: { label: "Pós-atendimento", chip: "bg-violet-100 text-violet-800", dot: "#7C3AED" },
 };

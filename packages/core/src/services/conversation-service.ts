@@ -10,6 +10,7 @@ export const BOT_SILENCING_TAGS = ["desligar-ia", "atendimento-humano"];
 export const CONVERSATION_STAGES = [
   "IA_ATENDENDO",
   "SUPORTE_HUMANO",
+  "INTERESSADO",
   "AGENDADO",
   "POS_ATENDIMENTO",
 ] as const satisfies readonly ConversationStage[];
@@ -23,6 +24,7 @@ export const STAGE_TAG: Record<ConversationStage, string | null> = {
   NOVO_LEAD: "novo-lead", // legado: mantido só pra limpar a tag antiga ao mover o card
   IA_ATENDENDO: null, // fluxo normal: sem tag (a IA responde)
   SUPORTE_HUMANO: "atendimento-humano",
+  INTERESSADO: "interessado",
   AGENDADO: "agendado",
   POS_ATENDIMENTO: "pos-atendimento",
 };
@@ -619,6 +621,30 @@ export const conversationService = {
         data: { stage, tags, botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)) },
       });
       return { ...updated, previousStage: c.stage };
+    }),
+
+  /**
+   * A IA registrou o interesse de quem não fechou: o card vai pra coluna
+   * "Interessado" do funil. Por TELEFONE, porque quem chama é a ferramenta do
+   * agente — ela não conhece o id da conversa.
+   *
+   * Nunca atropela suporte humano, agendamento ativo nem pós-atendimento:
+   * puxar o card de volta nesses casos o esconderia de quem já estava cuidando
+   * dele. Registrar interesse é um passo à frente de "IA atendendo", nunca um
+   * passo atrás de qualquer outra coisa.
+   */
+  markInterested: (tenantId: string, phone: string) =>
+    withTenant(tenantId, async (tx) => {
+      const c = await tx.conversation.findUnique({ where: { tenantId_phone: { tenantId, phone } } });
+      if (!c) return null;
+      await lockConversation(tx, c.id);
+      if (["SUPORTE_HUMANO", "AGENDADO", "POS_ATENDIMENTO"].includes(c.stage)) return c;
+      const kept = c.tags.filter((tag) => !ALL_STAGE_TAGS.includes(tag));
+      const tags = [...new Set([...kept, STAGE_TAG.INTERESSADO!])];
+      return tx.conversation.update({
+        where: { id: c.id },
+        data: { stage: "INTERESSADO", tags, botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)) },
+      });
     }),
 
   /** Histórico recente pro contexto do bot (não zera não-lidas — quem lê é o atendente). */

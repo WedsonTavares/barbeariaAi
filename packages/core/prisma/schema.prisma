@@ -662,6 +662,7 @@ enum ConversationStage {
   NOVO_LEAD      // legado: não é mais usado (toda conversa nova já nasce em IA_ATENDENDO)
   IA_ATENDENDO   // a Dinha está conduzindo — primeira coluna do funil
   SUPORTE_HUMANO // equipe assumiu (bot pausado)
+  INTERESSADO    // quis, não fechou — a IA registrou o interesse pra equipe recuperar
   AGENDADO       // atendimento marcado
   POS_ATENDIMENTO      // acompanhamento pós-evento
 }

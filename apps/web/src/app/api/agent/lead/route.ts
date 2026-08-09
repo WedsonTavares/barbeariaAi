@@ -5,6 +5,10 @@ import { services, schemas, ZodError } from "@barbearia-ai/core";
 /**
  * Ferramenta pro agente de IA (n8n): registra o interesse do cliente como Lead pra
  * equipe confirmar — NUNCA cria agendamento, NUNCA processa pagamento.
+ *
+ * O card também vai pra coluna "Interessado" do funil. Antes o Lead só existia
+ * numa aba própria que ninguém abria; no funil ele aparece onde a equipe já
+ * trabalha todos os dias.
  * Tenant vem do host (subdomínio); o segredo conferido é o DESTE tenant.
  */
 export async function POST(req: Request) {
@@ -33,5 +37,6 @@ export async function POST(req: Request) {
     input.phone,
     `Lead registrado (${input.name})${partes.length ? ": " + partes.join(", ") : ""}.`
   );
+  await services.conversationService.markInterested(tenant.id, input.phone);
   return NextResponse.json({ ok: true, leadId: lead.id, message: "Lead registrado — a equipe vai confirmar em breve." });
 }

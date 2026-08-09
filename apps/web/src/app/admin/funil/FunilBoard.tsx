@@ -23,6 +23,7 @@ export type Board = Record<string, Card[]>;
 const COLUMNS = [
   { key: "IA_ATENDENDO",   label: "IA Atendendo",     head: "bg-sky-100 text-sky-900",         hint: "Dinha conduzindo" },
   { key: "SUPORTE_HUMANO", label: "Precisa de Suporte", head: "bg-rose-100 text-rose-900",     hint: "IA pausada" },
+  { key: "INTERESSADO",    label: "Interessado",      head: "bg-orange-100 text-orange-900",   hint: "Quis, não fechou" },
   { key: "AGENDADO",       label: "Agendado",         head: "bg-emerald-100 text-emerald-900", hint: "Atendimento marcado" },
   { key: "POS_ATENDIMENTO",      label: "Pós-atendimento",        head: "bg-violet-100 text-violet-900",   hint: "Acompanhamento" },
 ] as const;

@@ -20,7 +20,7 @@ export const TAG_CATALOG: { tag: string; label: string; hint?: string }[] = [
 ];
 
 /** Tags governadas só pelo funil (sem equivalente manual) — read-only nas telas. */
-export const STAGE_ONLY_TAGS = new Set(["novo-lead", "agendado"]);
+export const STAGE_ONLY_TAGS = new Set(["novo-lead", "agendado", "interessado"]);
 
 /** Tags que silenciam a IA (espelha BOT_SILENCING_TAGS do core). */
 export const SILENCING_TAGS = new Set(["desligar-ia", "atendimento-humano"]);
