@@ -491,3 +491,71 @@ export const tenantNameInput = z.object({
   name: z.string().trim().min(2, "Informe o nome da empresa").max(120),
 });
 export type TenantNameInput = z.infer<typeof tenantNameInput>;
+
+/* ────────────────────────── Super Admin (plataforma) ────────────────────────
+ * Entradas que SÓ o super admin usa. Lista fechada de campos, como a do
+ * `tenantSettingsInput`: assim uma tela nova não consegue, por descuido,
+ * escrever em `slug`, `clerkOrgId` ou `active` passando um objeto inteiro.
+ */
+
+/** Um link avulso da loja (workflow do n8n, doc, painel…). */
+export const tenantLinkInput = z.object({
+  label: z.string().trim().min(1, "Dê um nome ao link").max(60),
+  url: z.string().trim().url("Link inválido").max(500),
+});
+export type TenantLinkInput = z.infer<typeof tenantLinkInput>;
+
+/** Assinatura: registro manual, sem cobrança automática. */
+export const tenantBillingInput = z.object({
+  plan: z.string().trim().max(60).nullish(),
+  // `coerce` porque vem de <input type="number"> como string.
+  monthlyFee: z.coerce.number().min(0).max(1_000_000).nullish(),
+  // Data pura (yyyy-mm-dd) do <input type="date">. String vazia vira null.
+  paidUntil: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida")
+    .nullish()
+    .or(z.literal("").transform(() => null)),
+  adminNotes: z.string().trim().max(5_000).nullish(),
+});
+export type TenantBillingInput = z.infer<typeof tenantBillingInput>;
+
+/** Lista completa de links da loja — substitui a anterior. */
+export const tenantLinksInput = z.object({
+  links: z.array(tenantLinkInput).max(30, "Máximo de 30 links"),
+});
+export type TenantLinksInput = z.infer<typeof tenantLinksInput>;
+
+/**
+ * Loja nova, criada pelo Super Admin.
+ *
+ * O `slug` vira SUBDOMÍNIO e, por padrão, também o nome da INSTÂNCIA do
+ * WhatsApp — por isso o formato é restrito aqui e as colisões são checadas no
+ * service (`createFromSuperAdmin`), que é quem consegue olhar as outras lojas.
+ */
+export const tenantCreateInput = z.object({
+  name: z.string().trim().min(2, "Informe o nome da loja").max(120),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(3, "O slug precisa de pelo menos 3 caracteres")
+    .max(40, "O slug pode ter no máximo 40 caracteres")
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use só letras minúsculas, números e hífen (ex.: barbearia-centro)"),
+  clerkOrgId: z
+    .string()
+    .trim()
+    .regex(/^org_[A-Za-z0-9]+$/, 'O Organization ID do Clerk começa com "org_"'),
+});
+export type TenantCreateInput = z.infer<typeof tenantCreateInput>;
+
+/**
+ * Loja nova com a organização do Clerk criada pelo sistema. É o caminho normal:
+ * o super admin não precisa abrir o painel do Clerk nem copiar id nenhum.
+ * O `clerkOrgId` não entra aqui porque é o Clerk que devolve.
+ */
+export const tenantCreateWithOwnerInput = tenantCreateInput.omit({ clerkOrgId: true }).extend({
+  ownerEmail: z.string().trim().toLowerCase().email("E-mail do dono inválido"),
+});
+export type TenantCreateWithOwnerInput = z.infer<typeof tenantCreateWithOwnerInput>;

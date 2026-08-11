@@ -4,15 +4,22 @@ import { revalidatePath } from "next/cache";
 
 import { requireRole, services, schemas, ZodError } from "@barbearia-ai/core";
 import { requireTenant } from "@/lib/tenant";
+import { tenantHost } from "@/lib/tenant-resolution";
 import { getQrCode, getConnectionState, logoutInstance, ensureInstance } from "@/lib/evolution";
 
 const BASE = "/admin/configuracoes";
 
-/** Instância do Evolution DESTE tenant (nunca uma global — isolamento entre empresas). */
-async function tenantInstance() {
+/** Tenant + a instância DELE (nunca uma global — isolamento entre empresas). */
+async function tenantContext() {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN"]);
-  return services.tenantService.evolutionInstance(tenant.id, tenant.slug);
+  const instance = await services.tenantService.evolutionInstance(tenant.id, tenant.slug);
+  return { tenant, instance };
+}
+
+/** Instância do Evolution DESTE tenant. */
+async function tenantInstance() {
+  return (await tenantContext()).instance;
 }
 
 /**
@@ -58,13 +65,19 @@ export type ResultadoQr =
  * de QR — o caminho para quem está no próprio celular.
  */
 export async function fetchQrAction(phone?: string): Promise<ResultadoQr> {
-  const instance = await tenantInstance();
+  const { tenant, instance } = await tenantContext();
 
   const permitido = podePedirQr(instance);
   if (!permitido.ok) return permitido;
 
-  // tenant novo: cria a instância dele antes de pedir o QR
-  await ensureInstance(instance);
+  // Tenant novo: cria a instância dele antes de pedir o QR — JÁ COM O WEBHOOK.
+  // Sem o webhook a instância nasce muda: conecta, a tela diz "conectado" e
+  // nenhuma mensagem chega. O host e o segredo são os DESTE tenant, e é isso
+  // que impede a mensagem de uma loja de cair no inbox de outra.
+  await ensureInstance(instance, {
+    url: `https://${tenantHost(tenant.slug)}/api/whatsapp/inbound`,
+    headers: { "x-barbearia-ai-secret": await services.tenantService.ensureAgentSecret(tenant.id) },
+  });
   const r = await getQrCode(instance, phone);
   return { ok: true, ...r };
 }
