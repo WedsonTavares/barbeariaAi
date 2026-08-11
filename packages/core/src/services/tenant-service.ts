@@ -54,6 +54,32 @@ async function donoDaInstancia(instance: string) {
   return null;
 }
 
+/**
+ * As três colisões de SLUG que quebrariam outra loja. Lança `TenantConflictError`
+ * com a mensagem que a tela mostra; se passar, o slug está livre.
+ *
+ * Está fora do objeto para poder ser chamada ANTES de criar a organização no
+ * Clerk. Sem isso, um slug inválido só seria descoberto depois de a org já
+ * existir lá, deixando lixo do outro lado.
+ */
+async function assertSlugDisponivel(slug: string) {
+  if (RESERVED_SLUGS.includes(slug)) {
+    throw new TenantConflictError(`O slug "${slug}" é reservado do sistema. Escolha outro.`);
+  }
+  if (await prisma.tenant.findUnique({ where: { slug } })) {
+    throw new TenantConflictError(`Já existe uma loja com o slug "${slug}".`);
+  }
+  // Mesma resolução que o roteador do n8n usa, para a checagem valer exatamente
+  // o que vai acontecer em produção.
+  const outraLoja = await donoDaInstancia(slug);
+  if (outraLoja) {
+    throw new TenantConflictError(
+      `O slug "${slug}" já é a instância de WhatsApp da loja "${outraLoja.name}". ` +
+        "Com ele, a loja nova leria as mensagens daquela. Escolha outro slug."
+    );
+  }
+}
+
 /** Operações de plataforma (Tenant não tem RLS) + leitura de settings por tenant. */
 export const tenantService = {
   get: (tenantId: string) => prisma.tenant.findUnique({ where: { id: tenantId } }),
@@ -158,6 +184,16 @@ export const tenantService = {
   /** Um tenant pelo id, para a tela de detalhe do super admin. */
   byId: (tenantId: string) => prisma.tenant.findUnique({ where: { id: tenantId } }),
 
+  /** Um tenant pela organização do Clerk. Usado para detectar corrida com o webhook. */
+  byClerkOrgId: (clerkOrgId: string) => prisma.tenant.findUnique({ where: { clerkOrgId } }),
+
+  /**
+   * Checa o slug SEM criar nada. Existe para validar antes de criar a
+   * organização no Clerk — assim um slug ruim é recusado enquanto nada foi
+   * criado fora do nosso banco.
+   */
+  assertSlugAvailable: (slug: string) => assertSlugDisponivel(slug.trim().toLowerCase()),
+
   /**
    * Cria uma loja pelo Super Admin. NUNCA faz upsert — falha alto em qualquer
    * colisão. Isto é deliberado e é a diferença para `createFromClerkOrg`, que é
@@ -180,24 +216,10 @@ export const tenantService = {
     const clerkOrgId = input.clerkOrgId.trim();
     const name = input.name.trim();
 
-    if (RESERVED_SLUGS.includes(slug)) {
-      throw new TenantConflictError(`O slug "${slug}" é reservado do sistema. Escolha outro.`);
-    }
-    if (await prisma.tenant.findUnique({ where: { slug } })) {
-      throw new TenantConflictError(`Já existe uma loja com o slug "${slug}".`);
-    }
+    await assertSlugDisponivel(slug);
     if (await prisma.tenant.findUnique({ where: { clerkOrgId } })) {
       throw new TenantConflictError(
         "Esse Organization ID do Clerk já pertence a outra loja. Confira se copiou o da organização certa."
-      );
-    }
-    // Mesma resolução que o roteador do n8n usa, para a checagem valer
-    // exatamente o que vai acontecer em produção.
-    const outraLoja = await donoDaInstancia(slug);
-    if (outraLoja) {
-      throw new TenantConflictError(
-        `O slug "${slug}" já é a instância de WhatsApp da loja "${outraLoja.name}". ` +
-          "Com ele, a loja nova leria as mensagens daquela. Escolha outro slug."
       );
     }
 

@@ -549,3 +549,13 @@ export const tenantCreateInput = z.object({
     .regex(/^org_[A-Za-z0-9]+$/, 'O Organization ID do Clerk começa com "org_"'),
 });
 export type TenantCreateInput = z.infer<typeof tenantCreateInput>;
+
+/**
+ * Loja nova com a organização do Clerk criada pelo sistema. É o caminho normal:
+ * o super admin não precisa abrir o painel do Clerk nem copiar id nenhum.
+ * O `clerkOrgId` não entra aqui porque é o Clerk que devolve.
+ */
+export const tenantCreateWithOwnerInput = tenantCreateInput.omit({ clerkOrgId: true }).extend({
+  ownerEmail: z.string().trim().toLowerCase().email("E-mail do dono inválido"),
+});
+export type TenantCreateWithOwnerInput = z.infer<typeof tenantCreateWithOwnerInput>;

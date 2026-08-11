@@ -12,11 +12,21 @@ import { resolveTenant } from "./tenant";
  * podia chamar `https://outraloja.dominio/api/agent/*` e operar a agenda de
  * qualquer empresa. Com um segredo por empresa, o de uma não abre a da outra.
  *
- * O global continua existindo para dois casos legítimos:
- *  - `/api/agent/tenant`, que descobre o dono de uma instância ANTES de se
- *    saber qual é o tenant (por isso não pode depender de segredo de tenant);
- *  - tenants criados antes desta coluna, que ainda não têm segredo próprio —
- *    o primeiro acesso ao painel gera o deles.
+ * O global sobrevive em UM lugar só: `/api/agent/tenant`
+ * (`authenticatePlatform`), que descobre o dono de uma instância ANTES de se
+ * saber qual é o tenant — por isso não tem como depender de segredo de tenant.
+ * Aquela rota só LÊ identidade; não move agenda nem lê dado de cliente.
+ *
+ * Até 11/08/2026 havia aqui um fallback para o global, como ponte para tenants
+ * anteriores à coluna `agentApiSecret`. Ele foi removido: enquanto existia,
+ * qualquer loja sem segredo próprio aceitava o global, e o global vive nas
+ * credenciais do n8n. Hoje todo caminho de criação de tenant já gera o segredo
+ * (`createFromClerkOrg`, `createFromSuperAdmin`) e o painel gera no primeiro QR
+ * (`fetchQrAction`), então a ponte não tem mais para quem servir.
+ *
+ * Consequência deliberada: tenant sem segredo próprio recebe 401 em vez de
+ * cair no global. Fail-closed — melhor uma loja muda, com log explícito, do
+ * que uma loja operável pelo segredo de todo mundo.
  */
 
 export type AgentAuth =
@@ -58,16 +68,20 @@ export async function authenticateAgent(req: Request): Promise<AgentAuth> {
   }
 
   const doTenant = await services.tenantService.agentSecret(tenant.id);
-  if (doTenant) {
-    return samesecret(fornecido, doTenant)
-      ? { ok: true, tenant }
-      : { ok: false, response: unauthorized() };
+  if (!doTenant) {
+    // Não deveria acontecer: todo caminho de criação gera o segredo. Se
+    // acontecer, o log precisa dizer QUAL loja, senão vira um 401 sem
+    // explicação. A correção é chamar `ensureAgentSecret` para ela.
+    console.error(
+      `[agent-auth] tenant "${tenant.slug}" está sem agentApiSecret — recusando. ` +
+        "Rode ensureAgentSecret para esta loja."
+    );
+    return { ok: false, response: unauthorized() };
   }
 
-  // Sem segredo próprio ainda: aceita o global, para não derrubar quem já opera.
-  const global = process.env.AGENT_API_SECRET;
-  if (global && samesecret(fornecido, global)) return { ok: true, tenant };
-  return { ok: false, response: unauthorized() };
+  return samesecret(fornecido, doTenant)
+    ? { ok: true, tenant }
+    : { ok: false, response: unauthorized() };
 }
 
 /** Só para `/api/agent/tenant`, que roda antes de se saber qual é o tenant. */

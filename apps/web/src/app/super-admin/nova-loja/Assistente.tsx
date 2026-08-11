@@ -1,9 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ExternalLink, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Check, AlertTriangle, ShieldCheck } from "lucide-react";
 
-import { criarLojaAction } from "../actions";
+import { criarLojaCompletaAction } from "../actions";
 
 /**
  * Assistente de implantação de loja.
@@ -16,6 +16,7 @@ import { criarLojaAction } from "../actions";
 export function Assistente({ rootDomain }: { rootDomain: string }) {
   const [slug, setSlug] = useState("");
   const [criada, setCriada] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
 
@@ -24,54 +25,34 @@ export function Assistente({ rootDomain }: { rootDomain: string }) {
 
   return (
     <div className="mt-6 space-y-4">
-      <Etapa n={1} titulo="Criar a organização no Clerk" feita={!!criada}>
-        <p>
-          Cada loja é uma <strong>Organization</strong> no Clerk — é ela que separa os usuários de uma loja dos da
-          outra.
-        </p>
-        <ol className="ml-4 list-decimal space-y-1">
-          <li>
-            Abra o painel do Clerk →{" "}
-            <a
-              href="https://dashboard.clerk.com/last-active?path=organizations"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-[var(--color-primary)]"
-            >
-              Organizations <ExternalLink className="size-3" />
-            </a>
-          </li>
-          <li>
-            Clique em <strong>Create organization</strong> e use o nome real da loja (é o que o dono vê).
-          </li>
-          <li>
-            Convide o dono como <strong>admin</strong> pelo e-mail dele. Sem isso ele não consegue entrar no painel.
-          </li>
-          <li>
-            Abra a organização criada e copie o <strong>Organization ID</strong> — começa com <code>org_</code>.
-          </li>
-        </ol>
-        <Aviso>
-          Copie o ID da organização <strong>nova</strong>. Colar o de uma loja existente é recusado na etapa 2, mas
-          confira mesmo assim — é o erro mais comum aqui.
-        </Aviso>
-      </Etapa>
-
-      <Etapa n={2} titulo="Cadastrar a loja no sistema" feita={!!criada} destaque={!criada}>
+      <Etapa n={1} titulo="Cadastrar a loja" feita={!!criada} destaque={!criada}>
         {criada ? (
-          <p className="flex items-center gap-2 font-semibold text-emerald-700">
-            <Check className="size-4" /> Loja criada. Slug: <code>{criada}</code>
-          </p>
+          <>
+            <p className="flex items-center gap-2 font-semibold text-emerald-700">
+              <Check className="size-4" /> Loja criada. Slug: <code>{criada}</code>
+            </p>
+            {aviso && (
+              <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                {aviso}
+              </p>
+            )}
+          </>
         ) : (
           <>
-            <p>Único passo que escreve no banco. O restante é conferência.</p>
+            <p>
+              Preencha e o sistema faz tudo: cria a <strong>organização no Clerk</strong>, convida o dono por e-mail,
+              cria a loja e gera o segredo dela. Você não precisa abrir o painel do Clerk.
+            </p>
             <form
               action={(fd) =>
                 iniciar(async () => {
                   setErro(null);
-                  const r = await criarLojaAction(fd);
-                  if (r.ok) setCriada(r.slug);
-                  else setErro(r.erro);
+                  const r = await criarLojaCompletaAction(fd);
+                  if (r.ok) {
+                    setCriada(r.slug);
+                    setAviso(r.aviso ?? null);
+                  } else setErro(r.erro);
                 })
               }
               className="space-y-3"
@@ -82,7 +63,7 @@ export function Assistente({ rootDomain }: { rootDomain: string }) {
 
               <Campo
                 rotulo="Slug"
-                dica={`Vira o endereço da loja E, por padrão, o nome da instância do WhatsApp. Só minúsculas, números e hífen.`}
+                dica="Vira o endereço da loja E, por padrão, o nome da instância do WhatsApp. Só minúsculas, números e hífen."
               >
                 <input
                   name="slug"
@@ -97,8 +78,8 @@ export function Assistente({ rootDomain }: { rootDomain: string }) {
                 </span>
               </Campo>
 
-              <Campo rotulo="Organization ID do Clerk" dica="O que você copiou na etapa 1.">
-                <input name="clerkOrgId" required className={INPUT} placeholder="org_..." />
+              <Campo rotulo="E-mail do dono" dica="Recebe o convite para entrar como administrador da loja.">
+                <input name="ownerEmail" type="email" required className={INPUT} placeholder="dono@email.com" />
               </Campo>
 
               {erro && (
@@ -119,22 +100,34 @@ export function Assistente({ rootDomain }: { rootDomain: string }) {
             </form>
 
             <div className="rounded-xl border border-black/10 bg-[var(--color-surface)] p-3 text-xs">
-              <p className="font-bold">O que é checado antes de criar:</p>
+              <p className="font-bold">O que é checado antes de criar qualquer coisa:</p>
               <ul className="ml-4 mt-1 list-disc space-y-0.5 text-[var(--color-muted)]">
                 <li>slug já usado por outra loja → recusa</li>
                 <li>slug reservado do sistema (evo, n8n, api, admin…) → recusa</li>
-                <li>Organization ID já pertence a outra loja → recusa</li>
                 <li>
                   <strong>slug igual à instância de WhatsApp de outra loja</strong> → recusa. Sem essa trava a loja nova
                   leria as mensagens da outra, e nenhuma constraint do banco pega isso.
                 </li>
               </ul>
               <p className="mt-2 text-[var(--color-muted)]">
-                Em qualquer colisão nada é criado. Nenhuma loja existente é alterada em hipótese alguma.
+                A validação roda <strong>antes</strong> de criar a organização no Clerk. Se algo der errado depois, a
+                organização é apagada de lá — não fica lixo dos dois lados. Nenhuma loja existente é alterada em
+                hipótese alguma.
               </p>
             </div>
           </>
         )}
+      </Etapa>
+
+      <Etapa n={2} titulo="O dono aceita o convite" feita={!!criada}>
+        <p>
+          Ele recebe um e-mail do Clerk e cria a senha dele no primeiro acesso. Depois entra em{" "}
+          <code>{host}/admin</code>.
+        </p>
+        <p className="text-xs text-[var(--color-muted)]">
+          A senha é gerenciada pelo Clerk — ele troca sozinho pelo menu da conta, no canto superior direito do painel.
+          Você nunca vê nem define a senha de ninguém.
+        </p>
       </Etapa>
 
       <Etapa n={3} titulo="Conectar o WhatsApp da loja" destaque={!!criada}>
