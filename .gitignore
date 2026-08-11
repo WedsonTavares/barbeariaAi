@@ -11,6 +11,8 @@ dist
 
 # Credenciais e documentação local — NUNCA versionar.
 credenciais.md
+vps.txt
+NOVA-LOJA.txt
 
 # Docs internas / workflows n8n podem conter tokens em texto puro.
 docs/

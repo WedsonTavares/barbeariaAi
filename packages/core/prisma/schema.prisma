@@ -191,6 +191,35 @@ model Tenant {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
+  // ─── Plataforma / Super Admin ────────────────────────────────────────────
+  // Estes campos são da PLATAFORMA sobre a loja, não dados operacionais DELA.
+  // Ficam aqui de propósito: `Tenant` é o único ponto de bypass de RLS
+  // sancionado (CLAUDE.md, regra 10). Criar tabela nova para isto obrigaria
+  // ou uma segunda exceção de RLS, ou ler tenant a tenant dentro de
+  // `withTenant` só para montar uma lista — os dois piores que uma coluna aqui.
+  // O dono da loja NUNCA vê nem edita nada disto; só /super-admin lê e escreve.
+
+  /// Nome do plano, texto livre ("Mensal", "Anual", "Cortesia").
+  plan             String?
+  /// Valor combinado da mensalidade. Só registro — não há cobrança automática.
+  monthlyFee       Decimal?  @db.Decimal(10, 2)
+  /// Assinatura paga ATÉ esta data. É o campo que responde "venceu?":
+  /// nulo = nunca cobrado; menor que hoje = vencido. Ao receber, empurra a data.
+  paidUntil        DateTime?
+  /// Quando o último pagamento foi registrado (auditoria do "recebi").
+  lastPaymentAt    DateTime?
+  /// Links úteis da loja: workflow do n8n, docs, painel. Formato:
+  /// [{ "label": "Workflow", "url": "https://..." }]. Json porque a lista é
+  /// livre e só o super admin lê — não vale uma tabela para isto.
+  links            Json?
+  /// Anotações do super admin sobre a loja. Nunca exposto ao dono.
+  adminNotes       String?
+  /// Etapas da implantação já concluídas, como lista de ids: ["workflow","negocio"].
+  /// Só as que NÃO dá para deduzir sozinho — "WhatsApp conectado" vem do Evolution
+  /// e "loja criada" vem da própria linha existir; marcar isso na mão seria
+  /// um estado a mais para ficar mentindo.
+  setupSteps       Json?
+
   settings      TenantSettings?
   customers     Customer[]
   leads         Lead[]

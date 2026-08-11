@@ -116,11 +116,23 @@ async function instanciaExiste(instance: string): Promise<boolean | null> {
   }
 }
 
+/** Webhook que a instância deve chamar quando chegar mensagem. */
+export type InstanceWebhook = { url: string; headers?: Record<string, string> };
+
 /**
  * Cria a instância no Evolution se ainda não existir (tenant novo conectando pela
  * primeira vez). Idempotente: se já existe, o Evolution devolve erro e seguimos.
+ *
+ * O `webhook` NÃO é opcional na prática: sem ele a instância nasce muda. Ela
+ * conecta, a tela mostra "conectado" e nenhuma mensagem chega em
+ * `/api/whatsapp/inbound` — falha silenciosa, sem erro em lugar nenhum. Quem
+ * chama é responsável por montar a URL com o host DESTE tenant e o segredo
+ * DELE; é o que garante que a mensagem de uma loja não caia no inbox de outra.
+ *
+ * O segredo vai em HEADER, não na query string: a URL do webhook aparece em log
+ * de acesso, `Referer` e histórico de proxy.
  */
-export async function ensureInstance(instance: string, webhookUrl?: string): Promise<void> {
+export async function ensureInstance(instance: string, webhook?: InstanceWebhook): Promise<void> {
   if (!evolutionConfigured() || !instance || bloqueado(instance)) return;
   try {
     const existe = await instanciaExiste(instance);
@@ -133,7 +145,16 @@ export async function ensureInstance(instance: string, webhookUrl?: string): Pro
         integration: "WHATSAPP-BAILEYS",
         qrcode: true,
         groupsIgnore: true,
-        ...(webhookUrl ? { webhook: { url: webhookUrl, enabled: true, events: ["MESSAGES_UPSERT"] } } : {}),
+        ...(webhook
+          ? {
+              webhook: {
+                url: webhook.url,
+                enabled: true,
+                events: ["MESSAGES_UPSERT"],
+                ...(webhook.headers ? { headers: webhook.headers } : {}),
+              },
+            }
+          : {}),
       }),
     });
   } catch {
@@ -168,6 +189,38 @@ export async function getQrCode(
     };
   } catch {
     return { state: "unknown" };
+  }
+}
+
+/**
+ * Estado de TODAS as instâncias em UMA chamada, indexado por nome da instância.
+ *
+ * Existe para o painel do super admin: com uma chamada por loja, a tela ficaria
+ * mais lenta a cada cliente novo e ainda castigaria o Evolution. `fetchInstances`
+ * devolve todas de uma vez.
+ *
+ * Devolve Map vazio se o Evolution estiver fora — quem chama mostra "sem
+ * informação", que é diferente de "desconectado". Confundir os dois faria a
+ * tela gritar que todas as lojas caíram quando o problema é o Evolution.
+ */
+export async function fetchAllConnectionStates(): Promise<Map<string, WhatsappState>> {
+  const estados = new Map<string, WhatsappState>();
+  if (!evolutionConfigured()) return estados;
+  try {
+    const res = await fetch(`${API_URL}/instance/fetchInstances`, { headers: headers(), cache: "no-store" });
+    if (!res.ok) return estados;
+    const lista = await res.json();
+    if (!Array.isArray(lista)) return estados;
+    for (const item of lista) {
+      // v2 devolve { name, connectionStatus }. Os nomes mudaram entre versões
+      // do Evolution, então aceitamos os dois formatos em vez de quebrar num upgrade.
+      const nome = item?.name ?? item?.instance?.instanceName;
+      const estado = item?.connectionStatus ?? item?.instance?.state;
+      if (typeof nome === "string" && nome) estados.set(nome, (estado as WhatsappState) ?? "unknown");
+    }
+    return estados;
+  } catch {
+    return estados;
   }
 }
 
