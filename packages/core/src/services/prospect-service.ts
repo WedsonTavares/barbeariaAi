@@ -6,6 +6,7 @@ import type {
 } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
+import { brPhoneMatchKey } from "../phone";
 
 /**
  * Carteira de prospecção da plataforma.
@@ -189,6 +190,73 @@ export const prospectService = {
         decisorTelefone: decisor.telefone.trim() || null,
       },
     }),
+
+  /**
+   * Um lead da carteira respondeu no WhatsApp — espelha isso na prospecção.
+   *
+   * Chamado pelo inbox do tenant da PLATAFORMA (o seu), nunca pelo de um
+   * cliente: quem decide isso é o call site, e sem ele nada aqui roda.
+   *
+   * Três recusas deliberadas, todas devolvendo `null` sem escrever nada:
+   *  - telefone que não é brasileiro reconhecível;
+   *  - nenhum lead com aquele número;
+   *  - MAIS DE UM lead com o mesmo número — aí não dá para saber qual respondeu,
+   *    e registrar no errado é pior do que não registrar.
+   *
+   * A janela de silêncio existe porque o histórico do lead é resumo comercial,
+   * não log de conversa: dez mensagens seguidas viram um registro só. Mas quando
+   * a resposta MUDA a etapa, grava sempre — mover sem deixar rastro quebraria a
+   * conversão por etapa.
+   */
+  registrarRespostaDeWhatsapp: async (
+    telefone: string,
+    texto: string,
+    janelaHoras = 6
+  ): Promise<{ leadId: string; nome: string; stage: ProspectStage } | null> => {
+    const chave = brPhoneMatchKey(telefone);
+    if (!chave) return null;
+
+    // A chave não existe como coluna, então o casamento é em memória. São
+    // centenas de linhas de duas colunas — buscar por LIKE no banco daria o
+    // mesmo trabalho e erraria nos formatos com máscara.
+    const candidatos = (
+      await prisma.prospectLead.findMany({
+        where: { telefone: { not: null } },
+        select: { id: true, nome: true, telefone: true, stage: true },
+      })
+    ).filter((l) => brPhoneMatchKey(l.telefone!) === chave);
+
+    if (candidatos.length !== 1) return null;
+    const lead = candidatos[0]!;
+    if (ENCERRADOS.includes(lead.stage)) return null;
+
+    // Responder só faz o lead avançar até RESPONDEU. Quem já está em Demo ou
+    // Proposta não regride por ter mandado uma mensagem.
+    const avanca = lead.stage === "NOVO" || lead.stage === "CONTATADO";
+
+    if (!avanca) {
+      const ultima = await prisma.prospectInteraction.findFirst({
+        where: { leadId: lead.id },
+        orderBy: { criadoEm: "desc" },
+        select: { criadoEm: true },
+      });
+      const recente =
+        ultima && Date.now() - ultima.criadoEm.getTime() < janelaHoras * 3_600_000;
+      if (recente) return null;
+    }
+
+    const trecho = texto.trim().replace(/\s+/g, " ").slice(0, 140);
+    await prospectService.registrarInteracao({
+      leadId: lead.id,
+      canal: "WHATSAPP",
+      // Resultado fica em branco de propósito: sabemos que respondeu, não com
+      // quem falamos. Preencher um valor aqui falsearia o relatório de canal.
+      resumo: `Respondeu no WhatsApp: ${trecho}`,
+      paraStage: avanca ? "RESPONDEU" : null,
+    });
+
+    return { leadId: lead.id, nome: lead.nome, stage: avanca ? "RESPONDEU" : lead.stage };
+  },
 
   /**
    * Movimento rápido no kanban, sem abrir o painel.

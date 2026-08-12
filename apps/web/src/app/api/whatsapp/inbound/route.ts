@@ -30,6 +30,27 @@ export async function POST(req: Request) {
   const n8nUrl = process.env.N8N_AGENT_WEBHOOK_URL;
   const tenantHost = req.headers.get("host");
 
+  /**
+   * Espelha a resposta na carteira de prospecção do super admin.
+   *
+   * Isolado em três camadas, de propósito: só roda se `PROSPECT_INBOX_TENANT_SLUG`
+   * estiver definida (sem ela, o comportamento é exatamente o de antes), só para
+   * ESSE tenant, e dentro do próprio try/catch — um erro aqui não pode impedir a
+   * mensagem de chegar no inbox nem o bot de responder. Nenhum tenant de cliente
+   * é alcançado por este bloco.
+   */
+  const tenantDaPlataforma = process.env.PROSPECT_INBOX_TENANT_SLUG?.trim();
+  if (tenantDaPlataforma && tenant.slug === tenantDaPlataforma) {
+    after(async () => {
+      try {
+        const casou = await services.prospectService.registrarRespostaDeWhatsapp(phone, text);
+        if (casou) console.info(`[carteira] ${casou.nome} respondeu → ${casou.stage}`);
+      } catch (e) {
+        console.error("[carteira] espelho da resposta falhou", e);
+      }
+    });
+  }
+
   // Só aciona o cérebro (n8n ou bot nativo) se o bot pode responder (respeita tags/handoff).
   after(async () => {
     try {
