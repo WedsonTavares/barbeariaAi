@@ -16,6 +16,17 @@ ALTER TABLE "Tenant" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_app_access ON "Tenant";
 CREATE POLICY tenant_app_access ON "Tenant" FOR ALL TO app_runtime USING (true) WITH CHECK (true);
 
+-- ProspectLead: carteira de prospecção da PLATAFORMA (empresas que queremos
+-- vender). Não tem tenantId e por isso não entra no laço de isolamento abaixo —
+-- não há tenant a que pertencer. Mesmo tratamento do `Tenant`: RLS ligada com
+-- policy permissiva restrita ao app_runtime, para o Supabase não expor a tabela
+-- via PostgREST para anon/authenticated.
+-- ⚠️ Só o super admin lê e escreve aqui; a checagem é no app (requireSuperAdmin).
+GRANT SELECT, INSERT, UPDATE, DELETE ON "ProspectLead" TO app_runtime;
+ALTER TABLE "ProspectLead" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS prospect_app_access ON "ProspectLead";
+CREATE POLICY prospect_app_access ON "ProspectLead" FOR ALL TO app_runtime USING (true) WITH CHECK (true);
+
 -- Metadados do Prisma. Não é tabela de tenant, mas fica em `public` e por isso
 -- é exposta ao PostgREST — o linter do Supabase acusa como crítico e está certo.
 -- Ninguém precisa lê-la pela API: as migrations rodam pelo DIRECT_URL como dono,

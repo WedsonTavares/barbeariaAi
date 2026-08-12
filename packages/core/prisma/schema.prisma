@@ -182,6 +182,53 @@ enum NotificationType {
   INTEGRATION_ERROR
 }
 
+/// Estágio do lead na SUA prospecção comercial (não confundir com o funil do
+/// cliente, que é `ConversationStage` e vive dentro de cada loja).
+enum ProspectStage {
+  NOVO
+  CONTATADO
+  RESPONDEU
+  DEMO
+  PROPOSTA
+  GANHO
+  PERDIDO
+}
+
+/// Empresa prospectada — barbearia ou salão que VOCÊ quer vender.
+///
+/// É tabela de PLATAFORMA, como `Tenant`: não tem `tenantId` e não entra na RLS
+/// por tenant. O motivo é simples: estes leads são seus, não de uma loja. Se
+/// morassem no funil do `/admin` precisariam pertencer a algum tenant, e não
+/// pertencem a nenhum — seriam clientes de um cliente, o que não existe aqui.
+model ProspectLead {
+  id         String   @id @default(uuid())
+  /// Id do Google Places. É a chave de deduplicação: reimportar a mesma região
+  /// atualiza os dados públicos sem apagar o que você anotou.
+  placeId    String   @unique
+  nome       String
+  nicho      String
+  telefone   String?
+  site       String?
+  maps       String?
+  endereco   String?
+  nota       Decimal? @db.Decimal(2, 1)
+  avaliacoes Int      @default(0)
+  /// Score do buscador na hora da importação. Guardado para você comparar depois
+  /// o que ele previu com o que de fato converteu.
+  score      Int      @default(0)
+  motivos    String[] @default([])
+
+  stage       ProspectStage @default(NOVO)
+  contatadoEm DateTime?
+  observacao  String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([stage])
+  @@index([nicho])
+}
+
 model Tenant {
   id           String   @id @default(uuid())
   clerkOrgId   String   @unique
