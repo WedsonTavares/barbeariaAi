@@ -1,4 +1,9 @@
-import type { ProspectCanal, ProspectMotivoPerda, ProspectStage } from "@prisma/client";
+import type {
+  ProspectCanal,
+  ProspectMotivoPerda,
+  ProspectResultado,
+  ProspectStage,
+} from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 
@@ -110,6 +115,7 @@ export const prospectService = {
   registrarInteracao: (input: {
     leadId: string;
     canal: ProspectCanal;
+    resultado?: ProspectResultado | null;
     resumo: string;
     paraStage?: ProspectStage | null;
     motivoPerda?: ProspectMotivoPerda | null;
@@ -129,6 +135,7 @@ export const prospectService = {
         data: {
           leadId: input.leadId,
           canal: input.canal,
+          resultado: input.resultado ?? null,
           resumo: input.resumo.trim(),
           paraStage: input.paraStage ?? null,
         },
@@ -163,6 +170,24 @@ export const prospectService = {
     prisma.prospectLead.update({
       where: { id },
       data: { observacao: observacao.trim() || null },
+    }),
+
+  /**
+   * Quem decide na empresa. Campo à parte da observação de propósito: é
+   * consultado toda vez antes de ligar, e caçar isso no meio de um texto corrido
+   * é exatamente o atrito que faz a pessoa ligar de novo para a recepção.
+   */
+  setDecisor: (
+    id: string,
+    decisor: { nome: string; cargo: string; telefone: string }
+  ) =>
+    prisma.prospectLead.update({
+      where: { id },
+      data: {
+        decisorNome: decisor.nome.trim() || null,
+        decisorCargo: decisor.cargo.trim() || null,
+        decisorTelefone: decisor.telefone.trim() || null,
+      },
     }),
 
   /**

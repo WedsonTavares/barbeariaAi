@@ -220,6 +220,25 @@ enum ProspectMotivoPerda {
   OUTRO
 }
 
+/// O que SAIU do contato — coisa diferente do canal e do estágio.
+///
+/// Os três são independentes e confundi-los estraga o relatório: dá para mandar
+/// WhatsApp (canal) e ninguém responder (resultado), e o lead segue em CONTATADO
+/// (estágio). Só com o resultado separado é possível perguntar "de 40 ligações,
+/// quantas chegaram no responsável?" — texto livre não agrupa.
+enum ProspectResultado {
+  NAO_RESPONDEU
+  FALEI_FUNCIONARIO
+  FALEI_RESPONSAVEL
+  PEDIU_INFO
+  DEMONSTROU_INTERESSE
+  SEM_INTERESSE
+  RETORNAR_DEPOIS
+  DEMO_REALIZADA
+  PROPOSTA_ENVIADA
+  OUTRO
+}
+
 /// Cada toque no lead: ligação, mensagem, reunião. É o histórico que responde
 /// "o que eu já falei com essa pessoa" antes de ligar de novo.
 model ProspectInteraction {
@@ -227,6 +246,9 @@ model ProspectInteraction {
   leadId    String
   lead      ProspectLead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
   canal     ProspectCanal
+  /// Opcional porque as interações gravadas antes deste campo existir não têm
+  /// como ser adivinhadas — e chutar um valor falsearia o relatório.
+  resultado ProspectResultado?
   /// O que aconteceu, em uma linha. É o que aparece resumido na lista.
   resumo    String
   /// Estágio para o qual o lead foi movido NESTE toque, se houve mudança.
@@ -264,6 +286,13 @@ model ProspectLead {
   stage       ProspectStage @default(NOVO)
   contatadoEm DateTime?
   observacao  String?
+
+  /// Quem de fato decide. O telefone que vem do Google costuma ser o da
+  /// recepção; em venda B2B, saber o nome de quem assina — e o número direto —
+  /// é o que encurta o ciclo. Descoberto na conversa, não na importação.
+  decisorNome     String?
+  decisorCargo    String?
+  decisorTelefone String?
 
   /// A próxima coisa a fazer e QUANDO. Lead ativo sem isso é lead que some do
   /// processo — a tela avisa quando está vencida ou em branco.

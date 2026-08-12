@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Upload, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock, HelpCircle,
 } from "lucide-react";
@@ -8,10 +8,13 @@ import type { ProspectStage } from "@barbearia-ai/core";
 import { importarCsvAction, moverStageAction } from "./actions";
 import { PainelLead } from "./PainelLead";
 import {
-  COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
-  diasAte, estaAtrasado, estaLargado, formatarData, presencaDe,
-  type LeadView,
+  COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_ESTAGIO, ROTULO_MOTIVO, ROTULO_ORDEM,
+  ROTULO_RESULTADO, diasAte, estaAtrasado, estaLargado, formatarData, ordenar,
+  presencaDe, type LeadView, type Ordem,
 } from "./tipos";
+
+/** Quantos leads por página na lista. */
+const POR_PAGINA = 50;
 
 type Filtro =
   | { tipo: "nicho" | "presenca" | "stage" | "motivo"; valor: string; rotulo: string }
@@ -22,6 +25,8 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
   const [filtro, setFiltro] = useState<Filtro>(null);
   const [busca, setBusca] = useState("");
   const [modo, setModo] = useState<"lista" | "quadro">("lista");
+  const [ordem, setOrdem] = useState<Ordem>("urgencia");
+  const [pagina, setPagina] = useState(0);
   const [aberto, setAberto] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
   const [pendente, iniciar] = useTransition();
@@ -29,7 +34,7 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return leads.filter((l) => {
+    const filtrados = leads.filter((l) => {
       if (termo && !l.nome.toLowerCase().includes(termo)) return false;
       if (!filtro) return true;
       switch (filtro.tipo) {
@@ -42,7 +47,20 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
         case "largados": return estaLargado(l);
       }
     });
-  }, [leads, filtro, busca]);
+    return ordenar(filtrados, ordem);
+  }, [leads, filtro, busca, ordem]);
+
+  // Filtrar ou reordenar com a página 3 aberta mostraria um pedaço do meio de um
+  // conjunto que o usuário acabou de trocar. Qualquer mudança volta para o começo.
+  useEffect(() => setPagina(0), [filtro, busca, ordem]);
+
+  const paginas = Math.max(1, Math.ceil(visiveis.length / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, paginas - 1);
+  const daPagina = visiveis.slice(paginaAtual * POR_PAGINA, (paginaAtual + 1) * POR_PAGINA);
+  const irPara = (p: number) => {
+    setPagina(p);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const total = leads.length;
   const naoContatados = leads.filter((l) => l.stage === "NOVO").length;
@@ -262,6 +280,18 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                 placeholder="Buscar..."
                 className="w-36 rounded-xl border border-black/10 px-3 py-1.5 text-sm outline-none focus:border-[var(--color-primary)]"
               />
+              {modo === "lista" && (
+                <select
+                  value={ordem}
+                  onChange={(e) => setOrdem(e.target.value as Ordem)}
+                  aria-label="Ordenar por"
+                  className="rounded-xl border border-black/10 px-2 py-1.5 text-sm font-semibold outline-none focus:border-[var(--color-primary)]"
+                >
+                  {(Object.keys(ROTULO_ORDEM) as Ordem[]).map((o) => (
+                    <option key={o} value={o}>{ROTULO_ORDEM[o]}</option>
+                  ))}
+                </select>
+              )}
               <div className="flex overflow-hidden rounded-xl border border-black/10">
                 {([["lista", LayoutList], ["quadro", Columns3]] as const).map(([m, Icon]) => (
                   <button
@@ -280,8 +310,41 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
             </div>
 
             {modo === "lista" ? (
-              <Lista leads={visiveis} aoAbrir={setAberto} />
+              <>
+                <Lista leads={daPagina} aoAbrir={setAberto} />
+                {paginas > 1 && (
+                  <div className="flex items-center justify-between gap-3 border-t border-black/5 p-3">
+                    <p className="text-xs text-[var(--color-muted)]">
+                      {paginaAtual * POR_PAGINA + 1}–
+                      {Math.min((paginaAtual + 1) * POR_PAGINA, visiveis.length)} de {visiveis.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => irPara(paginaAtual - 1)}
+                        disabled={paginaAtual === 0}
+                        className={BOTAO_PAGINA}
+                      >
+                        Anterior
+                      </button>
+                      <span className="text-xs font-bold tabular-nums">
+                        {paginaAtual + 1} / {paginas}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => irPara(paginaAtual + 1)}
+                        disabled={paginaAtual >= paginas - 1}
+                        className={BOTAO_PAGINA}
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
+              /* O quadro não pagina: as colunas já dividem o conjunto, e cortar
+                 no meio esconderia leads de uma etapa sem dizer que existem. */
               <Quadro leads={visiveis} aoAbrir={setAberto} aoMover={mover} pendente={pendente} />
             )}
           </section>
@@ -340,7 +403,14 @@ function Lista({ leads, aoAbrir }: { leads: LeadView[]; aoAbrir: (id: string) =>
                 <td className="max-w-[16rem] p-3">
                   {l.ultimaInteracao ? (
                     <>
-                      <p className="truncate text-xs">{l.ultimaInteracao.resumo}</p>
+                      {l.ultimaInteracao.resultado && (
+                        <p className="text-xs font-semibold">
+                          {ROTULO_RESULTADO[l.ultimaInteracao.resultado]}
+                        </p>
+                      )}
+                      <p className="truncate text-xs text-[var(--color-muted)]">
+                        {l.ultimaInteracao.resumo}
+                      </p>
                       <p className="text-[11px] text-[var(--color-muted)]">
                         {formatarData(l.ultimaInteracao.criadoEm)}
                       </p>
@@ -479,6 +549,9 @@ function Quadro({
 }
 
 /* ───────────────────────────── auxiliares ─────────────────────────────── */
+
+const BOTAO_PAGINA =
+  "rounded-xl border border-black/10 px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface)] disabled:opacity-40";
 
 function agrupar<T>(itens: T[], chave: (i: T) => string): [string, number][] {
   const mapa = new Map<string, number>();

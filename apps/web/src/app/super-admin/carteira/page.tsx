@@ -43,8 +43,16 @@ export default async function CarteiraPage() {
       proximaAcao: l.proximaAcao,
       proximaAcaoEm: l.proximaAcaoEm?.toISOString() ?? null,
       motivoPerda: l.motivoPerda,
+      decisorNome: l.decisorNome,
+      decisorCargo: l.decisorCargo,
+      decisorTelefone: l.decisorTelefone,
       ultimaInteracao: ultima
-        ? { resumo: ultima.resumo, canal: ultima.canal, criadoEm: ultima.criadoEm.toISOString() }
+        ? {
+            resumo: ultima.resumo,
+            canal: ultima.canal,
+            resultado: ultima.resultado,
+            criadoEm: ultima.criadoEm.toISOString(),
+          }
         : null,
     };
   });
