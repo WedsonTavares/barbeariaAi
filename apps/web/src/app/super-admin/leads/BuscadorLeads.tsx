@@ -1,6 +1,13 @@
 "use client";
 import { useState } from "react";
-import { Search, Download, Phone, ExternalLink, AlertTriangle, Info } from "lucide-react";
+import {
+  Search,
+  Download,
+  Phone,
+  ExternalLink,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
 
 import {
   planejarAction,
@@ -34,7 +41,8 @@ export function BuscadorLeads() {
   const [encontrados, setEncontrados] = useState(0);
   const [nicho, setNicho] = useState<string>("todos");
 
-  const ocupado = fase === "varrendo" || fase === "detalhando" || fase === "planejando";
+  const ocupado =
+    fase === "varrendo" || fase === "detalhando" || fase === "planejando";
 
   async function planejar() {
     setErro(null);
@@ -99,19 +107,44 @@ export function BuscadorLeads() {
 
   function baixarCsv() {
     const cab = [
-      "score", "nicho", "nome", "telefone", "telefone_internacional", "avaliacoes",
-      "nota", "site", "endereco", "horario", "por_que", "maps",
+      "place_id",
+      "score",
+      "nicho",
+      "nome",
+      "telefone",
+      "telefone_internacional",
+      "avaliacoes",
+      "nota",
+      "site",
+      "endereco",
+      "horario",
+      "por_que",
+      "maps",
     ];
     const escapar = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const linhas = visiveis.map((l) =>
       [
-        l.score, l.nicho, l.nome, l.telefone ?? "", l.telefoneInternacional ?? "", l.avaliacoes,
-        l.nota ?? "", l.site ?? "", l.endereco, (l.horario ?? []).join(" | "),
-        l.motivos.join(" · "), l.maps ?? "",
-      ].map(escapar).join(",")
+        l.id,
+        l.score,
+        l.nicho,
+        l.nome,
+        l.telefone ?? "",
+        l.telefoneInternacional ?? "",
+        l.avaliacoes,
+        l.nota ?? "",
+        l.site ?? "",
+        l.endereco,
+        (l.horario ?? []).join(" | "),
+        l.motivos.join(" · "),
+        l.maps ?? "",
+      ]
+        .map(escapar)
+        .join(",")
     );
     // BOM para o Excel abrir acentuação certo.
-    const blob = new Blob(["﻿" + [cab.join(","), ...linhas].join("\n")], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["﻿" + [cab.join(","), ...linhas].join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `leads-${nicho === "todos" ? "todos" : nicho}-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -124,7 +157,8 @@ export function BuscadorLeads() {
     acc[l.nicho] = (acc[l.nicho] ?? 0) + 1;
     return acc;
   }, {});
-  const visiveis = nicho === "todos" ? leads : leads.filter((l) => l.nicho === nicho);
+  const visiveis =
+    nicho === "todos" ? leads : leads.filter((l) => l.nicho === nicho);
   const quentes = visiveis.filter((l) => l.score >= 70).length;
 
   return (
@@ -157,29 +191,75 @@ export function BuscadorLeads() {
 
         <div className="mt-3 grid gap-3 sm:grid-cols-4">
           <Campo rotulo="Latitude">
-            <input type="number" step="0.0001" value={lat} disabled={ocupado}
-              onChange={(e) => { setLat(Number(e.target.value)); setPlano(null); }} className={INPUT} />
+            <input
+              type="number"
+              step="0.0001"
+              value={lat}
+              disabled={ocupado}
+              onChange={(e) => {
+                setLat(Number(e.target.value));
+                setPlano(null);
+              }}
+              className={INPUT}
+            />
           </Campo>
           <Campo rotulo="Longitude">
-            <input type="number" step="0.0001" value={lng} disabled={ocupado}
-              onChange={(e) => { setLng(Number(e.target.value)); setPlano(null); }} className={INPUT} />
+            <input
+              type="number"
+              step="0.0001"
+              value={lng}
+              disabled={ocupado}
+              onChange={(e) => {
+                setLng(Number(e.target.value));
+                setPlano(null);
+              }}
+              className={INPUT}
+            />
           </Campo>
           <Campo rotulo="Raio (m)" dica="8000 cobre uma cidade média">
-            <input type="number" step="1000" min={1000} max={30000} value={raio} disabled={ocupado}
-              onChange={(e) => { setRaio(Number(e.target.value)); setPlano(null); }} className={INPUT} />
+            <input
+              type="number"
+              step="1000"
+              min={1000}
+              max={30000}
+              value={raio}
+              disabled={ocupado}
+              onChange={(e) => {
+                setRaio(Number(e.target.value));
+                setPlano(null);
+              }}
+              className={INPUT}
+            />
           </Campo>
           <Campo rotulo="Mín. avaliações" dica="descarta cadastro morto">
-            <input type="number" min={0} max={500} value={minAvaliacoes} disabled={ocupado}
-              onChange={(e) => setMinAvaliacoes(Number(e.target.value))} className={INPUT} />
+            <input
+              type="number"
+              min={0}
+              max={500}
+              value={minAvaliacoes}
+              disabled={ocupado}
+              onChange={(e) => setMinAvaliacoes(Number(e.target.value))}
+              className={INPUT}
+            />
           </Campo>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button type="button" onClick={planejar} disabled={ocupado} className={BOTAO_SEC}>
+          <button
+            type="button"
+            onClick={planejar}
+            disabled={ocupado}
+            className={BOTAO_SEC}
+          >
             {fase === "planejando" ? "Calculando..." : "Estimar busca"}
           </button>
           {plano && (
-            <button type="button" onClick={buscar} disabled={ocupado} className={BOTAO}>
+            <button
+              type="button"
+              onClick={buscar}
+              disabled={ocupado}
+              className={BOTAO}
+            >
               <Search className="size-4" /> Buscar leads
             </button>
           )}
@@ -189,9 +269,12 @@ export function BuscadorLeads() {
           <p className="mt-3 flex items-start gap-2 rounded-xl border border-black/10 bg-[var(--color-surface)] p-3 text-xs text-[var(--color-muted)]">
             <Info className="mt-0.5 size-4 shrink-0" />
             <span>
-              A varredura usa <strong>{plano.celulas} círculos</strong> de {plano.raioCelulaM} m. São{" "}
-              <strong>{plano.celulas} chamadas baratas</strong>; as caras (telefone e site) só acontecem para quem
-              passar no filtro de avaliações. Cada busca consome cota da Places API — estime antes de repetir.
+              A varredura usa <strong>{plano.celulas} círculos</strong> de{" "}
+              {plano.raioCelulaM} m. São{" "}
+              <strong>{plano.celulas} chamadas baratas</strong>; as caras
+              (telefone e site) só acontecem para quem passar no filtro de
+              avaliações. Cada busca consome cota da Places API — estime antes
+              de repetir.
             </span>
           </p>
         )}
@@ -208,7 +291,11 @@ export function BuscadorLeads() {
       {(fase === "varrendo" || fase === "detalhando") && (
         <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm font-bold">
-            <span>{fase === "varrendo" ? "Varrendo a região..." : "Buscando telefones..."}</span>
+            <span>
+              {fase === "varrendo"
+                ? "Varrendo a região..."
+                : "Buscando telefones..."}
+            </span>
             <span className="tabular-nums text-[var(--color-muted)]">
               {progresso.feito}/{progresso.total}
             </span>
@@ -216,11 +303,15 @@ export function BuscadorLeads() {
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-surface)]">
             <div
               className="h-full rounded-full bg-[var(--color-primary)] transition-all"
-              style={{ width: `${progresso.total ? (progresso.feito / progresso.total) * 100 : 0}%` }}
+              style={{
+                width: `${progresso.total ? (progresso.feito / progresso.total) * 100 : 0}%`,
+              }}
             />
           </div>
           {fase === "varrendo" && (
-            <p className="mt-2 text-xs text-[var(--color-muted)]">{encontrados} estabelecimentos até agora</p>
+            <p className="mt-2 text-xs text-[var(--color-muted)]">
+              {encontrados} estabelecimentos até agora
+            </p>
           )}
         </section>
       )}
@@ -232,9 +323,13 @@ export function BuscadorLeads() {
             <div className="min-w-0 flex-1">
               <h2 className="font-bold">
                 {visiveis.length} {visiveis.length === 1 ? "lead" : "leads"} ·{" "}
-                <span className="text-emerald-700">{quentes} com score 70+</span>
+                <span className="text-emerald-700">
+                  {quentes} com score 70+
+                </span>
               </h2>
-              <p className="text-xs text-[var(--color-muted)]">Ordenados por prioridade. Comece de cima.</p>
+              <p className="text-xs text-[var(--color-muted)]">
+                Ordenados por prioridade. Comece de cima.
+              </p>
             </div>
             <button type="button" onClick={baixarCsv} className={BOTAO_SEC}>
               <Download className="size-4" /> CSV
@@ -246,7 +341,10 @@ export function BuscadorLeads() {
           <div className="flex flex-wrap gap-2 border-b border-black/5 px-4 py-3">
             {[
               ["todos", leads.length] as const,
-              ...(Object.entries(porNicho).sort((a, b) => b[1] - a[1]) as [string, number][]),
+              ...(Object.entries(porNicho).sort((a, b) => b[1] - a[1]) as [
+                string,
+                number,
+              ][]),
             ].map(([n, qtd]) => (
               <button
                 key={n}
@@ -258,7 +356,8 @@ export function BuscadorLeads() {
                     : "border-black/10 hover:bg-[var(--color-surface)]"
                 }`}
               >
-                {n === "todos" ? "Todos" : n} <span className="tabular-nums opacity-70">{qtd}</span>
+                {n === "todos" ? "Todos" : n}{" "}
+                <span className="tabular-nums opacity-70">{qtd}</span>
               </button>
             ))}
           </div>
@@ -292,12 +391,20 @@ export function BuscadorLeads() {
                     <td className="p-3">
                       <p className="font-semibold">{l.nome}</p>
                       <p className="text-xs text-[var(--color-muted)]">
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold">{l.nicho}</span>{" "}
-                        {l.avaliacoes} avaliações{l.nota ? ` · nota ${l.nota}` : ""}
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold">
+                          {l.nicho}
+                        </span>{" "}
+                        {l.avaliacoes} avaliações
+                        {l.nota ? ` · nota ${l.nota}` : ""}
                       </p>
-                      <p className="mt-0.5 text-xs text-[var(--color-muted)]">{l.endereco}</p>
+                      <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                        {l.endereco}
+                      </p>
                       {l.horario?.[0] && (
-                        <p className="mt-0.5 text-[11px] text-[var(--color-muted)]" title={l.horario.join(" | ")}>
+                        <p
+                          className="mt-0.5 text-[11px] text-[var(--color-muted)]"
+                          title={l.horario.join(" | ")}
+                        >
                           {l.horario.length} dias com horário cadastrado
                         </p>
                       )}
@@ -315,23 +422,37 @@ export function BuscadorLeads() {
                           <Phone className="size-3.5" /> {l.telefone}
                         </a>
                       ) : (
-                        <span className="block text-xs text-[var(--color-muted)]">sem telefone</span>
+                        <span className="block text-xs text-[var(--color-muted)]">
+                          sem telefone
+                        </span>
                       )}
                       {l.site && (
-                        <a href={l.site} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1 truncate text-xs text-[var(--color-muted)] hover:underline">
+                        <a
+                          href={l.site}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 truncate text-xs text-[var(--color-muted)] hover:underline"
+                        >
                           <ExternalLink className="size-3 shrink-0" />
-                          <span className="truncate">{l.site.replace(/^https?:\/\//, "").slice(0, 28)}</span>
+                          <span className="truncate">
+                            {l.site.replace(/^https?:\/\//, "").slice(0, 28)}
+                          </span>
                         </a>
                       )}
                       {l.maps && (
-                        <a href={l.maps} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)]">
+                        <a
+                          href={l.maps}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)]"
+                        >
                           Maps <ExternalLink className="size-3" />
                         </a>
                       )}
                     </td>
-                    <td className="p-3 text-xs text-[var(--color-muted)]">{l.motivos.join(" · ")}</td>
+                    <td className="p-3 text-xs text-[var(--color-muted)]">
+                      {l.motivos.join(" · ")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -350,11 +471,25 @@ const BOTAO =
 const BOTAO_SEC =
   "flex items-center gap-1.5 rounded-xl border border-black/10 px-4 py-2 text-sm font-bold hover:bg-[var(--color-surface)] disabled:opacity-50";
 
-function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; children: React.ReactNode }) {
+function Campo({
+  rotulo,
+  dica,
+  children,
+}: {
+  rotulo: string;
+  dica?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="block text-[11px] font-bold uppercase text-[var(--color-muted)]">{rotulo}</span>
-      {dica && <span className="mb-1 block text-[11px] text-[var(--color-muted)]">{dica}</span>}
+      <span className="block text-[11px] font-bold uppercase text-[var(--color-muted)]">
+        {rotulo}
+      </span>
+      {dica && (
+        <span className="mb-1 block text-[11px] text-[var(--color-muted)]">
+          {dica}
+        </span>
+      )}
       {children}
     </label>
   );
