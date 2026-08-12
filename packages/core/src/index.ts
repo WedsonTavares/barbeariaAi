@@ -5,6 +5,8 @@ export type {
   NotificationType,
   ConversationStage,
   ProspectStage,
+  ProspectCanal,
+  ProspectMotivoPerda,
 } from "@prisma/client";
 export { prisma } from "./db/prisma";
 export { withTenant, platformDb, type Tx } from "./db/withTenant";

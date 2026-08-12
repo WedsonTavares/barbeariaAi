@@ -194,6 +194,49 @@ enum ProspectStage {
   PERDIDO
 }
 
+/// Por onde o contato aconteceu. Serve para descobrir qual canal abre porta —
+/// se ligação converte 3x mais que WhatsApp, muda como você trabalha o dia.
+enum ProspectCanal {
+  LIGACAO
+  WHATSAPP
+  EMAIL
+  REUNIAO
+  PRESENCIAL
+  OUTRO
+}
+
+/// Por que o lead foi perdido. Enum e não texto livre de propósito: é isto que
+/// vira o gráfico de "por que estou perdendo vendas", e texto livre não agrupa.
+enum ProspectMotivoPerda {
+  SEM_INTERESSE
+  JA_TEM_FORNECEDOR
+  SEM_ORCAMENTO
+  NAO_VE_NECESSIDADE
+  NAO_RESPONDEU
+  CONTATO_INVALIDO
+  FORA_DO_PERFIL
+  MOMENTO_INADEQUADO
+  PRECO
+  OUTRO
+}
+
+/// Cada toque no lead: ligação, mensagem, reunião. É o histórico que responde
+/// "o que eu já falei com essa pessoa" antes de ligar de novo.
+model ProspectInteraction {
+  id        String        @id @default(uuid())
+  leadId    String
+  lead      ProspectLead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  canal     ProspectCanal
+  /// O que aconteceu, em uma linha. É o que aparece resumido na lista.
+  resumo    String
+  /// Estágio para o qual o lead foi movido NESTE toque, se houve mudança.
+  /// Guardar aqui é o que permite calcular conversão real por etapa depois.
+  paraStage ProspectStage?
+  criadoEm  DateTime      @default(now())
+
+  @@index([leadId, criadoEm])
+}
+
 /// Empresa prospectada — barbearia ou salão que VOCÊ quer vender.
 ///
 /// É tabela de PLATAFORMA, como `Tenant`: não tem `tenantId` e não entra na RLS
@@ -222,11 +265,22 @@ model ProspectLead {
   contatadoEm DateTime?
   observacao  String?
 
+  /// A próxima coisa a fazer e QUANDO. Lead ativo sem isso é lead que some do
+  /// processo — a tela avisa quando está vencida ou em branco.
+  proximaAcao   String?
+  proximaAcaoEm DateTime?
+
+  /// Só preenchido quando o estágio vira PERDIDO. Alimenta o gráfico de perdas.
+  motivoPerda ProspectMotivoPerda?
+
+  interacoes ProspectInteraction[]
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   @@index([stage])
   @@index([nicho])
+  @@index([proximaAcaoEm])
 }
 
 model Tenant {

@@ -2,7 +2,8 @@ import { Briefcase } from "lucide-react";
 
 import { services } from "@barbearia-ai/core";
 import { getAuthContext } from "@/lib/tenant";
-import { Carteira, type LeadView } from "./Carteira";
+import { Carteira } from "./Carteira";
+import type { LeadView } from "./tipos";
 
 export const dynamic = "force-dynamic";
 
@@ -20,24 +21,33 @@ export default async function CarteiraPage() {
 
   // Achatado e serializável: Decimal e Date não atravessam a fronteira
   // servidor → cliente. Os agregados são calculados no cliente de propósito —
-  // com algumas centenas de linhas isso é instantâneo, e permite que os filtros
-  // recalculem os gráficos sem ida ao servidor.
-  const view: LeadView[] = leads.map((l) => ({
-    id: l.id,
-    nome: l.nome,
-    nicho: l.nicho,
-    telefone: l.telefone,
-    site: l.site,
-    maps: l.maps,
-    endereco: l.endereco,
-    nota: l.nota ? Number(l.nota) : null,
-    avaliacoes: l.avaliacoes,
-    score: l.score,
-    motivos: l.motivos,
-    stage: l.stage,
-    contatadoEm: l.contatadoEm ? l.contatadoEm.toISOString() : null,
-    observacao: l.observacao,
-  }));
+  // com algumas centenas de linhas é instantâneo, e os filtros recalculam os
+  // gráficos sem ida ao servidor.
+  const view: LeadView[] = leads.map((l) => {
+    const ultima = l.interacoes[0];
+    return {
+      id: l.id,
+      nome: l.nome,
+      nicho: l.nicho,
+      telefone: l.telefone,
+      site: l.site,
+      maps: l.maps,
+      endereco: l.endereco,
+      nota: l.nota ? Number(l.nota) : null,
+      avaliacoes: l.avaliacoes,
+      score: l.score,
+      motivos: l.motivos,
+      stage: l.stage,
+      contatadoEm: l.contatadoEm?.toISOString() ?? null,
+      observacao: l.observacao,
+      proximaAcao: l.proximaAcao,
+      proximaAcaoEm: l.proximaAcaoEm?.toISOString() ?? null,
+      motivoPerda: l.motivoPerda,
+      ultimaInteracao: ultima
+        ? { resumo: ultima.resumo, canal: ultima.canal, criadoEm: ultima.criadoEm.toISOString() }
+        : null,
+    };
+  });
 
   return (
     <main className="mx-auto max-w-6xl p-6 sm:p-8">

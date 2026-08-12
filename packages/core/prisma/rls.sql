@@ -27,6 +27,14 @@ ALTER TABLE "ProspectLead" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS prospect_app_access ON "ProspectLead";
 CREATE POLICY prospect_app_access ON "ProspectLead" FOR ALL TO app_runtime USING (true) WITH CHECK (true);
 
+-- Histórico de contatos. Mesmo tratamento: é filha da ProspectLead, também de
+-- plataforma. Sem esta policy o app_runtime enxergaria 0 interações e a tela de
+-- histórico apareceria sempre vazia, sem erro nenhum.
+GRANT SELECT, INSERT, UPDATE, DELETE ON "ProspectInteraction" TO app_runtime;
+ALTER TABLE "ProspectInteraction" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS prospect_interaction_app_access ON "ProspectInteraction";
+CREATE POLICY prospect_interaction_app_access ON "ProspectInteraction" FOR ALL TO app_runtime USING (true) WITH CHECK (true);
+
 -- Metadados do Prisma. Não é tabela de tenant, mas fica em `public` e por isso
 -- é exposta ao PostgREST — o linter do Supabase acusa como crítico e está certo.
 -- Ninguém precisa lê-la pela API: as migrations rodam pelo DIRECT_URL como dono,

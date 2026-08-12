@@ -1,67 +1,28 @@
 "use client";
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Upload, Phone, ExternalLink, AlertTriangle, Check, X } from "lucide-react";
+import {
+  Upload, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock, HelpCircle,
+} from "lucide-react";
 
 import type { ProspectStage } from "@barbearia-ai/core";
-import { importarCsvAction, mudarEstagioAction, salvarObservacaoAction } from "./actions";
+import { importarCsvAction, moverStageAction } from "./actions";
+import { PainelLead } from "./PainelLead";
+import {
+  COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
+  diasAte, estaAtrasado, estaLargado, formatarData, presencaDe,
+  type LeadView,
+} from "./tipos";
 
-export type LeadView = {
-  id: string;
-  nome: string;
-  nicho: string;
-  telefone: string | null;
-  site: string | null;
-  maps: string | null;
-  endereco: string | null;
-  nota: number | null;
-  avaliacoes: number;
-  score: number;
-  motivos: string[];
-  stage: ProspectStage;
-  contatadoEm: string | null;
-  observacao: string | null;
-};
-
-/** Ordem do funil. É a sequência real da abordagem, e o gráfico depende dela. */
-const FUNIL: { stage: ProspectStage; rotulo: string }[] = [
-  { stage: "NOVO", rotulo: "Novo" },
-  { stage: "CONTATADO", rotulo: "Contatado" },
-  { stage: "RESPONDEU", rotulo: "Respondeu" },
-  { stage: "DEMO", rotulo: "Demo" },
-  { stage: "PROPOSTA", rotulo: "Proposta" },
-  { stage: "GANHO", rotulo: "Ganho" },
-];
-
-/**
- * Cores de ESTADO, não de série. Só GANHO e PERDIDO recebem cor semântica; o
- * resto fica neutro de propósito — pintar cada etapa de uma cor faria o olho
- * procurar significado onde só existe ordem.
- */
-const COR_ESTAGIO: Record<ProspectStage, string> = {
-  NOVO: "bg-slate-100 text-slate-700",
-  CONTATADO: "bg-blue-50 text-blue-700",
-  RESPONDEU: "bg-blue-100 text-blue-800",
-  DEMO: "bg-violet-100 text-violet-800",
-  PROPOSTA: "bg-amber-100 text-amber-800",
-  GANHO: "bg-emerald-100 text-emerald-800",
-  PERDIDO: "bg-red-100 text-red-700",
-};
-
-const TODOS_ESTAGIOS: ProspectStage[] = [...FUNIL.map((f) => f.stage), "PERDIDO"];
-
-/** Presença digital: o sinal que decide a oferta. */
-function presencaDe(l: LeadView): "Sem site" | "Só rede social" | "Site próprio" {
-  if (!l.site) return "Sem site";
-  return /instagram\.|facebook\.|linktr\.ee|linktree|wa\.me|beacons\.|api\.whatsapp/.test(l.site.toLowerCase())
-    ? "Só rede social"
-    : "Site próprio";
-}
-
-type Filtro = { tipo: "nicho" | "presenca" | "stage" | "prioridade"; valor: string } | null;
+type Filtro =
+  | { tipo: "nicho" | "presenca" | "stage" | "motivo"; valor: string; rotulo: string }
+  | { tipo: "prioridade" | "atrasados" | "largados"; valor: string; rotulo: string }
+  | null;
 
 export function Carteira({ leads }: { leads: LeadView[] }) {
   const [filtro, setFiltro] = useState<Filtro>(null);
   const [busca, setBusca] = useState("");
+  const [modo, setModo] = useState<"lista" | "quadro">("lista");
+  const [aberto, setAberto] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
   const [pendente, iniciar] = useTransition();
   const inputArquivo = useRef<HTMLInputElement>(null);
@@ -71,34 +32,41 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
     return leads.filter((l) => {
       if (termo && !l.nome.toLowerCase().includes(termo)) return false;
       if (!filtro) return true;
-      if (filtro.tipo === "nicho") return l.nicho === filtro.valor;
-      if (filtro.tipo === "presenca") return presencaDe(l) === filtro.valor;
-      if (filtro.tipo === "stage") return l.stage === filtro.valor;
-      if (filtro.tipo === "prioridade") return l.score >= 80;
-      return true;
+      switch (filtro.tipo) {
+        case "nicho": return l.nicho === filtro.valor;
+        case "presenca": return presencaDe(l) === filtro.valor;
+        case "stage": return l.stage === filtro.valor;
+        case "motivo": return l.motivoPerda === filtro.valor;
+        case "prioridade": return l.score >= 80;
+        case "atrasados": return estaAtrasado(l);
+        case "largados": return estaLargado(l);
+      }
     });
   }, [leads, filtro, busca]);
 
   const total = leads.length;
   const naoContatados = leads.filter((l) => l.stage === "NOVO").length;
-  const emAndamento = leads.filter(
-    (l) => l.stage !== "NOVO" && l.stage !== "GANHO" && l.stage !== "PERDIDO"
-  ).length;
   const ganhos = leads.filter((l) => l.stage === "GANHO").length;
   const trabalhados = total - naoContatados;
   const conversao = trabalhados ? Math.round((ganhos / trabalhados) * 100) : 0;
+  const atrasados = leads.filter(estaAtrasado);
+  const largados = leads.filter(estaLargado);
+  const hoje = leads.filter((l) => !ENCERRADOS.includes(l.stage) && diasAte(l.proximaAcaoEm) === 0);
 
   const porNicho = agrupar(leads, (l) => l.nicho);
   const porPresenca = agrupar(leads, presencaDe);
+  const perdidos = leads.filter((l) => l.motivoPerda);
+  const porMotivo = agrupar(perdidos, (l) => ROTULO_MOTIVO[l.motivoPerda!]);
 
-  // Funil cumulativo: quem chegou em "Demo" necessariamente passou por
-  // "Contatado". Contar só quem está PARADO em cada etapa daria um gráfico que
-  // encolhe e cresce sem sentido.
+  // Funil cumulativo: quem chegou em "Demo" passou por "Contatado". Contar só
+  // quem está PARADO em cada etapa daria um gráfico que encolhe e cresce sem
+  // sentido conforme os leads avançam.
   const funil = FUNIL.map((f, i) => {
     const idx = (s: ProspectStage) => FUNIL.findIndex((x) => x.stage === s);
-    const qtd = leads.filter((l) => l.stage !== "PERDIDO" && idx(l.stage) >= i).length;
-    return { ...f, qtd };
+    return { ...f, qtd: leads.filter((l) => l.stage !== "PERDIDO" && idx(l.stage) >= i).length };
   });
+
+  const leadAberto = leads.find((l) => l.id === aberto) ?? null;
 
   function enviarArquivo(file: File) {
     setMsg(null);
@@ -112,9 +80,9 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
     reader.readAsText(file, "utf-8");
   }
 
-  function trocarEstagio(id: string, stage: ProspectStage) {
+  function mover(id: string, stage: ProspectStage) {
     iniciar(async () => {
-      const r = await mudarEstagioAction(id, stage);
+      const r = await moverStageAction(id, stage);
       if (!r.ok) setMsg({ ok: false, texto: r.erro });
     });
   }
@@ -127,7 +95,7 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
           <h2 className="text-sm font-bold">Importar da Prospecção</h2>
           <p className="text-xs text-[var(--color-muted)]">
             Suba o CSV exportado. Reimportar a mesma região atualiza nota e avaliações e{" "}
-            <strong>preserva</strong> o estágio e as anotações.
+            <strong>preserva</strong> estágio, histórico e anotações.
           </p>
         </div>
         <input
@@ -167,26 +135,50 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
         </section>
       ) : (
         <>
-          {/* ── Indicadores ─────────────────────────────────────────────── */}
+          {/* ── O que fazer hoje ────────────────────────────────────────── */}
           <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile rotulo="Na carteira" valor={total} detalhe={`${porNicho.length} nichos`} />
+            <Tile
+              rotulo="Atrasados"
+              valor={atrasados.length}
+              detalhe={atrasados.length ? "passaram da data" : "nada atrasado"}
+              alerta={atrasados.length > 0}
+              aoClicar={atrasados.length ? () => setFiltro({ tipo: "atrasados", valor: "", rotulo: "Atrasados" }) : undefined}
+            />
+            <Tile
+              rotulo="Para hoje"
+              valor={hoje.length}
+              detalhe={hoje.length ? "follow-up marcado" : "nada marcado"}
+            />
             <Tile
               rotulo="A contatar"
               valor={naoContatados}
-              detalhe={naoContatados ? "clique para filtrar" : "tudo trabalhado"}
-              aoClicar={naoContatados ? () => setFiltro({ tipo: "stage", valor: "NOVO" }) : undefined}
-              alerta={naoContatados > 0}
+              detalhe={naoContatados ? "nunca abordados" : "tudo trabalhado"}
+              aoClicar={naoContatados ? () => setFiltro({ tipo: "stage", valor: "NOVO", rotulo: "A contatar" }) : undefined}
             />
-            <Tile rotulo="Em andamento" valor={emAndamento} detalhe="contatado até proposta" />
             <Tile rotulo="Clientes" valor={ganhos} detalhe={trabalhados ? `${conversao}% dos trabalhados` : "—"} />
           </section>
+
+          {/*
+            Sem próxima ação é o caso mais perigoso do processo: não tem data,
+            então não aparece em atrasados, e some do radar sem ninguém notar.
+          */}
+          {largados.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFiltro({ tipo: "largados", valor: "", rotulo: "Sem próxima ação" })}
+              className="flex w-full items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-left text-sm font-semibold text-amber-900"
+            >
+              <HelpCircle className="size-4 shrink-0" />
+              {largados.length} {largados.length === 1 ? "lead trabalhado está" : "leads trabalhados estão"} sem próxima
+              ação marcada — é assim que lead some do processo.
+            </button>
+          )}
 
           {/* ── Funil ───────────────────────────────────────────────────── */}
           <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
             <h2 className="text-sm font-bold">Funil</h2>
             <p className="text-xs text-[var(--color-muted)]">
-              Cumulativo: quem chegou na Demo passou por Contatado. A queda entre duas etapas mostra onde o processo
-              trava.
+              Cumulativo. A queda entre duas etapas mostra onde o processo trava.
             </p>
             <div className="mt-3 space-y-1.5">
               {funil.map((f, i) => {
@@ -199,7 +191,7 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                     valor={f.qtd}
                     maximo={funil[0]!.qtd}
                     sufixo={taxa !== null ? `${taxa}% da etapa anterior` : undefined}
-                    aoClicar={() => setFiltro({ tipo: "stage", valor: f.stage })}
+                    aoClicar={() => setFiltro({ tipo: "stage", valor: f.stage, rotulo: f.rotulo })}
                   />
                 );
               })}
@@ -208,42 +200,38 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
 
           {/* ── Distribuições ───────────────────────────────────────────── */}
           <section className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
-              <h2 className="text-sm font-bold">Por nicho</h2>
-              <p className="text-xs text-[var(--color-muted)]">A abordagem muda conforme o negócio.</p>
-              <div className="mt-3 space-y-1.5">
-                {porNicho.map(([nicho, qtd]) => (
-                  <Barra
-                    key={nicho}
-                    rotulo={nicho}
-                    valor={qtd}
-                    maximo={porNicho[0]![1]}
-                    aoClicar={() => setFiltro({ tipo: "nicho", valor: nicho })}
-                  />
-                ))}
-              </div>
-            </div>
+            <Painel titulo="Por nicho" nota="A abordagem muda conforme o negócio.">
+              {porNicho.map(([nicho, qtd]) => (
+                <Barra key={nicho} rotulo={nicho} valor={qtd} maximo={porNicho[0]![1]}
+                  aoClicar={() => setFiltro({ tipo: "nicho", valor: nicho, rotulo: nicho })} />
+              ))}
+            </Painel>
 
-            <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
-              <h2 className="text-sm font-bold">Presença digital</h2>
-              <p className="text-xs text-[var(--color-muted)]">
-                Sem site é oferta de presença + automação. Com site próprio, só automação.
-              </p>
-              <div className="mt-3 space-y-1.5">
-                {porPresenca.map(([p, qtd]) => (
-                  <Barra
-                    key={p}
-                    rotulo={p}
-                    valor={qtd}
-                    maximo={porPresenca[0]![1]}
-                    aoClicar={() => setFiltro({ tipo: "presenca", valor: p })}
-                  />
-                ))}
-              </div>
-            </div>
+            <Painel titulo="Presença digital" nota="Sem site é presença + automação. Com site, só automação.">
+              {porPresenca.map(([p, qtd]) => (
+                <Barra key={p} rotulo={p} valor={qtd} maximo={porPresenca[0]![1]}
+                  aoClicar={() => setFiltro({ tipo: "presenca", valor: p, rotulo: p })} />
+              ))}
+            </Painel>
           </section>
 
-          {/* ── Lista ───────────────────────────────────────────────────── */}
+          {/* Só aparece quando há perda registrada — gráfico vazio não informa. */}
+          {porMotivo.length > 0 && (
+            <Painel
+              titulo="Por que você perde"
+              nota="Muito 'não vê necessidade' é problema de comunicação de valor; muito 'preço' é posicionamento."
+            >
+              {porMotivo.map(([m, qtd]) => (
+                <Barra key={m} rotulo={m} valor={qtd} maximo={porMotivo[0]![1]}
+                  aoClicar={() => {
+                    const chave = Object.entries(ROTULO_MOTIVO).find(([, r]) => r === m)?.[0];
+                    if (chave) setFiltro({ tipo: "motivo", valor: chave, rotulo: m });
+                  }} />
+              ))}
+            </Painel>
+          )}
+
+          {/* ── Lista / Quadro ──────────────────────────────────────────── */}
           <section className="overflow-hidden rounded-2xl border border-black/5 bg-white shadow-sm">
             <div className="flex flex-wrap items-center gap-2 border-b border-black/5 p-4">
               <div className="min-w-0 flex-1">
@@ -256,13 +244,14 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                     onClick={() => setFiltro(null)}
                     className="mt-1 inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)] bg-blue-50 px-2 py-0.5 text-xs font-bold text-[var(--color-primary)]"
                   >
-                    {filtro.tipo === "prioridade" ? "Score 80+" : filtro.valor} <X className="size-3" />
+                    {filtro.rotulo} <X className="size-3" />
                   </button>
                 )}
               </div>
+
               <button
                 type="button"
-                onClick={() => setFiltro({ tipo: "prioridade", valor: "80" })}
+                onClick={() => setFiltro({ tipo: "prioridade", valor: "80", rotulo: "Score 80+" })}
                 className="rounded-full border border-black/10 px-3 py-1 text-xs font-bold hover:bg-[var(--color-surface)]"
               >
                 Score 80+
@@ -270,89 +259,226 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
               <input
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar empresa..."
-                className="rounded-xl border border-black/10 px-3 py-1.5 text-sm outline-none focus:border-[var(--color-primary)]"
+                placeholder="Buscar..."
+                className="w-36 rounded-xl border border-black/10 px-3 py-1.5 text-sm outline-none focus:border-[var(--color-primary)]"
               />
+              <div className="flex overflow-hidden rounded-xl border border-black/10">
+                {([["lista", LayoutList], ["quadro", Columns3]] as const).map(([m, Icon]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setModo(m)}
+                    aria-label={m === "lista" ? "Ver em lista" : "Ver em quadro"}
+                    className={`grid size-8 place-items-center ${
+                      modo === m ? "bg-[var(--color-primary)] text-white" : "hover:bg-[var(--color-surface)]"
+                    }`}
+                  >
+                    <Icon className="size-4" />
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-[var(--color-surface)] text-left text-[11px] uppercase text-[var(--color-muted)]">
-                  <tr>
-                    <th className="p-3">Score</th>
-                    <th className="p-3">Empresa</th>
-                    <th className="p-3">Contato</th>
-                    <th className="p-3">Etapa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visiveis.map((l) => (
-                    <tr key={l.id} className="border-t border-black/5 align-top">
-                      <td className="p-3">
-                        <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-extrabold tabular-nums">
-                          {l.score}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <p className="font-semibold">{l.nome}</p>
-                        <p className="text-xs text-[var(--color-muted)]">
-                          {l.nicho} · {l.avaliacoes} avaliações{l.nota ? ` · ${l.nota}` : ""} · {presencaDe(l)}
-                        </p>
-                        {l.contatadoEm && (
-                          <p className="text-[11px] text-[var(--color-muted)]">
-                            contato em {new Date(l.contatadoEm).toLocaleDateString("pt-BR")}
-                          </p>
-                        )}
-                      </td>
-                      <td className="space-y-1 p-3">
-                        {l.telefone ? (
-                          <a
-                            href={`https://wa.me/${`55${l.telefone}`.replace(/\D/g, "")}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 font-semibold text-[var(--color-primary)]"
-                          >
-                            <Phone className="size-3.5" /> {l.telefone}
-                          </a>
-                        ) : (
-                          <span className="block text-xs text-[var(--color-muted)]">sem telefone</span>
-                        )}
-                        {l.maps && (
-                          <a
-                            href={l.maps}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 text-xs text-[var(--color-muted)] hover:underline"
-                          >
-                            Maps <ExternalLink className="size-3" />
-                          </a>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <select
-                          value={l.stage}
-                          disabled={pendente}
-                          onChange={(e) => trocarEstagio(l.id, e.target.value as ProspectStage)}
-                          className={`rounded-lg border-0 px-2 py-1 text-xs font-bold outline-none ${COR_ESTAGIO[l.stage]}`}
-                        >
-                          {TODOS_ESTAGIOS.map((s) => (
-                            <option key={s} value={s}>
-                              {s.charAt(0) + s.slice(1).toLowerCase()}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {modo === "lista" ? (
+              <Lista leads={visiveis} aoAbrir={setAberto} />
+            ) : (
+              <Quadro leads={visiveis} aoAbrir={setAberto} aoMover={mover} pendente={pendente} />
+            )}
           </section>
         </>
       )}
+
+      {leadAberto && <PainelLead lead={leadAberto} aoFechar={() => setAberto(null)} />}
     </div>
   );
 }
+
+/* ────────────────────────────── Lista ─────────────────────────────────── */
+
+function Lista({ leads, aoAbrir }: { leads: LeadView[]; aoAbrir: (id: string) => void }) {
+  if (!leads.length) {
+    return <p className="p-6 text-center text-sm text-[var(--color-muted)]">Nada neste filtro.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-[var(--color-surface)] text-left text-[11px] uppercase text-[var(--color-muted)]">
+          <tr>
+            <th className="p-3">Score</th>
+            <th className="p-3">Empresa</th>
+            <th className="p-3">Último contato</th>
+            <th className="p-3">Próxima ação</th>
+            <th className="p-3">Etapa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {leads.map((l) => {
+            const atrasado = estaAtrasado(l);
+            const dias = diasAte(l.proximaAcaoEm);
+            return (
+              <tr
+                key={l.id}
+                onClick={() => aoAbrir(l.id)}
+                className="cursor-pointer border-t border-black/5 align-top hover:bg-[var(--color-surface)]"
+              >
+                <td className="p-3">
+                  <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-extrabold tabular-nums">
+                    {l.score}
+                  </span>
+                </td>
+                <td className="p-3">
+                  <p className="font-semibold">{l.nome}</p>
+                  <p className="text-xs text-[var(--color-muted)]">
+                    {l.nicho} · {l.avaliacoes} aval. · {presencaDe(l)}
+                  </p>
+                  {l.telefone && (
+                    <span className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)]">
+                      <Phone className="size-3" /> {l.telefone}
+                    </span>
+                  )}
+                </td>
+                <td className="max-w-[16rem] p-3">
+                  {l.ultimaInteracao ? (
+                    <>
+                      <p className="truncate text-xs">{l.ultimaInteracao.resumo}</p>
+                      <p className="text-[11px] text-[var(--color-muted)]">
+                        {formatarData(l.ultimaInteracao.criadoEm)}
+                      </p>
+                    </>
+                  ) : (
+                    <span className="text-xs text-[var(--color-muted)]">—</span>
+                  )}
+                </td>
+                <td className="p-3">
+                  {ENCERRADOS.includes(l.stage) ? (
+                    <span className="text-xs text-[var(--color-muted)]">—</span>
+                  ) : l.proximaAcaoEm ? (
+                    <>
+                      <p className="truncate text-xs">{l.proximaAcao ?? "sem descrição"}</p>
+                      <p className={`text-[11px] font-semibold ${atrasado ? "text-red-700" : "text-[var(--color-muted)]"}`}>
+                        {formatarData(l.proximaAcaoEm)}
+                        {dias !== null && (dias < 0 ? ` · atrasada ${Math.abs(dias)}d` : dias === 0 ? " · hoje" : "")}
+                      </p>
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
+                      <Clock className="size-3" /> sem próxima ação
+                    </span>
+                  )}
+                </td>
+                <td className="p-3">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${COR_ESTAGIO[l.stage]}`}>
+                    {ROTULO_ESTAGIO[l.stage]}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ────────────────────────────── Quadro ────────────────────────────────── */
+
+/**
+ * Kanban por botão, não por arrastar.
+ *
+ * Arrastar exige biblioteca, não funciona bem no toque e quebra em coluna com
+ * rolagem. As setas movem uma etapa por vez, que é como a conversa anda de
+ * verdade — e funcionam igual no celular.
+ *
+ * PERDIDO não é coluna: é um desfecho que exige motivo, e o motivo se informa no
+ * painel do lead. Ter a coluna convidaria a marcar perda sem dizer por quê,
+ * que é justamente o dado que falta para saber por que você perde venda.
+ */
+function Quadro({
+  leads,
+  aoAbrir,
+  aoMover,
+  pendente,
+}: {
+  leads: LeadView[];
+  aoAbrir: (id: string) => void;
+  aoMover: (id: string, stage: ProspectStage) => void;
+  pendente: boolean;
+}) {
+  return (
+    <div className="flex gap-3 overflow-x-auto p-4">
+      {FUNIL.map((coluna, i) => {
+        const daColuna = leads.filter((l) => l.stage === coluna.stage);
+        return (
+          <div key={coluna.stage} className="w-64 shrink-0">
+            <p className="flex items-center justify-between px-1 pb-2 text-xs font-bold uppercase text-[var(--color-muted)]">
+              {coluna.rotulo}
+              <span className="tabular-nums">{daColuna.length}</span>
+            </p>
+            <div className="space-y-2">
+              {daColuna.map((l) => {
+                const atrasado = estaAtrasado(l);
+                return (
+                  <div
+                    key={l.id}
+                    className={`rounded-xl border bg-white p-3 shadow-sm ${
+                      atrasado ? "border-red-200" : "border-black/10"
+                    }`}
+                  >
+                    <button type="button" onClick={() => aoAbrir(l.id)} className="w-full text-left">
+                      <p className="truncate text-sm font-bold">{l.nome}</p>
+                      <p className="text-[11px] text-[var(--color-muted)]">
+                        {l.score} · {l.nicho} · {l.avaliacoes} aval.
+                      </p>
+                      {l.ultimaInteracao && (
+                        <p className="mt-1 line-clamp-2 text-[11px] text-[var(--color-muted)]">
+                          {l.ultimaInteracao.resumo}
+                        </p>
+                      )}
+                      {!ENCERRADOS.includes(l.stage) && l.proximaAcaoEm && (
+                        <p className={`mt-1 text-[11px] font-semibold ${atrasado ? "text-red-700" : "text-[var(--color-muted)]"}`}>
+                          {atrasado ? "atrasada " : ""}{formatarData(l.proximaAcaoEm)}
+                        </p>
+                      )}
+                    </button>
+                    <div className="mt-2 flex gap-1">
+                      {i > 0 && (
+                        <button
+                          type="button"
+                          disabled={pendente}
+                          onClick={() => aoMover(l.id, FUNIL[i - 1]!.stage)}
+                          className="flex-1 rounded-lg border border-black/10 py-1 text-[11px] font-bold hover:bg-[var(--color-surface)] disabled:opacity-50"
+                        >
+                          ←
+                        </button>
+                      )}
+                      {i < FUNIL.length - 1 && (
+                        <button
+                          type="button"
+                          disabled={pendente}
+                          onClick={() => aoMover(l.id, FUNIL[i + 1]!.stage)}
+                          className="flex-1 rounded-lg border border-black/10 py-1 text-[11px] font-bold hover:bg-[var(--color-surface)] disabled:opacity-50"
+                        >
+                          →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {!daColuna.length && (
+                <p className="rounded-xl border border-dashed border-black/10 p-3 text-center text-[11px] text-[var(--color-muted)]">
+                  vazio
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ───────────────────────────── auxiliares ─────────────────────────────── */
 
 function agrupar<T>(itens: T[], chave: (i: T) => string): [string, number][] {
   const mapa = new Map<string, number>();
@@ -360,25 +486,27 @@ function agrupar<T>(itens: T[], chave: (i: T) => string): [string, number][] {
   return [...mapa.entries()].sort((a, b) => b[1] - a[1]);
 }
 
+function Painel({ titulo, nota, children }: { titulo: string; nota: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
+      <h2 className="text-sm font-bold">{titulo}</h2>
+      <p className="text-xs text-[var(--color-muted)]">{nota}</p>
+      <div className="mt-3 space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
 /**
  * Barra horizontal de magnitude.
  *
  * Uma cor só: o comprimento já codifica a grandeza, e pintar cada categoria de
- * uma cor faria o olho procurar um significado que não existe. O valor vai
+ * uma cor faria o olho procurar significado que não existe. O valor vai
  * rotulado ao lado, o que dispensa eixo e grade.
  */
 function Barra({
-  rotulo,
-  valor,
-  maximo,
-  sufixo,
-  aoClicar,
+  rotulo, valor, maximo, sufixo, aoClicar,
 }: {
-  rotulo: string;
-  valor: number;
-  maximo: number;
-  sufixo?: string;
-  aoClicar?: () => void;
+  rotulo: string; valor: number; maximo: number; sufixo?: string; aoClicar?: () => void;
 }) {
   const pct = maximo > 0 ? (valor / maximo) * 100 : 0;
   return (
@@ -388,7 +516,7 @@ function Barra({
       title={sufixo ? `${rotulo}: ${valor} — ${sufixo}` : `${rotulo}: ${valor}`}
       className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 text-left hover:bg-[var(--color-surface)]"
     >
-      <span className="w-28 shrink-0 truncate text-xs font-semibold">{rotulo}</span>
+      <span className="w-32 shrink-0 truncate text-xs font-semibold">{rotulo}</span>
       <span className="h-4 min-w-0 flex-1 overflow-hidden rounded-sm bg-[var(--color-surface)]">
         <span
           className="block h-full rounded-r-sm bg-[var(--color-primary)]"
@@ -402,35 +530,23 @@ function Barra({
 }
 
 function Tile({
-  rotulo,
-  valor,
-  detalhe,
-  aoClicar,
-  alerta = false,
+  rotulo, valor, detalhe, aoClicar, alerta = false,
 }: {
-  rotulo: string;
-  valor: number;
-  detalhe: string;
-  aoClicar?: () => void;
-  alerta?: boolean;
+  rotulo: string; valor: number; detalhe: string; aoClicar?: () => void; alerta?: boolean;
 }) {
   const Tag = aoClicar ? "button" : "div";
   return (
     <Tag
       {...(aoClicar ? { type: "button" as const, onClick: aoClicar } : {})}
       className={`rounded-2xl border p-4 text-left shadow-sm ${
-        alerta ? "border-amber-200 bg-amber-50" : "border-black/5 bg-white"
+        alerta ? "border-red-200 bg-red-50" : "border-black/5 bg-white"
       } ${aoClicar ? "hover:border-[var(--color-primary)]" : ""}`}
     >
-      <p
-        className={`text-[11px] font-bold uppercase tracking-wide ${
-          alerta ? "text-amber-700" : "text-[var(--color-muted)]"
-        }`}
-      >
+      <p className={`text-[11px] font-bold uppercase tracking-wide ${alerta ? "text-red-700" : "text-[var(--color-muted)]"}`}>
         {rotulo}
       </p>
-      <p className="mt-1 text-2xl font-extrabold tabular-nums">{valor}</p>
-      <p className={`mt-0.5 truncate text-xs ${alerta ? "text-amber-800" : "text-[var(--color-muted)]"}`}>{detalhe}</p>
+      <p className={`mt-1 text-2xl font-extrabold tabular-nums ${alerta ? "text-red-700" : ""}`}>{valor}</p>
+      <p className={`mt-0.5 truncate text-xs ${alerta ? "text-red-800" : "text-[var(--color-muted)]"}`}>{detalhe}</p>
     </Tag>
   );
 }
