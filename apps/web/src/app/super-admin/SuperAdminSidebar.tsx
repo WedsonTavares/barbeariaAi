@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck } from "lucide-react";
+import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar } from "lucide-react";
 
 const GRUPOS = [
   {
@@ -11,6 +11,10 @@ const GRUPOS = [
       { href: "/super-admin", label: "Lojas", icon: Building2, exato: true },
       { href: "/super-admin/nova-loja", label: "Nova loja", icon: Plus, exato: false },
     ],
+  },
+  {
+    label: "Crescimento",
+    links: [{ href: "/super-admin/leads", label: "Prospecção", icon: Radar, exato: false }],
   },
   {
     label: "Atalhos",
