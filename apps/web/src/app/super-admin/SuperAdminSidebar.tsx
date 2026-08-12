@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar } from "lucide-react";
+import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar, Briefcase } from "lucide-react";
 
 const GRUPOS = [
   {
@@ -14,7 +14,10 @@ const GRUPOS = [
   },
   {
     label: "Crescimento",
-    links: [{ href: "/super-admin/leads", label: "Prospecção", icon: Radar, exato: false }],
+    links: [
+      { href: "/super-admin/leads", label: "Prospecção", icon: Radar, exato: false },
+      { href: "/super-admin/carteira", label: "Carteira", icon: Briefcase, exato: false },
+    ],
   },
   {
     label: "Atalhos",
