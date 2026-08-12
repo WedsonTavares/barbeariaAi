@@ -25,3 +25,7 @@ base_de_dados.md
 
 # Backup local dos ícones antigos (logo de outro produto). Só para reverter.
 apps/web/public/.icones-diny-antigos/
+
+# Artefatos do Python
+__pycache__/
+*.pyc
