@@ -6,6 +6,7 @@ import type {
 } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
+import { brPhoneMatchKey } from "../phone";
 
 /**
  * Carteira de prospecção da plataforma.
@@ -34,6 +35,26 @@ export type ResultadoImportacao = { novos: number; atualizados: number; total: n
 
 /** Estágios que encerram o lead — não têm próxima ação nem entram em atrasados. */
 const ENCERRADOS: ProspectStage[] = ["GANHO", "PERDIDO"];
+
+/**
+ * Descarta os campos vazios de um update.
+ *
+ * Existe porque uma reimportação incompleta não pode destruir dado bom: sem
+ * isto, um CSV sem a coluna de telefone zera os telefones já coletados, e
+ * `avaliacoes: 0` sobrescreve as 783 avaliações de uma barbearia movimentada.
+ * Zero e string vazia aqui significam "a busca não trouxe", não "mudou para
+ * zero" — nenhum estabelecimento real perde todas as avaliações de uma vez.
+ */
+function somenteComValor<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => {
+      if (v === null || v === undefined || v === "") return false;
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === "number") return v > 0;
+      return true;
+    })
+  ) as Partial<T>;
+}
 
 export const prospectService = {
   /**
@@ -94,7 +115,12 @@ export const prospectService = {
         where: { placeId: e.placeId },
         // `stage`, `contatadoEm`, `observacao`, `proximaAcao*` e `motivoPerda`
         // ficam FORA do update de propósito — são seus, não do Google.
-        update: publico,
+        //
+        // E o update só leva o que veio PREENCHIDO: uma varredura interrompida
+        // antes da fase de telefone traz o lead sem número, e mandar esse vazio
+        // apagaria o telefone que já estava lá. Reimportar atualiza; nunca
+        // destrói. Na criação vai tudo, inclusive os vazios.
+        update: somenteComValor(publico),
         create: { placeId: e.placeId, ...publico },
       });
       if (existentes.has(e.placeId)) atualizados++;
@@ -189,6 +215,73 @@ export const prospectService = {
         decisorTelefone: decisor.telefone.trim() || null,
       },
     }),
+
+  /**
+   * Um lead da carteira respondeu no WhatsApp — espelha isso na prospecção.
+   *
+   * Chamado pelo inbox do tenant da PLATAFORMA (o seu), nunca pelo de um
+   * cliente: quem decide isso é o call site, e sem ele nada aqui roda.
+   *
+   * Três recusas deliberadas, todas devolvendo `null` sem escrever nada:
+   *  - telefone que não é brasileiro reconhecível;
+   *  - nenhum lead com aquele número;
+   *  - MAIS DE UM lead com o mesmo número — aí não dá para saber qual respondeu,
+   *    e registrar no errado é pior do que não registrar.
+   *
+   * A janela de silêncio existe porque o histórico do lead é resumo comercial,
+   * não log de conversa: dez mensagens seguidas viram um registro só. Mas quando
+   * a resposta MUDA a etapa, grava sempre — mover sem deixar rastro quebraria a
+   * conversão por etapa.
+   */
+  registrarRespostaDeWhatsapp: async (
+    telefone: string,
+    texto: string,
+    janelaHoras = 6
+  ): Promise<{ leadId: string; nome: string; stage: ProspectStage } | null> => {
+    const chave = brPhoneMatchKey(telefone);
+    if (!chave) return null;
+
+    // A chave não existe como coluna, então o casamento é em memória. São
+    // centenas de linhas de duas colunas — buscar por LIKE no banco daria o
+    // mesmo trabalho e erraria nos formatos com máscara.
+    const candidatos = (
+      await prisma.prospectLead.findMany({
+        where: { telefone: { not: null } },
+        select: { id: true, nome: true, telefone: true, stage: true },
+      })
+    ).filter((l) => brPhoneMatchKey(l.telefone!) === chave);
+
+    if (candidatos.length !== 1) return null;
+    const lead = candidatos[0]!;
+    if (ENCERRADOS.includes(lead.stage)) return null;
+
+    // Responder só faz o lead avançar até RESPONDEU. Quem já está em Demo ou
+    // Proposta não regride por ter mandado uma mensagem.
+    const avanca = lead.stage === "NOVO" || lead.stage === "CONTATADO";
+
+    if (!avanca) {
+      const ultima = await prisma.prospectInteraction.findFirst({
+        where: { leadId: lead.id },
+        orderBy: { criadoEm: "desc" },
+        select: { criadoEm: true },
+      });
+      const recente =
+        ultima && Date.now() - ultima.criadoEm.getTime() < janelaHoras * 3_600_000;
+      if (recente) return null;
+    }
+
+    const trecho = texto.trim().replace(/\s+/g, " ").slice(0, 140);
+    await prospectService.registrarInteracao({
+      leadId: lead.id,
+      canal: "WHATSAPP",
+      // Resultado fica em branco de propósito: sabemos que respondeu, não com
+      // quem falamos. Preencher um valor aqui falsearia o relatório de canal.
+      resumo: `Respondeu no WhatsApp: ${trecho}`,
+      paraStage: avanca ? "RESPONDEU" : null,
+    });
+
+    return { leadId: lead.id, nome: lead.nome, stage: avanca ? "RESPONDEU" : lead.stage };
+  },
 
   /**
    * Movimento rápido no kanban, sem abrir o painel.
