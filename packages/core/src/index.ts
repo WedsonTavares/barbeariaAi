@@ -6,6 +6,7 @@ export type {
   ConversationStage,
   ProspectStage,
   ProspectCanal,
+  ProspectResultado,
   ProspectMotivoPerda,
 } from "@prisma/client";
 export { prisma } from "./db/prisma";

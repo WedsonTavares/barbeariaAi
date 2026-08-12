@@ -6,11 +6,29 @@ import {
   services,
   type ProspectCanal,
   type ProspectMotivoPerda,
+  type ProspectResultado,
   type ProspectStage,
 } from "@barbearia-ai/core";
 import { getAuthContext } from "@/lib/tenant";
+import {
+  MOTIVOS_PERDA, RESULTADOS, ROTULO_CANAL, ROTULO_RESULTADO, TODOS_ESTAGIOS,
+} from "./tipos";
 
 const BASE = "/super-admin/carteira";
+
+const CANAIS = Object.keys(ROTULO_CANAL) as ProspectCanal[];
+
+/**
+ * Lê um enum do formulário conferindo contra os valores que existem de verdade.
+ *
+ * `as ProspectStage` não valida nada em tempo de execução: um valor inventado
+ * atravessaria até o Prisma e derrubaria a requisição com erro de enum. Aqui um
+ * valor desconhecido vira `null`, que cada campo trata como "não informado".
+ */
+function enumDo<T extends string>(v: FormDataEntryValue | null, validos: readonly T[]): T | null {
+  const s = String(v ?? "");
+  return (validos as readonly string[]).includes(s) ? (s as T) : null;
+}
 
 async function guarda() {
   requireSuperAdmin(await getAuthContext());
@@ -108,6 +126,7 @@ export async function historicoAction(leadId: string) {
   return itens.map((i) => ({
     id: i.id,
     canal: i.canal,
+    resultado: i.resultado,
     resumo: i.resumo,
     paraStage: i.paraStage,
     criadoEm: i.criadoEm.toISOString(),
@@ -122,18 +141,26 @@ export async function registrarContatoAction(leadId: string, form: FormData): Pr
   try {
     await guarda();
 
-    const resumo = String(form.get("resumo") ?? "").trim();
-    if (!resumo) return { ok: false, erro: "Escreva o que aconteceu no contato." };
+    // O resultado estruturado já diz o que aconteceu; o texto é o detalhe.
+    // Exigir os dois faria você digitar "não atendeu" depois de já ter marcado
+    // "Não respondeu" — atrito puro. Um dos dois basta.
+    const resultado = enumDo(form.get("resultado"), RESULTADOS.map((r) => r.valor));
+    const detalhe = String(form.get("resumo") ?? "").trim();
+    if (!resultado && !detalhe) {
+      return { ok: false, erro: "Escolha o que aconteceu no contato, ou descreva no campo de detalhe." };
+    }
+    const resumo = detalhe || ROTULO_RESULTADO[resultado!];
 
-    const paraStage = (String(form.get("paraStage") ?? "") || null) as ProspectStage | null;
-    const motivo = (String(form.get("motivoPerda") ?? "") || null) as ProspectMotivoPerda | null;
+    const paraStage = enumDo(form.get("paraStage"), TODOS_ESTAGIOS);
+    const motivo = enumDo(form.get("motivoPerda"), MOTIVOS_PERDA.map((m) => m.valor));
     if (paraStage === "PERDIDO" && !motivo) {
       return { ok: false, erro: "Escolha o motivo da perda — é o que alimenta o gráfico de perdas." };
     }
 
     await services.prospectService.registrarInteracao({
       leadId,
-      canal: (String(form.get("canal") ?? "LIGACAO") as ProspectCanal) || "LIGACAO",
+      canal: enumDo(form.get("canal"), CANAIS) ?? "LIGACAO",
+      resultado,
       resumo,
       paraStage,
       motivoPerda: motivo,
@@ -179,6 +206,22 @@ export async function reagendarAction(leadId: string, form: FormData): Promise<R
     return { ok: true };
   } catch (e) {
     return falha(e, "reagendar falhou");
+  }
+}
+
+/** Quem decide na empresa — descoberto na conversa, não na importação. */
+export async function salvarDecisorAction(leadId: string, form: FormData): Promise<Resultado> {
+  try {
+    await guarda();
+    await services.prospectService.setDecisor(leadId, {
+      nome: String(form.get("decisorNome") ?? ""),
+      cargo: String(form.get("decisorCargo") ?? ""),
+      telefone: String(form.get("decisorTelefone") ?? ""),
+    });
+    revalidatePath(BASE);
+    return { ok: true };
+  } catch (e) {
+    return falha(e, "decisor falhou");
   }
 }
 

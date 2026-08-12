@@ -1,20 +1,40 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
-import { X, Phone, ExternalLink, AlertTriangle, Clock, MapPin } from "lucide-react";
-
-import type { ProspectStage } from "@barbearia-ai/core";
-import { historicoAction, registrarContatoAction, reagendarAction, salvarObservacaoAction } from "./actions";
 import {
-  COR_ESTAGIO, ENCERRADOS, MOTIVOS_PERDA, ROTULO_CANAL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
-  TODOS_ESTAGIOS, diasAte, estaAtrasado, formatarData, presencaDe,
+  X, Phone, ExternalLink, AlertTriangle, Clock, MapPin, Target, UserRound,
+} from "lucide-react";
+
+import type { ProspectResultado, ProspectStage } from "@barbearia-ai/core";
+import {
+  historicoAction, registrarContatoAction, reagendarAction,
+  salvarDecisorAction, salvarObservacaoAction,
+} from "./actions";
+import {
+  COR_ESTAGIO, ENCERRADOS, FUNIL, MOTIVOS_PERDA, RESULTADOS, ROTULO_CANAL,
+  ROTULO_ESTAGIO, ROTULO_MOTIVO, ROTULO_RESULTADO, TODOS_ESTAGIOS,
+  diasAte, estaAtrasado, formatarData, ofertaDe, presencaDe,
   type Interacao, type LeadView,
 } from "./tipos";
 
 /** Sugere o próximo estágio — o caminho que a conversa quase sempre segue. */
 function proximoStage(atual: ProspectStage): ProspectStage {
-  const ordem: ProspectStage[] = ["NOVO", "CONTATADO", "RESPONDEU", "DEMO", "PROPOSTA", "GANHO"];
+  const ordem = FUNIL.map((f) => f.stage);
   const i = ordem.indexOf(atual);
   return i >= 0 && i < ordem.length - 1 ? ordem[i + 1]! : atual;
+}
+
+/**
+ * Aplica a sugestão do resultado só quando ela AVANÇA o lead.
+ *
+ * Sem isso, registrar "falei com o responsável" num lead que já está em Proposta
+ * o puxaria de volta para Respondeu — o resultado descreve o toque, não regride
+ * a negociação. Perda é exceção: pode acontecer em qualquer etapa.
+ */
+function sugestaoValida(atual: ProspectStage, sugerido: ProspectStage | null): ProspectStage | null {
+  if (!sugerido) return null;
+  if (sugerido === "PERDIDO") return sugerido;
+  const ordem = FUNIL.map((f) => f.stage);
+  return ordem.indexOf(sugerido) > ordem.indexOf(atual) ? sugerido : null;
 }
 
 /** Data de hoje em yyyy-mm-dd, para o valor padrão do <input type="date">. */
@@ -24,15 +44,10 @@ function hojeMais(dias: number) {
   return d.toISOString().slice(0, 10);
 }
 
-export function PainelLead({
-  lead,
-  aoFechar,
-}: {
-  lead: LeadView;
-  aoFechar: () => void;
-}) {
+export function PainelLead({ lead, aoFechar }: { lead: LeadView; aoFechar: () => void }) {
   const [historico, setHistorico] = useState<Interacao[] | null>(null);
   const [stageEscolhido, setStageEscolhido] = useState<ProspectStage>(proximoStage(lead.stage));
+  const [editandoDecisor, setEditandoDecisor] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
 
@@ -61,6 +76,7 @@ export function PainelLead({
   const atrasado = estaAtrasado(lead);
   const dias = diasAte(lead.proximaAcaoEm);
   const encerrado = ENCERRADOS.includes(lead.stage);
+  const temDecisor = Boolean(lead.decisorNome || lead.decisorTelefone);
 
   return (
     <div className="fixed inset-0 z-50">
@@ -76,7 +92,7 @@ export function PainelLead({
         aria-label={`Lead ${lead.nome}`}
         className="absolute inset-y-0 right-0 flex w-[30rem] max-w-[95vw] flex-col overflow-y-auto bg-white shadow-2xl"
       >
-        {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
+        {/* ── Identificação ─────────────────────────────────────────────── */}
         <div className="sticky top-0 z-10 flex items-start gap-2 border-b border-black/5 bg-white/95 p-4 backdrop-blur">
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-center gap-2">
@@ -84,10 +100,14 @@ export function PainelLead({
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${COR_ESTAGIO[lead.stage]}`}>
                 {ROTULO_ESTAGIO[lead.stage]}
               </span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-extrabold tabular-nums">
+                score {lead.score}
+              </span>
             </p>
             <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-              {lead.nicho} · score {lead.score} · {lead.avaliacoes} avaliações
-              {lead.nota ? ` · nota ${lead.nota}` : ""} · {presencaDe(lead)}
+              {lead.nicho}
+              {lead.nota ? ` · ${lead.nota} de nota` : ""} · {lead.avaliacoes} avaliações ·{" "}
+              {presencaDe(lead)}
             </p>
           </div>
           <button
@@ -102,37 +122,157 @@ export function PainelLead({
 
         <div className="space-y-5 p-4">
           {/* ── Contato ─────────────────────────────────────────────────── */}
-          <div className="flex flex-wrap gap-2">
-            {lead.telefone && (
-              <a
-                href={`https://wa.me/${`55${lead.telefone}`.replace(/\D/g, "")}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-3 py-2 text-sm font-bold text-white"
-              >
-                <Phone className="size-4" /> {lead.telefone}
-              </a>
-            )}
-            {lead.maps && (
-              <a href={lead.maps} target="_blank" rel="noreferrer" className={BOTAO_SEC}>
-                <MapPin className="size-4" /> Maps
-              </a>
-            )}
-            {lead.site && (
-              <a href={lead.site} target="_blank" rel="noreferrer" className={BOTAO_SEC}>
-                <ExternalLink className="size-4" /> Site
-              </a>
+          <div>
+            <div className="flex flex-wrap gap-2">
+              {lead.telefone && (
+                <a
+                  href={`https://wa.me/${`55${lead.telefone}`.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-3 py-2 text-sm font-bold text-white"
+                >
+                  <Phone className="size-4" /> {lead.telefone}
+                </a>
+              )}
+              {lead.maps && (
+                <a href={lead.maps} target="_blank" rel="noreferrer" className={BOTAO_SEC}>
+                  <MapPin className="size-4" /> Maps
+                </a>
+              )}
+              {lead.site && (
+                <a href={lead.site} target="_blank" rel="noreferrer" className={BOTAO_SEC}>
+                  <ExternalLink className="size-4" /> Site
+                </a>
+              )}
+            </div>
+            {lead.endereco && (
+              <p className="mt-2 text-xs text-[var(--color-muted)]">{lead.endereco}</p>
             )}
           </div>
-          {lead.endereco && <p className="text-xs text-[var(--color-muted)]">{lead.endereco}</p>}
 
-          {/* ── Por que ele entrou na lista ─────────────────────────────── */}
-          {lead.motivos.length > 0 && (
-            <div className="rounded-xl border border-black/10 bg-[var(--color-surface)] p-3">
-              <p className="text-[11px] font-bold uppercase text-[var(--color-muted)]">Oportunidade</p>
-              <p className="mt-1 text-xs">{lead.motivos.join(" · ")}</p>
+          {/* ── Estado atual, sem precisar ler o histórico ──────────────── */}
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-black/10 bg-[var(--color-surface)] p-3 text-xs">
+            <div>
+              <p className="text-[11px] font-bold uppercase text-[var(--color-muted)]">Último contato</p>
+              <p className="mt-0.5 font-semibold">
+                {lead.ultimaInteracao ? formatarData(lead.ultimaInteracao.criadoEm) : "Nunca"}
+              </p>
+              {lead.ultimaInteracao?.resultado && (
+                <p className="text-[var(--color-muted)]">
+                  {ROTULO_RESULTADO[lead.ultimaInteracao.resultado]}
+                </p>
+              )}
             </div>
-          )}
+            <div>
+              <p className="text-[11px] font-bold uppercase text-[var(--color-muted)]">Próxima ação</p>
+              <p className={`mt-0.5 font-semibold ${atrasado ? "text-red-700" : ""}`}>
+                {encerrado
+                  ? "—"
+                  : lead.proximaAcaoEm
+                    ? `${formatarData(lead.proximaAcaoEm)}${dias === 0 ? " · hoje" : dias !== null && dias < 0 ? ` · atrasada ${Math.abs(dias)}d` : ""}`
+                    : "Nenhuma"}
+              </p>
+              {!encerrado && lead.proximaAcao && (
+                <p className="text-[var(--color-muted)]">{lead.proximaAcao}</p>
+              )}
+            </div>
+          </div>
+
+          {/* ── Quem decide ─────────────────────────────────────────────── */}
+          <div className="rounded-xl border border-black/10 p-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-[var(--color-muted)]">
+              <UserRound className="size-3.5" /> Quem decide
+            </p>
+
+            {temDecisor && !editandoDecisor ? (
+              <div className="mt-1.5 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold">{lead.decisorNome ?? "—"}</p>
+                  {lead.decisorCargo && (
+                    <p className="text-xs text-[var(--color-muted)]">{lead.decisorCargo}</p>
+                  )}
+                  {lead.decisorTelefone && (
+                    <a
+                      href={`https://wa.me/${`55${lead.decisorTelefone}`.replace(/\D/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)]"
+                    >
+                      <Phone className="size-3" /> {lead.decisorTelefone}
+                    </a>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditandoDecisor(true)}
+                  className="shrink-0 text-xs font-bold text-[var(--color-muted)] hover:underline"
+                >
+                  Editar
+                </button>
+              </div>
+            ) : editandoDecisor || !temDecisor ? (
+              <form
+                action={(fd) =>
+                  iniciar(async () => {
+                    setErro(null);
+                    const r = await salvarDecisorAction(lead.id, fd);
+                    if (r.ok) setEditandoDecisor(false);
+                    else setErro(r.erro);
+                  })
+                }
+                className="mt-2 space-y-2"
+              >
+                {!temDecisor && (
+                  <p className="text-xs text-[var(--color-muted)]">
+                    Ainda não identificado. O telefone acima costuma ser o da recepção.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    name="decisorNome"
+                    defaultValue={lead.decisorNome ?? ""}
+                    placeholder="Nome"
+                    className={`${INPUT} min-w-0 flex-1`}
+                  />
+                  <input
+                    name="decisorCargo"
+                    defaultValue={lead.decisorCargo ?? ""}
+                    placeholder="Cargo"
+                    className={`${INPUT} w-28`}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    name="decisorTelefone"
+                    defaultValue={lead.decisorTelefone ?? ""}
+                    placeholder="Telefone direto"
+                    className={`${INPUT} min-w-0 flex-1`}
+                  />
+                  <button disabled={pendente} className={BOTAO_SEC}>Salvar</button>
+                </div>
+              </form>
+            ) : null}
+          </div>
+
+          {/* ── Oportunidade ────────────────────────────────────────────── */}
+          <div className="rounded-xl border border-black/10 bg-[var(--color-surface)] p-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-[var(--color-muted)]">
+              <Target className="size-3.5" /> Oportunidade
+            </p>
+            <p className="mt-1 text-sm font-bold">{ofertaDe(lead)}</p>
+            {lead.motivos.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {lead.motivos.map((m) => (
+                  <span
+                    key={m}
+                    className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[11px] font-semibold"
+                  >
+                    {m}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* ── Próxima ação ────────────────────────────────────────────── */}
           {!encerrado && (
@@ -176,9 +316,7 @@ export function PainelLead({
                   defaultValue={lead.proximaAcaoEm?.slice(0, 10) ?? ""}
                   className={INPUT}
                 />
-                <button disabled={pendente} className={BOTAO_SEC}>
-                  Salvar
-                </button>
+                <button disabled={pendente} className={BOTAO_SEC}>Salvar</button>
               </form>
             </div>
           )}
@@ -187,7 +325,7 @@ export function PainelLead({
           <div className="rounded-xl border border-black/10 p-3">
             <p className="text-sm font-bold">Registrar contato</p>
             <p className="text-xs text-[var(--color-muted)]">
-              O que aconteceu, para onde ele vai e o próximo passo — tudo de uma vez.
+              Por onde falou, o que saiu disso, e o próximo passo — tudo de uma vez.
             </p>
             <form
               action={(fd) =>
@@ -204,30 +342,47 @@ export function PainelLead({
               className="mt-2 space-y-2"
             >
               <div className="flex gap-2">
-                <select name="canal" className={`${INPUT} w-36`} defaultValue="LIGACAO">
+                <select name="canal" className={`${INPUT} w-32`} defaultValue="LIGACAO">
                   {Object.entries(ROTULO_CANAL).map(([v, r]) => (
                     <option key={v} value={v}>{r}</option>
                   ))}
                 </select>
+                {/* Escolher o resultado já move a etapa para o lugar provável —
+                    e a etapa continua editável logo abaixo, para a exceção. */}
                 <select
-                  name="paraStage"
-                  value={stageEscolhido}
-                  onChange={(e) => setStageEscolhido(e.target.value as ProspectStage)}
+                  name="resultado"
+                  defaultValue=""
+                  onChange={(e) => {
+                    const r = RESULTADOS.find((x) => x.valor === e.target.value);
+                    const sugerido = sugestaoValida(lead.stage, r?.sugere ?? null);
+                    if (sugerido) setStageEscolhido(sugerido);
+                  }}
                   className={`${INPUT} min-w-0 flex-1`}
                 >
-                  {TODOS_ESTAGIOS.map((s) => (
-                    <option key={s} value={s}>
-                      {s === lead.stage ? `Continua em ${ROTULO_ESTAGIO[s]}` : `→ ${ROTULO_ESTAGIO[s]}`}
-                    </option>
+                  <option value="">O que aconteceu?</option>
+                  {RESULTADOS.map((r) => (
+                    <option key={r.valor} value={r.valor}>{r.rotulo}</option>
                   ))}
                 </select>
               </div>
 
+              <select
+                name="paraStage"
+                value={stageEscolhido}
+                onChange={(e) => setStageEscolhido(e.target.value as ProspectStage)}
+                className={INPUT}
+              >
+                {TODOS_ESTAGIOS.map((s) => (
+                  <option key={s} value={s}>
+                    {s === lead.stage ? `Continua em ${ROTULO_ESTAGIO[s]}` : `→ ${ROTULO_ESTAGIO[s]}`}
+                  </option>
+                ))}
+              </select>
+
               <textarea
                 name="resumo"
-                required
                 rows={2}
-                placeholder="O que foi dito? Ex.: falei com o dono, agenda no caderno, topou ver a demo"
+                placeholder="Detalhe (opcional): agenda no caderno, pediu para chamar depois das 14h..."
                 className={INPUT}
               />
 
@@ -272,7 +427,7 @@ export function PainelLead({
             </p>
           )}
 
-          {/* ── Observação ──────────────────────────────────────────────── */}
+          {/* ── Anotações ───────────────────────────────────────────────── */}
           <div>
             <p className="text-sm font-bold">Anotações</p>
             <form
@@ -287,7 +442,7 @@ export function PainelLead({
                 name="observacao"
                 defaultValue={lead.observacao ?? ""}
                 rows={3}
-                placeholder="Nome do dono, horário melhor para ligar, contexto..."
+                placeholder="Contexto que não muda: melhor horário, como chegou até ele, concorrente que já usa..."
                 className={INPUT}
               />
               <button disabled={pendente} className={BOTAO_SEC}>Salvar anotação</button>
@@ -302,22 +457,26 @@ export function PainelLead({
             ) : historico.length === 0 ? (
               <p className="mt-2 text-xs text-[var(--color-muted)]">Nenhum contato registrado ainda.</p>
             ) : (
-              <ol className="mt-2 space-y-2 border-l border-black/10 pl-4">
+              <ol className="mt-2 space-y-3 border-l border-black/10 pl-4">
                 {historico.map((i) => (
                   <li key={i.id} className="relative">
                     <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-[var(--color-primary)]" />
+                    <p className="text-[11px] text-[var(--color-muted)]">
+                      {new Date(i.criadoEm).toLocaleString("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </p>
                     <p className="text-xs font-semibold">
                       {ROTULO_CANAL[i.canal]}
+                      {i.resultado && ` · ${ROTULO_RESULTADO[i.resultado]}`}
                       {i.paraStage && (
                         <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] ${COR_ESTAGIO[i.paraStage]}`}>
                           → {ROTULO_ESTAGIO[i.paraStage]}
                         </span>
                       )}
-                      <span className="ml-1 font-normal text-[var(--color-muted)]">
-                        {new Date(i.criadoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-                      </span>
                     </p>
-                    <p className="text-sm">{i.resumo}</p>
+                    {i.resumo && <p className="text-sm">{i.resumo}</p>}
                   </li>
                 ))}
               </ol>
@@ -325,7 +484,8 @@ export function PainelLead({
           </div>
 
           <p className="pb-4 text-[11px] text-[var(--color-muted)]">
-            Na carteira desde {formatarData(lead.contatadoEm)} · {lead.telefone ? "" : "sem telefone"}
+            Na carteira desde {formatarData(lead.contatadoEm)}
+            {lead.telefone ? "" : " · sem telefone"}
           </p>
         </div>
       </div>
