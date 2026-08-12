@@ -36,6 +36,26 @@ export type ResultadoImportacao = { novos: number; atualizados: number; total: n
 /** Estágios que encerram o lead — não têm próxima ação nem entram em atrasados. */
 const ENCERRADOS: ProspectStage[] = ["GANHO", "PERDIDO"];
 
+/**
+ * Descarta os campos vazios de um update.
+ *
+ * Existe porque uma reimportação incompleta não pode destruir dado bom: sem
+ * isto, um CSV sem a coluna de telefone zera os telefones já coletados, e
+ * `avaliacoes: 0` sobrescreve as 783 avaliações de uma barbearia movimentada.
+ * Zero e string vazia aqui significam "a busca não trouxe", não "mudou para
+ * zero" — nenhum estabelecimento real perde todas as avaliações de uma vez.
+ */
+function somenteComValor<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => {
+      if (v === null || v === undefined || v === "") return false;
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === "number") return v > 0;
+      return true;
+    })
+  ) as Partial<T>;
+}
+
 export const prospectService = {
   /**
    * Lista com a ÚLTIMA interação de cada lead.
@@ -95,7 +115,12 @@ export const prospectService = {
         where: { placeId: e.placeId },
         // `stage`, `contatadoEm`, `observacao`, `proximaAcao*` e `motivoPerda`
         // ficam FORA do update de propósito — são seus, não do Google.
-        update: publico,
+        //
+        // E o update só leva o que veio PREENCHIDO: uma varredura interrompida
+        // antes da fase de telefone traz o lead sem número, e mandar esse vazio
+        // apagaria o telefone que já estava lá. Reimportar atualiza; nunca
+        // destrói. Na criação vai tudo, inclusive os vazios.
+        update: somenteComValor(publico),
         create: { placeId: e.placeId, ...publico },
       });
       if (existentes.has(e.placeId)) atualizados++;
