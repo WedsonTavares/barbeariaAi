@@ -1,8 +1,35 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { authenticateAgent } from "@/lib/agent-auth";
-import { parseEvolution, services } from "@barbearia-ai/core";
+import { brPhoneMatchKey, parseEvolution, services } from "@barbearia-ai/core";
 import { sendText } from "@/lib/evolution";
+
+/**
+ * Lista de teste: enquanto ela existir, só estes números recebem resposta
+ * automática. Todo o resto continua chegando no inbox normalmente — a trava é
+ * na RESPOSTA, nunca no registro, senão você perderia o contato do lead.
+ *
+ * Vale só para o tenant nomeado em `PROSPECT_INBOX_TENANT_SLUG`, o seu. Uma
+ * loja cliente jamais é silenciada por uma variável de ambiente da plataforma:
+ * ela tem o próprio controle, por conversa, no painel.
+ *
+ * Vazia (o padrão) = todos passam, exatamente como antes.
+ */
+function iaLiberadaPara(slug: string, phone: string): boolean {
+  const lista = process.env.AI_ALLOWLIST?.trim();
+  if (!lista) return true;
+  if (slug !== process.env.PROSPECT_INBOX_TENANT_SLUG?.trim()) return true;
+
+  // Compara por chave, não por texto: assim tanto faz escrever o número na
+  // variável como 16999998888, (16) 99999-8888 ou 5516999998888.
+  //
+  // Só vírgula, ponto-e-vírgula e quebra de linha separam — espaço NÃO, senão
+  // "(16) 99999-8888" viraria dois pedaços e não casaria com número nenhum.
+  const permitidos = new Set(
+    lista.split(/[,;\n]+/).map((n) => brPhoneMatchKey(n)).filter(Boolean)
+  );
+  return permitidos.has(brPhoneMatchKey(phone));
+}
 
 /**
  * Webhook do Evolution: mensagem recebida no WhatsApp → salva no inbox nativo.
@@ -54,6 +81,13 @@ export async function POST(req: Request) {
   // Só aciona o cérebro (n8n ou bot nativo) se o bot pode responder (respeita tags/handoff).
   after(async () => {
     try {
+      // A lista de teste é checada ANTES de tudo: barrando aqui, nem o n8n nem
+      // o bot nativo são acionados. Um filtro dentro do workflow deixaria o
+      // fallback nativo passar por fora quando o n8n estivesse indisponível.
+      if (!iaLiberadaPara(tenant.slug, phone)) {
+        console.info(`[ia] ${phone} fora da lista de teste — mensagem registrada, sem resposta`);
+        return;
+      }
       if (!(await services.conversationService.botCanReply(tenantId, phone))) return;
 
       if (n8nUrl) {
