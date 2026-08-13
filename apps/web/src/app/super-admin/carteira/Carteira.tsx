@@ -17,6 +17,19 @@ import {
 /** Quantos leads por página na lista. */
 const POR_PAGINA = 50;
 
+/**
+ * Atalhos de filtro da barra.
+ *
+ * São as três perguntas do dia: quem vale a pena atacar, quem já recebeu
+ * mensagem e está calado, e com quem estou conversando agora. As demais
+ * combinações continuam saindo dos gráficos e da busca.
+ */
+const RAPIDOS: { rotulo: string; filtro: { tipo: "prioridade" | "stage"; valor: string } }[] = [
+  { rotulo: "Score 80+", filtro: { tipo: "prioridade", valor: "80" } },
+  { rotulo: "Contatado", filtro: { tipo: "stage", valor: "CONTATADO" } },
+  { rotulo: "Em conversa", filtro: { tipo: "stage", valor: "RESPONDEU" } },
+];
+
 type Filtro =
   | { tipo: "nicho" | "presenca" | "stage" | "motivo"; valor: string; rotulo: string }
   | { tipo: "prioridade" | "atrasados" | "largados"; valor: string; rotulo: string }
@@ -287,13 +300,25 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setFiltro({ tipo: "prioridade", valor: "80", rotulo: "Score 80+" })}
-                className="rounded-full border border-black/10 px-3 py-1 text-xs font-bold hover:bg-[var(--color-surface)]"
-              >
-                Score 80+
-              </button>
+              {/* Atalhos do dia a dia. São alternadores: clicar no que já está
+                  ativo desliga, em vez de obrigar a ir no chip para limpar. */}
+              {RAPIDOS.map((r) => {
+                const ativo = filtro?.tipo === r.filtro.tipo && filtro.valor === r.filtro.valor;
+                return (
+                  <button
+                    key={r.rotulo}
+                    type="button"
+                    onClick={() => setFiltro(ativo ? null : { ...r.filtro, rotulo: r.rotulo })}
+                    className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                      ativo
+                        ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                        : "border-black/10 hover:bg-[var(--color-surface)]"
+                    }`}
+                  >
+                    {r.rotulo}
+                  </button>
+                );
+              })}
               <input
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
