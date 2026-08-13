@@ -44,10 +44,21 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const parsed = parseEvolution(body);
-  // Ignora: mensagens nossas, grupo/canal/status, e o que não é texto nem
-  // mídia que o agente saiba tratar.
-  if (!parsed || parsed.fromMe || parsed.ignorado || !parsed.text) {
+  // Ignora: grupo/canal/status e o que não é texto nem mídia que o agente saiba
+  // tratar.
+  if (!parsed || parsed.ignorado || !parsed.text) {
     return NextResponse.json({ ignored: true });
+  }
+
+  // Mensagem que saiu daqui: ou foi digitada no celular — e aí precisa aparecer
+  // no inbox, senão a conversa fica pela metade — ou é o eco do que o próprio
+  // sistema enviou, que o service reconhece e descarta.
+  //
+  // Sai antes do resto de propósito: responder a si mesmo não aciona o bot, e a
+  // carteira registra quando o LEAD fala, não quando você fala com ele.
+  if (parsed.fromMe) {
+    await services.conversationService.recordFromDevice(tenant.id, parsed.phone, parsed.text);
+    return NextResponse.json({ ok: true, fromMe: true });
   }
 
   await services.conversationService.recordInbound(tenant.id, parsed.phone, parsed.text, parsed.name);
