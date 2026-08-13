@@ -326,6 +326,40 @@ export const conversationService = {
       return convo;
     }),
 
+  /**
+   * Mensagem que SAIU do número da loja e voltou pelo webhook (`fromMe`).
+   *
+   * Cobre o caso mais comum do dia a dia: o dono responde pelo celular, com a
+   * tesoura na mão, e o inbox ficava só com a metade do cliente — quem abrisse
+   * a conversa depois via o cliente respondendo a uma pergunta invisível.
+   *
+   * O que já saiu daqui volta pelo webhook e não pode virar linha nova. O
+   * dedupe de `recordMessage` não basta: ele casa pelo remetente exato, e o eco
+   * de uma resposta do bot chegaria como AGENT contra um registro BOT. Por isso
+   * este olha para os dois e usa janela maior — 8s cobre clique duplo, não a
+   * volta pela rede do WhatsApp.
+   *
+   * Devolve `null` quando reconheceu o eco e não gravou nada.
+   */
+  recordFromDevice: (tenantId: string, phone: string, text: string) =>
+    withTenant(tenantId, async (tx) => {
+      const convo = await tx.conversation.findUnique({
+        where: { tenantId_phone: { tenantId, phone } },
+      });
+      if (convo) {
+        const eco = await tx.message.findFirst({
+          where: {
+            conversationId: convo.id,
+            text,
+            sender: { in: ["BOT", "AGENT"] },
+            createdAt: { gte: new Date(Date.now() - 30_000) },
+          },
+        });
+        if (eco) return null;
+      }
+      return recordMessage(tx, tenantId, { phone, text, sender: "AGENT" });
+    }),
+
   /** Atendente assume a conversa: pausa o bot, marca a tag e move o card. */
   takeOver: (tenantId: string, id: string) =>
     withTenant(tenantId, (tx) => takeOverConversation(tx, id)),
