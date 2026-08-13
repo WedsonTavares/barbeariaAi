@@ -151,7 +151,12 @@ export const prospectService = {
     prisma.$transaction(async (tx) => {
       const atual = await tx.prospectLead.findUniqueOrThrow({
         where: { id: input.leadId },
-        select: { contatadoEm: true, stage: true },
+        select: {
+          contatadoEm: true,
+          stage: true,
+          proximaAcao: true,
+          proximaAcaoEm: true,
+        },
       });
 
       const novoStage = input.paraStage ?? atual.stage;
@@ -179,8 +184,16 @@ export const prospectService = {
           motivoPerda: novoStage === "PERDIDO" ? (input.motivoPerda ?? "OUTRO") : null,
           // Lead encerrado não tem próxima ação — deixá-la viva faria ele
           // aparecer eternamente na lista de atrasados.
-          proximaAcao: encerrou ? null : (input.proximaAcao?.trim() || null),
-          proximaAcaoEm: encerrou ? null : (input.proximaAcaoEm ?? null),
+          proximaAcao: encerrou
+            ? null
+            : input.proximaAcao === undefined
+              ? atual.proximaAcao
+              : (input.proximaAcao?.trim() || null),
+          proximaAcaoEm: encerrou
+            ? null
+            : input.proximaAcaoEm === undefined
+              ? atual.proximaAcaoEm
+              : input.proximaAcaoEm,
         },
       });
     }),
@@ -228,15 +241,14 @@ export const prospectService = {
    *  - MAIS DE UM lead com o mesmo número — aí não dá para saber qual respondeu,
    *    e registrar no errado é pior do que não registrar.
    *
-   * A janela de silêncio existe porque o histórico do lead é resumo comercial,
-   * não log de conversa: dez mensagens seguidas viram um registro só. Mas quando
-   * a resposta MUDA a etapa, grava sempre — mover sem deixar rastro quebraria a
-   * conversão por etapa.
+   * Cada mensagem recebida vira uma linha no histórico para o super admin poder
+   * ler a resposta sem sair da carteira. Ela não muda a etapa sozinha: uma
+   * saudação automática não é uma resposta comercial, e quem classifica isso é a
+   * pessoa que está conduzindo a prospecção.
    */
   registrarRespostaDeWhatsapp: async (
     telefone: string,
-    texto: string,
-    janelaHoras = 6
+    texto: string
   ): Promise<{ leadId: string; nome: string; stage: ProspectStage } | null> => {
     const chave = brPhoneMatchKey(telefone);
     if (!chave) return null;
@@ -255,32 +267,18 @@ export const prospectService = {
     const lead = candidatos[0]!;
     if (ENCERRADOS.includes(lead.stage)) return null;
 
-    // Responder só faz o lead avançar até RESPONDEU. Quem já está em Demo ou
-    // Proposta não regride por ter mandado uma mensagem.
-    const avanca = lead.stage === "NOVO" || lead.stage === "CONTATADO";
+    const trecho = texto.trim().replace(/\s+/g, " ").slice(0, 2_000);
+    if (!trecho) return null;
 
-    if (!avanca) {
-      const ultima = await prisma.prospectInteraction.findFirst({
-        where: { leadId: lead.id },
-        orderBy: { criadoEm: "desc" },
-        select: { criadoEm: true },
-      });
-      const recente =
-        ultima && Date.now() - ultima.criadoEm.getTime() < janelaHoras * 3_600_000;
-      if (recente) return null;
-    }
-
-    const trecho = texto.trim().replace(/\s+/g, " ").slice(0, 140);
     await prospectService.registrarInteracao({
       leadId: lead.id,
       canal: "WHATSAPP",
-      // Resultado fica em branco de propósito: sabemos que respondeu, não com
-      // quem falamos. Preencher um valor aqui falsearia o relatório de canal.
-      resumo: `Respondeu no WhatsApp: ${trecho}`,
-      paraStage: avanca ? "RESPONDEU" : null,
+      // Resultado e etapa ficam em branco de propósito: sabemos que uma mensagem
+      // chegou, mas só a leitura humana distingue pessoa de resposta automática.
+      resumo: `Resposta recebida no WhatsApp: ${trecho}`,
     });
 
-    return { leadId: lead.id, nome: lead.nome, stage: avanca ? "RESPONDEU" : lead.stage };
+    return { leadId: lead.id, nome: lead.nome, stage: lead.stage };
   },
 
   /**
