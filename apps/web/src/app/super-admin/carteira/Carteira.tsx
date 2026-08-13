@@ -1,16 +1,16 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  Upload, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock, HelpCircle,
+  Upload, Download, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock, HelpCircle,
 } from "lucide-react";
 
 import type { ProspectStage } from "@barbearia-ai/core";
 import { importarCsvAction, moverStageAction } from "./actions";
 import { PainelLead } from "./PainelLead";
 import {
-  COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_ESTAGIO, ROTULO_MOTIVO, ROTULO_ORDEM,
-  ROTULO_RESULTADO, diasAte, estaAtrasado, estaLargado, formatarData, ordenar,
-  presencaDe, type LeadView, type Ordem,
+  COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_CANAL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
+  ROTULO_ORDEM, ROTULO_RESULTADO, diasAte, estaAtrasado, estaLargado, formatarData,
+  ordenar, presencaDe, type LeadView, type Ordem,
 } from "./tipos";
 
 /** Quantos leads por página na lista. */
@@ -292,6 +292,15 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                   ))}
                 </select>
               )}
+              <button
+                type="button"
+                onClick={() => baixarCsv(visiveis)}
+                disabled={!visiveis.length}
+                title="Baixa o que está na tela, com filtro e ordem aplicados"
+                className="flex items-center gap-1.5 rounded-xl border border-black/10 px-3 py-1.5 text-sm font-bold hover:bg-[var(--color-surface)] disabled:opacity-40"
+              >
+                <Download className="size-4" /> CSV
+              </button>
               <div className="flex overflow-hidden rounded-xl border border-black/10">
                 {([["lista", LayoutList], ["quadro", Columns3]] as const).map(([m, Icon]) => (
                   <button
@@ -549,6 +558,55 @@ function Quadro({
 }
 
 /* ───────────────────────────── auxiliares ─────────────────────────────── */
+
+/**
+ * Exporta a carteira como planilha.
+ *
+ * Leva o que você TRABALHOU, não só o que veio do Google: etapa, último
+ * resultado, próximo passo, decisor e motivo de perda. Sem isso o arquivo seria
+ * uma cópia do CSV da Prospecção e não serviria para acompanhar nada fora daqui.
+ *
+ * O `place_id` vai na primeira coluna de propósito — é ele que deduplica na
+ * reimportação. Um arquivo sem essa coluna volta como leads novos e apaga seu
+ * histórico de abordagem.
+ */
+function baixarCsv(leads: LeadView[]) {
+  const cab = [
+    "place_id", "nome", "nicho", "etapa", "score", "telefone", "endereco",
+    "nota", "avaliacoes", "presenca_digital", "site", "maps",
+    "decisor", "decisor_cargo", "decisor_telefone",
+    "ultimo_contato_em", "ultimo_contato_canal", "ultimo_contato_resultado", "ultimo_contato_resumo",
+    "proxima_acao", "proxima_acao_em", "dias_ate_acao",
+    "motivo_perda", "na_carteira_desde", "observacao", "por_que_entrou",
+  ];
+
+  const linha = (l: LeadView) => {
+    const u = l.ultimaInteracao;
+    const dias = ENCERRADOS.includes(l.stage) ? null : diasAte(l.proximaAcaoEm);
+    return [
+      l.placeId, l.nome, l.nicho, ROTULO_ESTAGIO[l.stage], l.score, l.telefone ?? "", l.endereco ?? "",
+      l.nota ?? "", l.avaliacoes, presencaDe(l), l.site ?? "", l.maps ?? "",
+      l.decisorNome ?? "", l.decisorCargo ?? "", l.decisorTelefone ?? "",
+      u ? formatarData(u.criadoEm) : "", u ? ROTULO_CANAL[u.canal] : "",
+      u?.resultado ? ROTULO_RESULTADO[u.resultado] : "", u?.resumo ?? "",
+      l.proximaAcao ?? "", l.proximaAcaoEm ? formatarData(l.proximaAcaoEm) : "",
+      dias ?? "", l.motivoPerda ? ROTULO_MOTIVO[l.motivoPerda] : "",
+      formatarData(l.contatadoEm), l.observacao ?? "", l.motivos.join(" · "),
+    ];
+  };
+
+  const escapar = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const corpo = leads.map((l) => linha(l).map(escapar).join(",")).join("\n");
+  // BOM para o Excel abrir a acentuação certa.
+  const blob = new Blob(["﻿" + cab.join(",") + "\n" + corpo], {
+    type: "text/csv;charset=utf-8",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `carteira-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 const BOTAO_PAGINA =
   "rounded-xl border border-black/10 px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface)] disabled:opacity-40";
