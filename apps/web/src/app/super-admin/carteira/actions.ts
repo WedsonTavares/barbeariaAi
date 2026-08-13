@@ -164,8 +164,6 @@ export async function registrarContatoAction(leadId: string, form: FormData): Pr
       resumo,
       paraStage,
       motivoPerda: motivo,
-      proximaAcao: String(form.get("proximaAcao") ?? "") || null,
-      proximaAcaoEm: dataDoInput(form.get("proximaAcaoEm")),
     });
 
     revalidatePath(BASE);

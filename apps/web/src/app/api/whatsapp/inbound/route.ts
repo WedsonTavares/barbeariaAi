@@ -82,7 +82,7 @@ export async function POST(req: Request) {
     after(async () => {
       try {
         const casou = await services.prospectService.registrarRespostaDeWhatsapp(phone, text);
-        if (casou) console.info(`[carteira] ${casou.nome} respondeu → ${casou.stage}`);
+        if (casou) console.info(`[carteira] resposta recebida de ${casou.nome} (etapa ${casou.stage})`);
       } catch (e) {
         console.error("[carteira] espelho da resposta falhou", e);
       }

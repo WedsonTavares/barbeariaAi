@@ -107,7 +107,7 @@ export const RESULTADOS: {
   rotulo: string;
   sugere: ProspectStage | null;
 }[] = [
-  { valor: "NAO_RESPONDEU", rotulo: "Não respondeu", sugere: null },
+  { valor: "NAO_RESPONDEU", rotulo: "Mensagem enviada, aguardando", sugere: "CONTATADO" },
   { valor: "FALEI_FUNCIONARIO", rotulo: "Falei com funcionário", sugere: null },
   { valor: "FALEI_RESPONSAVEL", rotulo: "Falei com o responsável", sugere: "RESPONDEU" },
   { valor: "PEDIU_INFO", rotulo: "Pediu mais informações", sugere: "RESPONDEU" },
@@ -122,6 +122,17 @@ export const RESULTADOS: {
 export const ROTULO_RESULTADO = Object.fromEntries(
   RESULTADOS.map((r) => [r.valor, r.rotulo])
 ) as Record<ProspectResultado, string>;
+
+const PREFIXOS_RESPOSTA_WHATSAPP = [
+  "Resposta recebida no WhatsApp:",
+  "Respondeu no WhatsApp:",
+];
+
+/** Texto de uma resposta espelhada do WhatsApp, incluindo registros antigos. */
+export function respostaWhatsappDe(resumo: string): string | null {
+  const prefixo = PREFIXOS_RESPOSTA_WHATSAPP.find((p) => resumo.startsWith(p));
+  return prefixo ? resumo.slice(prefixo.length).trim() : null;
+}
 
 export const MOTIVOS_PERDA: { valor: ProspectMotivoPerda; rotulo: string }[] = [
   { valor: "NAO_RESPONDEU", rotulo: "Não respondeu" },

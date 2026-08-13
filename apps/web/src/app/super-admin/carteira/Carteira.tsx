@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Upload, Download, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock,
-  HelpCircle, ChevronDown,
+  HelpCircle, ChevronDown, MessageCircle,
 } from "lucide-react";
 
 import type { ProspectStage } from "@barbearia-ai/core";
@@ -11,7 +11,7 @@ import { PainelLead } from "./PainelLead";
 import {
   COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_CANAL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
   ROTULO_ORDEM, ROTULO_RESULTADO, diasAte, estaAtrasado, estaLargado, formatarData,
-  ordenar, presencaDe, type LeadView, type Ordem,
+  ordenar, presencaDe, respostaWhatsappDe, type LeadView, type Ordem,
 } from "./tipos";
 
 /** Quantos leads por página na lista. */
@@ -423,6 +423,9 @@ function Lista({ leads, aoAbrir }: { leads: LeadView[]; aoAbrir: (id: string) =>
           {leads.map((l) => {
             const atrasado = estaAtrasado(l);
             const dias = diasAte(l.proximaAcaoEm);
+            const respostaWhatsapp = l.ultimaInteracao
+              ? respostaWhatsappDe(l.ultimaInteracao.resumo)
+              : null;
             return (
               <tr
                 key={l.id}
@@ -448,13 +451,17 @@ function Lista({ leads, aoAbrir }: { leads: LeadView[]; aoAbrir: (id: string) =>
                 <td className="max-w-[16rem] p-3">
                   {l.ultimaInteracao ? (
                     <>
-                      {l.ultimaInteracao.resultado && (
+                      {respostaWhatsapp ? (
+                        <p className="flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                          <MessageCircle className="size-3" /> Resposta no WhatsApp
+                        </p>
+                      ) : l.ultimaInteracao.resultado && (
                         <p className="text-xs font-semibold">
                           {ROTULO_RESULTADO[l.ultimaInteracao.resultado]}
                         </p>
                       )}
                       <p className="truncate text-xs text-[var(--color-muted)]">
-                        {l.ultimaInteracao.resumo}
+                        {respostaWhatsapp ?? l.ultimaInteracao.resumo}
                       </p>
                       <p className="text-[11px] text-[var(--color-muted)]">
                         {formatarData(l.ultimaInteracao.criadoEm)}
@@ -538,6 +545,9 @@ function Quadro({
             <div className="space-y-2">
               {daColuna.map((l) => {
                 const atrasado = estaAtrasado(l);
+                const respostaWhatsapp = l.ultimaInteracao
+                  ? respostaWhatsappDe(l.ultimaInteracao.resumo)
+                  : null;
                 return (
                   <div
                     key={l.id}
@@ -551,9 +561,16 @@ function Quadro({
                         {l.score} · {l.nicho} · {l.avaliacoes} aval.
                       </p>
                       {l.ultimaInteracao && (
-                        <p className="mt-1 line-clamp-2 text-[11px] text-[var(--color-muted)]">
-                          {l.ultimaInteracao.resumo}
-                        </p>
+                        <div className="mt-1">
+                          {respostaWhatsapp && (
+                            <p className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                              <MessageCircle className="size-3" /> Resposta no WhatsApp
+                            </p>
+                          )}
+                          <p className="line-clamp-2 text-[11px] text-[var(--color-muted)]">
+                            {respostaWhatsapp ?? l.ultimaInteracao.resumo}
+                          </p>
+                        </div>
                       )}
                       {!ENCERRADOS.includes(l.stage) && l.proximaAcaoEm && (
                         <p className={`mt-1 text-[11px] font-semibold ${atrasado ? "text-red-700" : "text-[var(--color-muted)]"}`}>
