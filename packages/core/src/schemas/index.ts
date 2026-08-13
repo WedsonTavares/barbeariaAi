@@ -442,6 +442,45 @@ export const businessHoursInput = z.object({
 });
 export type BusinessHoursInput = z.infer<typeof businessHoursInput>;
 
+const FUNNEL_SYSTEM_COLUMNS = [
+  "IA_ATENDENDO",
+  "SUPORTE_HUMANO",
+  "INTERESSADO",
+  "AGENDADO",
+  "POS_ATENDIMENTO",
+] as const;
+
+const funnelColumnInput = z.object({
+  id: z.string().regex(/^(?:IA_ATENDENDO|SUPORTE_HUMANO|INTERESSADO|AGENDADO|POS_ATENDIMENTO|custom_[a-z0-9_-]{8,64})$/),
+  kind: z.enum(["system", "custom"]),
+  label: z.string().trim().min(1, "Dê um nome à coluna").max(40),
+  visible: z.boolean(),
+}).superRefine((column, ctx) => {
+  const system = (FUNNEL_SYSTEM_COLUMNS as readonly string[]).includes(column.id);
+  if ((system && column.kind !== "system") || (!system && column.kind !== "custom")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Tipo de coluna inválido" });
+  }
+});
+
+export const funnelConfigInput = z.object({
+  version: z.literal(1),
+  columns: z.array(funnelColumnInput).min(5).max(15),
+}).superRefine((config, ctx) => {
+  const ids = config.columns.map((column) => column.id);
+  if (new Set(ids).size !== ids.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Coluna repetida" });
+  }
+  for (const id of FUNNEL_SYSTEM_COLUMNS) {
+    if (!ids.includes(id)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Falta a coluna ${id}` });
+    }
+  }
+  if (!config.columns.some((column) => column.visible)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Deixe ao menos uma coluna visível" });
+  }
+});
+export type FunnelConfigInput = z.infer<typeof funnelConfigInput>;
+
 /**
  * Configurações editáveis pelo painel.
  *
@@ -483,6 +522,7 @@ export const tenantSettingsInput = z.object({
 
   postServiceMessage: optText(500),
   reviewLink: optText(300),
+  funnelConfig: funnelConfigInput.optional(),
 });
 export type TenantSettingsInput = z.infer<typeof tenantSettingsInput>;
 

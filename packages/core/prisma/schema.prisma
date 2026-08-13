@@ -404,6 +404,9 @@ model TenantSettings {
   postServiceMessage String?
   /// Link de avaliação (Google/Instagram) oferecido quando a nota do pós-atendimento é boa.
   reviewLink       String?
+  /// Aparência do funil por empresa: nomes, ordem, visibilidade e colunas
+  /// personalizadas. Não altera os estágios funcionais nem suas automações.
+  funnelConfig     Json?
   logoUrl        String?
   faviconUrl     String?
   colorPrimary   String   @default("#2563EB")
@@ -847,6 +850,9 @@ model Conversation {
   tags          String[] @default([]) // desligar-ia, atendimento-humano, cliente-vip, livres
   botPaused     Boolean  @default(false) // atendente assumiu → bot não responde
   stage         ConversationStage @default(IA_ATENDENDO) // coluna no funil (/admin/funil)
+  /// Coluna personalizada apenas visual. Nulo = usa o `stage` funcional acima.
+  /// Os ids válidos pertencem ao `TenantSettings.funnelConfig` do mesmo tenant.
+  funnelColumnId String?
   notes         String?  // resumo do atendimento escrito pela IA (tool "notas")
   notesAt       DateTime?
   /// Resumo da conversa INTEIRA, gerado sob demanda (botão) ou ao a IA escalar

@@ -4,11 +4,13 @@ import { requireRole, services, type ConversationStage } from "@barbearia-ai/cor
 import { requireTenant } from "@/lib/tenant";
 import { normalizeTag, STAGE_ONLY_TAGS } from "@/lib/tags";
 import { sendPosAtendimentoAutoMessage } from "@/lib/pos-atendimento";
+import { isSystemFunnelColumn, normalizeFunnelConfig } from "@/lib/funnel-config";
 
 /**
- * Arrastar o card muda a etapa. As tags acompanham (ver STAGE_TAG no core):
- * mover pra "Suporte humano" pausa a IA; sair de lá religa. A etapa nunca vem
- * confiável do cliente — validamos contra a lista permitida.
+ * Arrastar para coluna do sistema muda a etapa e mantém os efeitos existentes.
+ * Arrastar para coluna personalizada grava só a posição visual: não toca em
+ * tag, IA, agenda nem mensagem. Todo destino é validado contra a configuração
+ * do tenant; um id inventado no navegador não é aceito.
  *
  * Entrar em POS_ATENDIMENTO dispara a mensagem automática.
  * Só na TRANSIÇÃO (`previousStage !== "POS_ATENDIMENTO"`) — arrastar de novo pra mesma
@@ -19,7 +21,21 @@ import { sendPosAtendimentoAutoMessage } from "@/lib/pos-atendimento";
 export async function moveCardAction(id: string, stage: string) {
   const { tenant, ctx } = await requireTenant();
   requireRole(ctx, ["OWNER", "ADMIN", "STAFF"]);
-  if (!(services.CONVERSATION_STAGES as readonly string[]).includes(stage)) return { ok: false as const };
+  if (!isSystemFunnelColumn(stage)) {
+    const settings = await services.tenantService.getSettings(tenant.id);
+    const custom = normalizeFunnelConfig(settings?.funnelConfig).columns.find(
+      (column) => column.kind === "custom" && column.id === stage
+    );
+    if (!custom) return { ok: false as const };
+
+    await services.conversationService.setFunnelColumn(tenant.id, id, custom.id);
+    revalidatePath("/admin/funil");
+    return { ok: true as const };
+  }
+
+  if (!(services.CONVERSATION_STAGES as readonly string[]).includes(stage)) {
+    return { ok: false as const };
+  }
 
   const updated = await services.conversationService.setStage(tenant.id, id, stage as ConversationStage);
 
