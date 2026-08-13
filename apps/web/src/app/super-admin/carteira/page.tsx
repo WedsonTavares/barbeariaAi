@@ -27,6 +27,7 @@ export default async function CarteiraPage() {
     const ultima = l.interacoes[0];
     return {
       id: l.id,
+      placeId: l.placeId,
       nome: l.nome,
       nicho: l.nicho,
       telefone: l.telefone,

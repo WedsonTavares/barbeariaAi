@@ -7,6 +7,8 @@ import type {
 
 export type LeadView = {
   id: string;
+  /** Id do Google. Só serve ao export — é ele que deduplica na reimportação. */
+  placeId: string;
   nome: string;
   nicho: string;
   telefone: string | null;
