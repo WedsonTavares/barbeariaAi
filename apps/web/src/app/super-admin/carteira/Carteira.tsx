@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  Upload, Download, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock, HelpCircle,
+  Upload, Download, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock,
+  HelpCircle, ChevronDown,
 } from "lucide-react";
 
 import type { ProspectStage } from "@barbearia-ai/core";
@@ -25,6 +26,7 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
   const [filtro, setFiltro] = useState<Filtro>(null);
   const [busca, setBusca] = useState("");
   const [modo, setModo] = useState<"lista" | "quadro">("lista");
+  const [mostrarAnalise, setMostrarAnalise] = useState(true);
   const [ordem, setOrdem] = useState<Ordem>("urgencia");
   const [pagina, setPagina] = useState(0);
   const [aberto, setAberto] = useState<string | null>(null);
@@ -106,16 +108,12 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
   }
 
   return (
-    <div className="mt-6 space-y-4">
-      {/* ── Importar ───────────────────────────────────────────────────── */}
-      <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-bold">Importar da Prospecção</h2>
-          <p className="text-xs text-[var(--color-muted)]">
-            Suba o CSV exportado. Reimportar a mesma região atualiza nota e avaliações e{" "}
-            <strong>preserva</strong> estágio, histórico e anotações.
-          </p>
-        </div>
+    <div className="mt-6 space-y-3">
+      {/* ── Ações ──────────────────────────────────────────────────────────
+          Importar e baixar são raros no dia a dia — viram dois botões
+          discretos no topo em vez de um bloco com parágrafo ocupando a
+          primeira dobra, que é onde o trabalho de verdade deveria estar. */}
+      <div className="flex flex-wrap items-center gap-2">
         <input
           ref={inputArquivo}
           type="file"
@@ -127,11 +125,32 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
           type="button"
           disabled={pendente}
           onClick={() => inputArquivo.current?.click()}
-          className="flex items-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+          title="Reimportar a mesma região atualiza nota e avaliações e preserva estágio, histórico e anotações"
+          className={BOTAO_ACAO}
         >
-          <Upload className="size-4" /> {pendente ? "Processando..." : "Escolher CSV"}
+          <Upload className="size-4" /> {pendente ? "Processando..." : "Importar CSV"}
         </button>
-      </section>
+        <button
+          type="button"
+          onClick={() => baixarCsv(visiveis)}
+          disabled={!visiveis.length}
+          title="Baixa o que está na tela, com filtro e ordem aplicados"
+          className={BOTAO_ACAO}
+        >
+          <Download className="size-4" /> Baixar CSV
+        </button>
+        {total > 0 && (
+          <button
+            type="button"
+            onClick={() => setMostrarAnalise((v) => !v)}
+            aria-expanded={mostrarAnalise}
+            className={`${BOTAO_ACAO} ml-auto`}
+          >
+            <ChevronDown className={`size-4 transition-transform ${mostrarAnalise ? "" : "-rotate-90"}`} />
+            Análise
+          </button>
+        )}
+      </div>
 
       {msg && (
         <p
@@ -154,7 +173,7 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
       ) : (
         <>
           {/* ── O que fazer hoje ────────────────────────────────────────── */}
-          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             <Tile
               rotulo="Atrasados"
               valor={atrasados.length}
@@ -192,61 +211,62 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
             </button>
           )}
 
-          {/* ── Funil ───────────────────────────────────────────────────── */}
-          <section className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
-            <h2 className="text-sm font-bold">Funil</h2>
-            <p className="text-xs text-[var(--color-muted)]">
-              Cumulativo. A queda entre duas etapas mostra onde o processo trava.
-            </p>
-            <div className="mt-3 space-y-1.5">
-              {funil.map((f, i) => {
-                const anterior = i > 0 ? funil[i - 1]!.qtd : null;
-                const taxa = anterior && anterior > 0 ? Math.round((f.qtd / anterior) * 100) : null;
-                return (
-                  <Barra
-                    key={f.stage}
-                    rotulo={f.rotulo}
-                    valor={f.qtd}
-                    maximo={funil[0]!.qtd}
-                    sufixo={taxa !== null ? `${taxa}% da etapa anterior` : undefined}
-                    aoClicar={() => setFiltro({ tipo: "stage", valor: f.stage, rotulo: f.rotulo })}
-                  />
-                );
-              })}
-            </div>
-          </section>
+          {/* ── Análise ─────────────────────────────────────────────────────
+              Lado a lado em vez de empilhado: a altura passa a ser a do maior
+              gráfico (6 barras) e não a soma dos três (13), o que tira a lista
+              de trabalho de baixo de meia tela de gráfico. Recolhível porque
+              isto se olha de vez em quando, não a cada lead. */}
+          {mostrarAnalise && (
+            <section className="grid gap-3 lg:grid-cols-3">
+              <Painel titulo="Funil" nota="Cumulativo. A queda mostra onde trava.">
+                {funil.map((f, i) => {
+                  const anterior = i > 0 ? funil[i - 1]!.qtd : null;
+                  const taxa = anterior && anterior > 0 ? Math.round((f.qtd / anterior) * 100) : null;
+                  return (
+                    <Barra
+                      key={f.stage}
+                      rotulo={f.rotulo}
+                      valor={f.qtd}
+                      maximo={funil[0]!.qtd}
+                      sufixo={taxa !== null ? `${taxa}%` : undefined}
+                      aoClicar={() => setFiltro({ tipo: "stage", valor: f.stage, rotulo: f.rotulo })}
+                    />
+                  );
+                })}
+              </Painel>
 
-          {/* ── Distribuições ───────────────────────────────────────────── */}
-          <section className="grid gap-3 lg:grid-cols-2">
-            <Painel titulo="Por nicho" nota="A abordagem muda conforme o negócio.">
-              {porNicho.map(([nicho, qtd]) => (
-                <Barra key={nicho} rotulo={nicho} valor={qtd} maximo={porNicho[0]![1]}
-                  aoClicar={() => setFiltro({ tipo: "nicho", valor: nicho, rotulo: nicho })} />
-              ))}
-            </Painel>
+              <Painel titulo="Por nicho" nota="A abordagem muda conforme o negócio.">
+                {porNicho.map(([nicho, qtd]) => (
+                  <Barra key={nicho} rotulo={nicho} valor={qtd} maximo={porNicho[0]![1]}
+                    aoClicar={() => setFiltro({ tipo: "nicho", valor: nicho, rotulo: nicho })} />
+                ))}
+              </Painel>
 
-            <Painel titulo="Presença digital" nota="Sem site é presença + automação. Com site, só automação.">
-              {porPresenca.map(([p, qtd]) => (
-                <Barra key={p} rotulo={p} valor={qtd} maximo={porPresenca[0]![1]}
-                  aoClicar={() => setFiltro({ tipo: "presenca", valor: p, rotulo: p })} />
-              ))}
-            </Painel>
-          </section>
+              <Painel titulo="Presença digital" nota="Sem site é presença + automação.">
+                {porPresenca.map(([p, qtd]) => (
+                  <Barra key={p} rotulo={p} valor={qtd} maximo={porPresenca[0]![1]}
+                    aoClicar={() => setFiltro({ tipo: "presenca", valor: p, rotulo: p })} />
+                ))}
+              </Painel>
 
-          {/* Só aparece quando há perda registrada — gráfico vazio não informa. */}
-          {porMotivo.length > 0 && (
-            <Painel
-              titulo="Por que você perde"
-              nota="Muito 'não vê necessidade' é problema de comunicação de valor; muito 'preço' é posicionamento."
-            >
-              {porMotivo.map(([m, qtd]) => (
-                <Barra key={m} rotulo={m} valor={qtd} maximo={porMotivo[0]![1]}
-                  aoClicar={() => {
-                    const chave = Object.entries(ROTULO_MOTIVO).find(([, r]) => r === m)?.[0];
-                    if (chave) setFiltro({ tipo: "motivo", valor: chave, rotulo: m });
-                  }} />
-              ))}
-            </Painel>
+              {/* Só aparece quando há perda registrada — gráfico vazio não informa. */}
+              {porMotivo.length > 0 && (
+                <div className="lg:col-span-3">
+                  <Painel
+                    titulo="Por que você perde"
+                    nota="Muito 'não vê necessidade' é comunicação de valor; muito 'preço' é posicionamento."
+                  >
+                    {porMotivo.map(([m, qtd]) => (
+                      <Barra key={m} rotulo={m} valor={qtd} maximo={porMotivo[0]![1]}
+                        aoClicar={() => {
+                          const chave = Object.entries(ROTULO_MOTIVO).find(([, r]) => r === m)?.[0];
+                          if (chave) setFiltro({ tipo: "motivo", valor: chave, rotulo: m });
+                        }} />
+                    ))}
+                  </Painel>
+                </div>
+              )}
+            </section>
           )}
 
           {/* ── Lista / Quadro ──────────────────────────────────────────── */}
@@ -292,15 +312,6 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                   ))}
                 </select>
               )}
-              <button
-                type="button"
-                onClick={() => baixarCsv(visiveis)}
-                disabled={!visiveis.length}
-                title="Baixa o que está na tela, com filtro e ordem aplicados"
-                className="flex items-center gap-1.5 rounded-xl border border-black/10 px-3 py-1.5 text-sm font-bold hover:bg-[var(--color-surface)] disabled:opacity-40"
-              >
-                <Download className="size-4" /> CSV
-              </button>
               <div className="flex overflow-hidden rounded-xl border border-black/10">
                 {([["lista", LayoutList], ["quadro", Columns3]] as const).map(([m, Icon]) => (
                   <button
@@ -439,10 +450,16 @@ function Lista({ leads, aoAbrir }: { leads: LeadView[]; aoAbrir: (id: string) =>
                         {dias !== null && (dias < 0 ? ` · atrasada ${Math.abs(dias)}d` : dias === 0 ? " · hoje" : "")}
                       </p>
                     </>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
-                      <Clock className="size-3" /> sem próxima ação
+                  ) : estaLargado(l) ? (
+                    /* O alerta é só para lead JÁ trabalhado que ficou sem plano.
+                       Em quem nunca foi abordado isso é o estado natural, e
+                       pintar 177 linhas de laranja ensina o olho a ignorar o
+                       aviso exatamente quando ele significa alguma coisa. */
+                    <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-amber-700">
+                      <Clock className="size-3 shrink-0" /> sem próxima ação
                     </span>
+                  ) : (
+                    <span className="text-xs text-[var(--color-muted)]">—</span>
                   )}
                 </td>
                 <td className="p-3">
@@ -608,6 +625,9 @@ function baixarCsv(leads: LeadView[]) {
   URL.revokeObjectURL(a.href);
 }
 
+const BOTAO_ACAO =
+  "flex items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 py-1.5 text-sm font-bold shadow-sm hover:bg-[var(--color-surface)] disabled:opacity-40";
+
 const BOTAO_PAGINA =
   "rounded-xl border border-black/10 px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface)] disabled:opacity-40";
 
@@ -619,10 +639,10 @@ function agrupar<T>(itens: T[], chave: (i: T) => string): [string, number][] {
 
 function Painel({ titulo, nota, children }: { titulo: string; nota: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm sm:p-5">
+    <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
       <h2 className="text-sm font-bold">{titulo}</h2>
-      <p className="text-xs text-[var(--color-muted)]">{nota}</p>
-      <div className="mt-3 space-y-1.5">{children}</div>
+      <p className="text-[11px] leading-snug text-[var(--color-muted)]">{nota}</p>
+      <div className="mt-2.5 space-y-1">{children}</div>
     </div>
   );
 }
@@ -645,17 +665,21 @@ function Barra({
       type="button"
       onClick={aoClicar}
       title={sufixo ? `${rotulo}: ${valor} — ${sufixo}` : `${rotulo}: ${valor}`}
-      className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 text-left hover:bg-[var(--color-surface)]"
+      className="flex w-full items-center gap-2 rounded-lg px-1 py-0.5 text-left hover:bg-[var(--color-surface)]"
     >
-      <span className="w-32 shrink-0 truncate text-xs font-semibold">{rotulo}</span>
+      {/* Larguras enxutas: em três colunas o rótulo largo de antes não deixava
+          espaço para a própria barra. O título completo fica no `title`. */}
+      <span className="w-28 shrink-0 truncate text-xs font-semibold">{rotulo}</span>
       <span className="h-4 min-w-0 flex-1 overflow-hidden rounded-sm bg-[var(--color-surface)]">
         <span
           className="block h-full rounded-r-sm bg-[var(--color-primary)]"
           style={{ width: `${Math.max(pct, valor > 0 ? 2 : 0)}%` }}
         />
       </span>
-      <span className="w-10 shrink-0 text-right text-xs font-extrabold tabular-nums">{valor}</span>
-      {sufixo && <span className="hidden w-40 shrink-0 text-[11px] text-[var(--color-muted)] sm:block">{sufixo}</span>}
+      <span className="w-8 shrink-0 text-right text-xs font-extrabold tabular-nums">{valor}</span>
+      {sufixo && (
+        <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-[var(--color-muted)]">{sufixo}</span>
+      )}
     </button>
   );
 }
@@ -669,15 +693,19 @@ function Tile({
   return (
     <Tag
       {...(aoClicar ? { type: "button" as const, onClick: aoClicar } : {})}
-      className={`rounded-2xl border p-4 text-left shadow-sm ${
+      className={`flex items-baseline gap-2 rounded-xl border px-3 py-2 text-left shadow-sm ${
         alerta ? "border-red-200 bg-red-50" : "border-black/5 bg-white"
       } ${aoClicar ? "hover:border-[var(--color-primary)]" : ""}`}
     >
-      <p className={`text-[11px] font-bold uppercase tracking-wide ${alerta ? "text-red-700" : "text-[var(--color-muted)]"}`}>
-        {rotulo}
-      </p>
-      <p className={`mt-1 text-2xl font-extrabold tabular-nums ${alerta ? "text-red-700" : ""}`}>{valor}</p>
-      <p className={`mt-0.5 truncate text-xs ${alerta ? "text-red-800" : "text-[var(--color-muted)]"}`}>{detalhe}</p>
+      {/* Número e rótulo na mesma linha: quatro tiles altos empurravam a lista
+          para baixo sem dizer mais do que dizem assim. */}
+      <span className={`text-xl font-extrabold tabular-nums ${alerta ? "text-red-700" : ""}`}>{valor}</span>
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-xs font-bold ${alerta ? "text-red-700" : ""}`}>{rotulo}</span>
+        <span className={`block truncate text-[11px] ${alerta ? "text-red-800" : "text-[var(--color-muted)]"}`}>
+          {detalhe}
+        </span>
+      </span>
     </Tag>
   );
 }
