@@ -7,6 +7,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { WhatsappConnect } from "./WhatsappConnect";
 import { SettingsSection, Field, TextArea, ColorField } from "./SettingsSection";
 import { connectServiceAccountCalendarAction, disconnectGoogleCalendarAction } from "./actions";
+import { FunnelSettingsEditor } from "./FunnelSettingsEditor";
+import { normalizeFunnelConfig } from "@/lib/funnel-config";
 
 export const dynamic = "force-dynamic";
 
@@ -244,6 +246,14 @@ export default async function ConfiguracoesPage({
           defaultValue={settings?.cancellationPolicy}
           placeholder="Cancelamentos com até 24h de antecedência podem ser remarcados."
         />
+      </SettingsSection>
+
+      <SettingsSection
+        id="funil"
+        title="Funil"
+        description="Escolha os nomes, a ordem e as colunas exibidas no quadro."
+      >
+        <FunnelSettingsEditor initial={normalizeFunnelConfig(settings?.funnelConfig)} />
       </SettingsSection>
 
       {/* ─────────── Site público ─────────── */}

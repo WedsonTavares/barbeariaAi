@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Tag, Search, Phone, MessageSquare, FileText, Bot, Pause, CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, Plus, X, RotateCw } from "lucide-react";
 import { TAG_CATALOG, STAGE_ONLY_TAGS, normalizeTag } from "@/lib/tags";
 import { moveCardAction, toggleTagFromFunilAction } from "./actions";
+import type { FunnelColumnView } from "@/lib/funnel-config";
 
 export type Card = {
   id: string;
@@ -18,18 +19,6 @@ export type Card = {
   notes?: string | null;
 };
 export type Board = Record<string, Card[]>;
-
-/** Colunas do funil: cada uma com sua cor de cabeçalho (bloco pastel). */
-const COLUMNS = [
-  { key: "IA_ATENDENDO",   label: "IA Atendendo",     head: "bg-sky-100 text-sky-900",         hint: "Dinha conduzindo" },
-  { key: "SUPORTE_HUMANO", label: "Precisa de Suporte", head: "bg-rose-100 text-rose-900",     hint: "IA pausada" },
-  { key: "INTERESSADO",    label: "Interessado",      head: "bg-orange-100 text-orange-900",   hint: "Quis, não fechou" },
-  { key: "AGENDADO",       label: "Agendado",         head: "bg-emerald-100 text-emerald-900", hint: "Atendimento marcado" },
-  { key: "POS_ATENDIMENTO",      label: "Pós-atendimento",        head: "bg-violet-100 text-violet-900",   hint: "Acompanhamento" },
-] as const;
-
-type ColumnKey = (typeof COLUMNS)[number]["key"];
-
 
 const fmtActivity = (iso: string) => {
   const elapsed = Math.max(0, Date.now() - new Date(iso).getTime());
@@ -84,7 +73,15 @@ const fmtAppointment = (iso: string) => {
   const minute = timeParts.find((part) => part.type === "minute")?.value ?? "";
   return `${day} ${month} · ${minute === "00" ? `${hour}h` : `${hour}:${minute}`}`;
 };
-export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: string }) {
+export function FunilBoard({
+  initial,
+  tenantId,
+  columns,
+}: {
+  initial: Board;
+  tenantId: string;
+  columns: FunnelColumnView[];
+}) {
   const [board, setBoard] = useState<Board>(initial);
   // `useState(initial)` só lê o valor inicial UMA vez — sem isto, um
   // `router.refresh()` (ex.: o botão de recarregar) buscaria dado novo no
@@ -111,16 +108,16 @@ export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: st
       if (!stored || typeof stored !== "object" || Array.isArray(stored)) return;
 
       const restored: Record<string, boolean> = {};
-      for (const column of COLUMNS) {
-        if ((stored as Record<string, unknown>)[column.key] === true) restored[column.key] = true;
+      for (const column of columns) {
+        if ((stored as Record<string, unknown>)[column.id] === true) restored[column.id] = true;
       }
       setCollapsed(restored);
     } catch {
       // A preferência é opcional; o funil continua utilizável sem storage.
     }
-  }, [collapsedStorageKey]);
+  }, [collapsedStorageKey, columns]);
 
-  function setColumnCollapsed(column: ColumnKey, value: boolean) {
+  function setColumnCollapsed(column: string, value: boolean) {
     setCollapsed((current) => {
       const next = { ...current };
       if (value) next[column] = true;
@@ -251,18 +248,18 @@ export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: st
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {COLUMNS.map((col) => {
-          const cards = filtered[col.key] ?? [];
-          const all = board[col.key] ?? [];
+        {columns.map((col) => {
+          const cards = filtered[col.id] ?? [];
+          const all = board[col.id] ?? [];
           const unread = all.reduce((n, c) => n + c.unread, 0);
-          const isOver = over === col.key;
-          const isCollapsed = collapsed[col.key];
+          const isOver = over === col.id;
+          const isCollapsed = collapsed[col.id];
 
           if (isCollapsed) {
             return (
-              <section key={col.key} className="flex w-12 shrink-0 flex-col">
+              <section key={col.id} className="flex w-12 shrink-0 flex-col">
                 <button
-                  onClick={() => setColumnCollapsed(col.key, false)}
+                  onClick={() => setColumnCollapsed(col.id, false)}
                   className={`flex h-full min-h-32 flex-col items-center gap-2 rounded-lg px-2 py-3 ${col.head}`}
                   aria-label={`Expandir ${col.label}`}
                 >
@@ -276,10 +273,10 @@ export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: st
 
           return (
             <section
-              key={col.key}
-              onDragOver={(e) => { e.preventDefault(); setOver(col.key); }}
-              onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
-              onDrop={() => drop(col.key)}
+              key={col.id}
+              onDragOver={(e) => { e.preventDefault(); setOver(col.id); }}
+              onDragLeave={() => setOver((o) => (o === col.id ? null : o))}
+              onDrop={() => drop(col.id)}
               // w-64 e não w-72: com 288px as quatro colunas somavam 1188px e
               // não cabiam nos 1168px úteis de uma tela 1440 — a coluna
               // Pós-atendimento ficava cortada na borda. Com 256px cabem inteiras a
@@ -292,7 +289,7 @@ export function FunilBoard({ initial, tenantId }: { initial: Board; tenantId: st
                 <div className="flex items-center gap-2">
                   <h2 className="truncate text-sm font-bold">{col.label}</h2>
                   <button
-                    onClick={() => setColumnCollapsed(col.key, true)}
+                    onClick={() => setColumnCollapsed(col.id, true)}
                     aria-label={`Recolher ${col.label}`}
                     className="ml-auto rounded p-0.5 hover:bg-black/10"
                   >

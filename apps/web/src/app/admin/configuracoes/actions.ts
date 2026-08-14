@@ -160,7 +160,17 @@ export async function saveSettings(formData: FormData) {
   for (const [key, value] of formData.entries()) {
     if (key === "secao" || key === "name" || key === "days") continue;
     if (key.startsWith("businessHours") || key.startsWith("serviceWindow")) continue;
-    if (typeof value === "string") raw[key] = value;
+    if (typeof value === "string") {
+      if (key === "funnelConfig") {
+        try {
+          raw[key] = JSON.parse(value);
+        } catch {
+          raw[key] = value;
+        }
+      } else {
+        raw[key] = value;
+      }
+    }
   }
   // O expediente chega como campos soltos (start/end + checkboxes) e vira JSON.
   // A janela de montagem viaja no mesmo JSON: `businessHours` é Json livre, e
@@ -200,6 +210,7 @@ export async function saveSettings(formData: FormData) {
   }
 
   revalidatePath(BASE);
+  if (secao === "funil") revalidatePath("/admin/funil");
   revalidatePath("/"); // o site público lê nome, cores e textos daqui
   redirect(`${dest}${secao ? `#${secao}` : ""}`);
 }

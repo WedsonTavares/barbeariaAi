@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { LayoutDashboard, Scissors, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Braces, Images, Menu, X, UserRoundCog } from "lucide-react";
+import { LayoutDashboard, Scissors, Users, CalendarRange, Wallet, MessagesSquare, KanbanSquare, Settings, Images, Menu, X, UserRoundCog } from "lucide-react";
 
 const GROUPS = [
   {
@@ -27,18 +27,6 @@ const GROUPS = [
   },
 ];
 
-/**
- * Ferramentas de operador, não do cliente. A documentação da API tem "Try it
- * out" que dispara requisição REAL em produção — não é algo para uma barbearia
- * encontrar no menu por acidente.
- */
-const GRUPOS_SUPER_ADMIN = [
-  {
-    label: "Plataforma",
-    links: [{ href: "/admin/api-docs", label: "API", icon: Braces }],
-  },
-];
-
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -51,15 +39,9 @@ function isActive(pathname: string, href: string) {
  * de que dava pra rolar — quem abria no telefone achava que o painel tinha
  * três telas. O botão mostra tudo de uma vez, com os agrupamentos.
  */
-export function AdminSidebar({
-  tenantName,
-  superAdmin = false,
-}: {
-  tenantName: string;
-  superAdmin?: boolean;
-}) {
+export function AdminSidebar({ tenantName }: { tenantName: string }) {
   const pathname = usePathname() ?? "";
-  const grupos = superAdmin ? [...GROUPS, ...GRUPOS_SUPER_ADMIN] : GROUPS;
+  const grupos = GROUPS;
   const todosOsLinks = grupos.flatMap((g) => g.links);
   const [aberto, setAberto] = useState(false);
   const painelRef = useRef<HTMLDivElement>(null);

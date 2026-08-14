@@ -124,7 +124,7 @@ async function takeOverConversation(tx: Tx, id: string) {
   const tags = [...new Set([...kept, "atendimento-humano"])];
   return tx.conversation.update({
     where: { id },
-    data: { botPaused: true, tags, stage: "SUPORTE_HUMANO" },
+    data: { botPaused: true, tags, stage: "SUPORTE_HUMANO", funnelColumnId: null },
   });
 }
 
@@ -164,6 +164,7 @@ export async function markConversationScheduled(
     data: {
       customerId: input.customerId,
       stage: "AGENDADO",
+      funnelColumnId: null,
       tags,
       botPaused: tags.some((tag) => BOT_SILENCING_TAGS.includes(tag)),
       notes: input.note.slice(0, 2000),
@@ -321,7 +322,10 @@ export const conversationService = {
       const convo = await recordMessage(tx, tenantId, { phone, text, sender });
       // Conversa antiga que ficou no estágio legado volta pro fluxo normal.
       if (convo.stage === "NOVO_LEAD") {
-        await tx.conversation.update({ where: { id: convo.id }, data: { stage: "IA_ATENDENDO" } });
+        await tx.conversation.update({
+          where: { id: convo.id },
+          data: { stage: "IA_ATENDENDO", funnelColumnId: null },
+        });
       }
       return convo;
     }),
@@ -381,6 +385,7 @@ export const conversationService = {
           botPaused: tags.some((tag) => BOT_SILENCING_TAGS.includes(tag)),
           tags,
           stage,
+          ...(stage !== c.stage ? { funnelColumnId: null } : {}),
         },
       });
     }),
@@ -458,7 +463,12 @@ export const conversationService = {
       const botPaused = tags.some((t) => BOT_SILENCING_TAGS.includes(t));
       const updated = await tx.conversation.update({
         where: { id },
-        data: { tags, stage, botPaused },
+        data: {
+          tags,
+          stage,
+          botPaused,
+          ...(stage !== c.stage ? { funnelColumnId: null } : {}),
+        },
         select: { id: true, phone: true, tags: true, stage: true, botPaused: true },
       });
       return { ...updated, previousStage: c.stage };
@@ -601,6 +611,7 @@ export const conversationService = {
         select: {
           id: true, phone: true, contactName: true, customerId: true, tags: true,
           botPaused: true, unread: true, lastMessageAt: true, stage: true, notes: true,
+          funnelColumnId: true,
         },
       });
       const active = rows.length ? await loadActiveAppointments(tx, now) : NO_ACTIVE_APPOINTMENTS;
@@ -652,9 +663,28 @@ export const conversationService = {
       const tags = tag ? [...kept, tag] : kept;
       const updated = await tx.conversation.update({
         where: { id },
-        data: { stage, tags, botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)) },
+        data: {
+          stage,
+          tags,
+          funnelColumnId: null,
+          botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)),
+        },
       });
       return { ...updated, previousStage: c.stage };
+    }),
+
+  /**
+   * Move o card para uma coluna criada pelo tenant sem tocar em etapa, tags ou
+   * estado da IA. A action valida se o id pertence à configuração desta empresa.
+   */
+  setFunnelColumn: (tenantId: string, id: string, columnId: string) =>
+    withTenant(tenantId, async (tx) => {
+      if (!/^custom_[a-z0-9_-]{8,64}$/.test(columnId)) throw new Error("Coluna visual inválida");
+      await lockConversation(tx, id);
+      return tx.conversation.update({
+        where: { id },
+        data: { funnelColumnId: columnId },
+      });
     }),
 
   /**
@@ -677,7 +707,12 @@ export const conversationService = {
       const tags = [...new Set([...kept, STAGE_TAG.INTERESSADO!])];
       return tx.conversation.update({
         where: { id: c.id },
-        data: { stage: "INTERESSADO", tags, botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)) },
+        data: {
+          stage: "INTERESSADO",
+          tags,
+          funnelColumnId: null,
+          botPaused: tags.some((t) => BOT_SILENCING_TAGS.includes(t)),
+        },
       });
     }),
 
@@ -770,6 +805,13 @@ export const conversationService = {
 
       const stage = needsStageFix ? "IA_ATENDENDO" : c.stage;
       const finalTags = needsStageFix ? tags.filter((t) => !ALL_STAGE_TAGS.includes(t)) : tags;
-      await tx.conversation.update({ where: { id: c.id }, data: { tags: finalTags, stage } });
+      await tx.conversation.update({
+        where: { id: c.id },
+        data: {
+          tags: finalTags,
+          stage,
+          ...(needsStageFix ? { funnelColumnId: null } : {}),
+        },
+      });
     }),
 };

@@ -1,24 +1,39 @@
 import { requireTenant } from "@/lib/tenant";
 import { services } from "@barbearia-ai/core";
 import { FunilBoard, type Board } from "./FunilBoard";
+import { funnelColumnViews } from "@/lib/funnel-config";
 
 export const dynamic = "force-dynamic";
 
 export default async function FunilPage() {
   const { tenant } = await requireTenant();
-  const grouped = await services.conversationService.board(tenant.id);
-
-  // Datas viram string pra atravessar a fronteira server → client component.
-  const initial: Board = Object.fromEntries(
-    Object.entries(grouped).map(([stage, cards]) => [
-      stage,
-      cards.map((c) => ({
-        ...c,
-        lastMessageAt: c.lastMessageAt.toISOString(),
-        activeAppointmentAt: c.activeAppointmentAt?.toISOString() ?? null,
-      })),
-    ])
+  const [grouped, settings] = await Promise.all([
+    services.conversationService.board(tenant.id),
+    services.tenantService.getSettings(tenant.id),
+  ]);
+  const columns = funnelColumnViews(settings?.funnelConfig);
+  const customIds = new Set(
+    columns.filter((column) => column.kind === "custom").map((column) => column.id)
   );
+
+  // O estágio funcional continua vindo do core. A coluna customizada só muda
+  // o agrupamento visual; agendamento ativo sempre prevalece para não esconder
+  // um compromisso real numa coluna criada pelo usuário.
+  const initial: Board = Object.fromEntries(columns.map((column) => [column.id, []]));
+  for (const [stage, cards] of Object.entries(grouped)) {
+    for (const card of cards) {
+      const target = card.activeAppointmentAt
+        ? "AGENDADO"
+        : card.funnelColumnId && customIds.has(card.funnelColumnId)
+          ? card.funnelColumnId
+          : stage;
+      (initial[target] ??= []).push({
+        ...card,
+        lastMessageAt: card.lastMessageAt.toISOString(),
+        activeAppointmentAt: card.activeAppointmentAt?.toISOString() ?? null,
+      });
+    }
+  }
   const total = Object.values(initial).reduce((n, cards) => n + cards.length, 0);
 
   return (
@@ -31,7 +46,11 @@ export default async function FunilPage() {
           </p>
         </>
       ) : (
-        <FunilBoard initial={initial} tenantId={tenant.id} />
+        <FunilBoard
+          initial={initial}
+          tenantId={tenant.id}
+          columns={columns.filter((column) => column.visible)}
+        />
       )}
     </div>
   );

@@ -5,14 +5,18 @@ export const metadata = { title: "API do agente" };
 export const dynamic = "force-dynamic";
 
 /**
- * Documentação viva das rotas que o agente de IA chama. Fica sob /admin de
- * propósito: o "Try it out" dispara requisição de verdade, contra o tenant
- * desta aba.
+ * Documentação viva das rotas que o agente de IA chama.
  *
- * SUPER-ADMIN apenas. É ferramenta de integração, não de negócio: quem toca
- * nela é quem liga o produto no Evolution e no n8n. Um profissional com papel
- * STAFF chegava aqui pela URL e encontrava um botão que cria e cancela
- * agendamento de cliente real em produção.
+ * Vive sob /super-admin porque é ferramenta de plataforma, não de negócio:
+ * quem toca nela é quem liga o produto no Evolution e no n8n, nunca a dona da
+ * barbearia. Antes ficava em /admin — protegida, mas no meio das telas do
+ * cliente, o que só convidava a uma condicional esquecida no futuro.
+ *
+ * Continua usando `requireTenant`: o "Try it out" dispara requisição DE VERDADE
+ * contra o tenant do host desta aba, então a página precisa saber qual é.
+ *
+ * A checagem de super admin fica aqui mesmo com o layout já checando — layout
+ * no Next é composição, não fronteira de segurança.
  */
 export default async function ApiDocsPage() {
   const { ctx } = await requireTenant();
