@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar, Briefcase } from "lucide-react";
+import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar, Briefcase, Braces } from "lucide-react";
 
 const GRUPOS = [
   {
@@ -20,6 +20,15 @@ const GRUPOS = [
     ],
   },
   {
+    label: "Integração",
+    links: [{ href: "/super-admin/api-docs", label: "API do agente", icon: Braces, exato: false }],
+  },
+  {
+    /**
+     * Volta para o painel operacional da loja DESTE host — é o caminho para o
+     * inbox, a agenda e as conversas, que continuam morando lá. Sem ele, sair
+     * do super admin só digitando a URL na mão.
+     */
     label: "Atalhos",
     links: [{ href: "/admin/dashboard", label: "Painel da loja", icon: LayoutDashboard, exato: false }],
   },
