@@ -28,7 +28,8 @@ const SEGREDO_ENTRADA = obrigatorio("HERMES_SECRET");
 /** Segredo entre Hermes → ferramentas do app. Pode ser o mesmo, melhor que não. */
 const SEGREDO_FERRAMENTAS = process.env.HERMES_TOOLS_SECRET?.trim() || SEGREDO_ENTRADA;
 const API_BASE = obrigatorio("HERMES_API_BASE");
-const CHAVE_ANTHROPIC = obrigatorio("ANTHROPIC_API_KEY");
+/** Chave do OpenRouter. Fica só aqui — o Next nunca a vê. */
+const CHAVE_MODELO = obrigatorio("OPENROUTER_API_KEY");
 
 function obrigatorio(nome: string): string {
   const v = process.env[nome]?.trim();
@@ -118,7 +119,7 @@ const servidor = createServer(async (req, res) => {
     const r = await responder(pergunta, perfil, {
       apiBase: API_BASE,
       segredoFerramentas: SEGREDO_FERRAMENTAS,
-      chaveAnthropic: CHAVE_ANTHROPIC,
+      chaveModelo: CHAVE_MODELO,
       requestId,
     });
     console.info(
