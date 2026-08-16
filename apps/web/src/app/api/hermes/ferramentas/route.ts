@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { services } from "@barbearia-ai/core";
+import { customerPhoneKey, phoneDigits, services } from "@barbearia-ai/core";
 import { conferir } from "@/lib/hermes-assinatura";
 import { flags } from "@/lib/flags";
 
@@ -29,6 +29,10 @@ const limiteDe = (args: Record<string, unknown>, padrao: number, teto = 50) => {
   const n = Number(args.limite);
   return Number.isFinite(n) && n > 0 ? Math.min(Math.trunc(n), teto) : padrao;
 };
+
+/** Celular BR: DDD + 9 + 8 dígitos. Fixo não recebe WhatsApp. */
+const ehCelular = (telefone: string | null) =>
+  telefone ? /^[1-9][1-9]9\d{8}$/.test(customerPhoneKey(phoneDigits(telefone))) : false;
 
 const DIA = 86_400_000;
 const diasAte = (d: Date | null) => {
@@ -73,6 +77,11 @@ const FERRAMENTAS: Record<string, Ferramenta> = {
         nota: l.nota ? Number(l.nota) : null,
         temSite: Boolean(l.site),
         telefone: l.telefone,
+        // Sem isto o modelo recomenda abordar por WhatsApp um número fixo, que
+        // não recebe mensagem — aconteceu no primeiro teste. Um quarto dos
+        // leads é fixo, então o dado muda a recomendação de verdade.
+        ehCelular: ehCelular(l.telefone),
+        canalPossivel: ehCelular(l.telefone) ? "WhatsApp ou ligação" : "só ligação",
         porQue: l.motivos,
       }));
   },

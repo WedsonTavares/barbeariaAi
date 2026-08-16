@@ -12,8 +12,17 @@ import { ferramentasDoPerfil, type Perfil } from "./perfis.js";
  * a chave do Supabase. Cada um só tem o que precisa.
  */
 
-/** Modelo capaz de usar ferramentas. Trocável por env sem tocar no código. */
-const MODELO = process.env.HERMES_MODEL?.trim() || "anthropic/claude-3.5-sonnet";
+/**
+ * Modelo padrão. Trocável por env sem tocar no código nem redeployar.
+ *
+ * `gpt-4o-mini` por ser barato o bastante para perguntar à vontade. Em troca é
+ * menos criterioso: num teste real recomendou abordar por WhatsApp um número
+ * fixo, coisa que um modelo maior notou sozinho. As ferramentas passaram a
+ * entregar o dado mastigado (`ehCelular`, `canalPossivel`) justamente para
+ * reduzir essa diferença — mas para análise mais fina, vale trocar por
+ * `anthropic/claude-sonnet-5`.
+ */
+const MODELO = process.env.HERMES_MODEL?.trim() || "openai/gpt-4o-mini";
 const BASE = process.env.HERMES_MODEL_BASE?.trim() || "https://openrouter.ai/api/v1";
 const MAX_VOLTAS = 6;
 
