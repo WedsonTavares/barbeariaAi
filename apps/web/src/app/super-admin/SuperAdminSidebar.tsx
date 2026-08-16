@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar, Briefcase, Braces } from "lucide-react";
+import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar, Briefcase, Braces, Globe } from "lucide-react";
 
 const GRUPOS = [
   {
@@ -52,11 +52,24 @@ function isActive(pathname: string, href: string, exato: boolean) {
  * comum — um lista as telas de UMA loja, o outro administra TODAS. Compartilhar
  * o componente exigiria um monte de condicional pra ganhar nada.
  */
-export function SuperAdminSidebar() {
+export function SuperAdminSidebar({ apify = false }: { apify?: boolean }) {
   const pathname = usePathname() ?? "";
   const [aberto, setAberto] = useState(false);
   const painelRef = useRef<HTMLDivElement>(null);
-  const todosOsLinks = GRUPOS.flatMap((g) => g.links);
+
+  /**
+   * A Apify entra como item extra no grupo que já existe, sem reordenar nada.
+   * Com a flag desligada o menu fica idêntico ao de antes — a extensão não
+   * anuncia a própria existência.
+   */
+  const grupos = apify
+    ? GRUPOS.map((g) =>
+        g.label === "Crescimento"
+          ? { ...g, links: [...g.links, { href: "/super-admin/apify", label: "Apify", icon: Globe, exato: false }] }
+          : g
+      )
+    : GRUPOS;
+  const todosOsLinks = grupos.flatMap((g) => g.links);
   const atual = todosOsLinks.find((l) => isActive(pathname, l.href, l.exato));
 
   // Navegou: fecha. Sem isso o painel fica por cima da tela nova.
@@ -99,7 +112,7 @@ export function SuperAdminSidebar() {
 
   const navegacao = (
     <nav className="flex flex-col" aria-label="Menu da plataforma">
-      {GRUPOS.map((grupo) => (
+      {grupos.map((grupo) => (
         <div key={grupo.label} className="mt-4 flex flex-col gap-1 first:mt-1">
           <span className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
             {grupo.label}
