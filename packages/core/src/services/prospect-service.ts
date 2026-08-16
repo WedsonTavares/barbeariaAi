@@ -45,6 +45,37 @@ const ENCERRADOS: ProspectStage[] = ["GANHO", "PERDIDO"];
  * Zero e string vazia aqui significam "a busca não trouxe", não "mudou para
  * zero" — nenhum estabelecimento real perde todas as avaliações de uma vez.
  */
+/**
+ * Domínio de um site, sem `www` nem caminho.
+ *
+ * Rede social não conta: dezenas de barbearias diferentes têm o "site" no
+ * instagram.com, e casar por aí uniria negócios que não têm nada a ver.
+ */
+const REDES = /^(instagram|facebook|linktr|linktree|wa|beacons|api\.whatsapp|m\.facebook|l\.instagram)\./;
+function dominioDe(site: string | null | undefined): string | null {
+  if (!site) return null;
+  try {
+    const host = new URL(site.startsWith("http") ? site : `https://${site}`).hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
+    return REDES.test(host) ? null : host;
+  } catch {
+    return null;
+  }
+}
+
+/** Nome + cidade, achatados para comparação. O sinal mais fraco dos três. */
+function nomeMaisCidade(nome: string, endereco: string | null | undefined): string | null {
+  const limpo = (s: string) =>
+    s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const n = limpo(nome);
+  if (!n) return null;
+  // Do endereço interessa só a cidade — rua e número mudam sem o negócio mudar.
+  const partes = (endereco ?? "").split(",").map((p) => limpo(p)).filter(Boolean);
+  const cidade = partes.length >= 2 ? partes[partes.length - 2] : partes[partes.length - 1];
+  return cidade ? `${n}|${cidade}` : null;
+}
+
 function somenteComValor<T extends Record<string, unknown>>(obj: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => {
@@ -85,6 +116,72 @@ export const prospectService = {
       select: { placeId: true },
     });
     return new Set(achados.map((a) => a.placeId));
+  },
+
+  /**
+   * Duplicata por QUALQUER critério estável, não só pelo id da fonte.
+   *
+   * O `placeId` resolve o caso fácil — mesma fonte, mesma empresa. Mas a mesma
+   * barbearia aparece com id diferente quando vem de outra fonte, quando o
+   * Google refaz a ficha, ou quando ela troca de endereço. Aí sobram três
+   * sinais, em ordem de confiança:
+   *
+   *  - telefone: quase nunca dá falso positivo, e é a chave que a operação usa;
+   *  - domínio do site: duas fichas com o mesmo site são o mesmo negócio;
+   *  - nome + cidade: o mais fraco, por isso exige os dois juntos.
+   *
+   * Devolve o MOTIVO junto para a tela poder dizer por que considerou repetido
+   * — "já existe" sem explicação vira desconfiança e leva a importar de novo.
+   */
+  encontrarDuplicatas: async (
+    candidatos: { placeId: string; telefone?: string | null; site?: string | null; nome: string; endereco?: string | null }[]
+  ): Promise<Map<string, { motivo: string; nome: string }>> => {
+    const achados = new Map<string, { motivo: string; nome: string }>();
+    if (!candidatos.length) return achados;
+
+    const existentes = await prisma.prospectLead.findMany({
+      select: { placeId: true, nome: true, telefone: true, site: true, endereco: true },
+    });
+
+    const porPlace = new Map(existentes.map((e) => [e.placeId, e]));
+    const porTelefone = new Map<string, (typeof existentes)[number]>();
+    const porDominio = new Map<string, (typeof existentes)[number]>();
+    const porNomeCidade = new Map<string, (typeof existentes)[number]>();
+
+    for (const e of existentes) {
+      const t = e.telefone ? brPhoneMatchKey(e.telefone) : null;
+      if (t) porTelefone.set(t, e);
+      const d = dominioDe(e.site);
+      if (d) porDominio.set(d, e);
+      const nc = nomeMaisCidade(e.nome, e.endereco);
+      if (nc) porNomeCidade.set(nc, e);
+    }
+
+    for (const c of candidatos) {
+      const place = porPlace.get(c.placeId);
+      if (place) {
+        achados.set(c.placeId, { motivo: "mesma ficha do Google", nome: place.nome });
+        continue;
+      }
+      const t = c.telefone ? brPhoneMatchKey(c.telefone) : null;
+      const porTel = t ? porTelefone.get(t) : undefined;
+      if (porTel) {
+        achados.set(c.placeId, { motivo: "mesmo telefone", nome: porTel.nome });
+        continue;
+      }
+      const d = dominioDe(c.site);
+      const porDom = d ? porDominio.get(d) : undefined;
+      if (porDom) {
+        achados.set(c.placeId, { motivo: "mesmo site", nome: porDom.nome });
+        continue;
+      }
+      const nc = nomeMaisCidade(c.nome, c.endereco);
+      const porNome = nc ? porNomeCidade.get(nc) : undefined;
+      if (porNome) {
+        achados.set(c.placeId, { motivo: "mesmo nome e cidade", nome: porNome.nome });
+      }
+    }
+    return achados;
   },
 
   /** Histórico completo — só quando o painel do lead é aberto. */

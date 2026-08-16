@@ -19,8 +19,19 @@ async function guarda() {
   requireSuperAdmin(await getAuthContext());
 }
 
-/** Lead do preview: o mesmo `Lead` da Prospecção + se já está na Carteira. */
-export type Achado = Lead & { jaExiste: boolean };
+/**
+ * Lead do preview: o mesmo `Lead` da Prospecção + o resultado da deduplicação.
+ *
+ * `duplicataDe` carrega o motivo e o nome de quem já está na carteira. Dizer só
+ * "já existe" faz duvidar do sistema; dizer "mesmo telefone que Barbearia X"
+ * deixa você confirmar em dois segundos.
+ */
+export type Achado = Lead & {
+  jaExiste: boolean;
+  duplicataDe: { motivo: string; nome: string } | null;
+  /** De onde veio. A Carteira mistura fontes; saber a origem muda a leitura. */
+  origem: "Apify";
+};
 
 export type ResultadoBusca =
   | { ok: true; leads: Achado[]; novos: number }
@@ -49,13 +60,27 @@ export async function buscarAction(busca: BuscaApify): Promise<ResultadoBusca> {
     const brutos = await buscarLocais(busca);
     if (!brutos.length) return { ok: true, leads: [], novos: 0 };
 
-    // Deduplicação contra a Carteira, por placeId — o mesmo identificador que
-    // o importador usa. Só marca; não descarta, porque ver que a empresa já
-    // está na carteira (e em que pé) também é informação útil.
-    const existentes = await services.prospectService.existentes(brutos.map((b) => b.id));
+    const candidatos = brutos.map(paraLead);
 
-    const leads: Achado[] = brutos
-      .map((b) => ({ ...paraLead(b), jaExiste: existentes.has(b.id) }))
+    // Deduplicação por quatro critérios, não só pelo id da fonte: a mesma
+    // empresa reaparece com ficha nova, e importar de novo criaria um segundo
+    // registro sem o histórico de abordagem do primeiro. Só marca; não
+    // descarta, porque ver que já está na carteira também é informação.
+    const duplicatas = await services.prospectService.encontrarDuplicatas(
+      candidatos.map((c) => ({
+        placeId: c.id,
+        telefone: c.telefone,
+        site: c.site,
+        nome: c.nome,
+        endereco: c.endereco,
+      }))
+    );
+
+    const leads: Achado[] = candidatos
+      .map((c) => {
+        const dup = duplicatas.get(c.id) ?? null;
+        return { ...c, jaExiste: dup !== null, duplicataDe: dup, origem: "Apify" as const };
+      })
       .sort((a, b) => b.score - a.score);
 
     return { ok: true, leads, novos: leads.filter((l) => !l.jaExiste).length };
