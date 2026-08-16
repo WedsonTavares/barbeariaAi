@@ -83,6 +83,7 @@ type ItemApify = {
   permanentlyClosed?: boolean;
   temporarilyClosed?: boolean;
   openingHours?: { day?: string; hours?: string }[];
+  location?: { lat?: number; lng?: number };
 };
 
 /**
@@ -114,6 +115,10 @@ export function paraLugarBruto(item: ItemApify): LugarBruto | null {
     internationalPhoneNumber: item.phoneUnformatted ?? undefined,
     websiteUri: item.website ?? undefined,
     googleMapsUri: item.url ?? undefined,
+    location:
+      item.location?.lat != null && item.location?.lng != null
+        ? { latitude: item.location.lat, longitude: item.location.lng }
+        : undefined,
     regularOpeningHours: item.openingHours?.length
       ? { weekdayDescriptions: item.openingHours.map((h) => `${h.day ?? ""} ${h.hours ?? ""}`.trim()) }
       : undefined,

@@ -30,6 +30,8 @@ const MASK_BUSCA = [
   "places.businessStatus",
   "places.primaryType",
   "places.types",
+  // Essentials (barato): coordenada para o filtro de proximidade.
+  "places.location",
 ].join(",");
 
 /**
@@ -62,6 +64,7 @@ export type LugarBruto = {
   websiteUri?: string;
   googleMapsUri?: string;
   regularOpeningHours?: { weekdayDescriptions?: string[] };
+  location?: { latitude?: number; longitude?: number };
 };
 
 export type Nicho = "Barbearia" | "Salão de beleza" | "Manicure" | "Estética/Spa" | "Outro";
@@ -101,6 +104,9 @@ export type Lead = {
   avaliacoes: number;
   score: number;
   motivos: string[];
+  /** Para o filtro de proximidade. Ausente em fonte que não devolve. */
+  lat: number | null;
+  lng: number | null;
 };
 
 export class PlacesConfigError extends Error {}
@@ -242,5 +248,7 @@ export function paraLead(p: LugarBruto): Lead {
     avaliacoes: p.userRatingCount ?? 0,
     score,
     motivos,
+    lat: p.location?.latitude ?? null,
+    lng: p.location?.longitude ?? null,
   };
 }

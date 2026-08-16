@@ -278,6 +278,11 @@ model ProspectLead {
   endereco   String?
   nota       Decimal? @db.Decimal(2, 1)
   avaliacoes Int      @default(0)
+  /// Coordenadas do estabelecimento. Servem à visita presencial: com elas dá
+  /// para perguntar "quem está perto de onde eu estou agora". Anuláveis porque
+  /// leads importados antes disto não têm — a tela cai no bairro nesses casos.
+  lat        Float?
+  lng        Float?
   /// Score do buscador na hora da importação. Guardado para você comparar depois
   /// o que ele previu com o que de fato converteu.
   score      Int      @default(0)

@@ -18,6 +18,8 @@ export type LeadView = {
   nota: number | null;
   avaliacoes: number;
   score: number;
+  lat: number | null;
+  lng: number | null;
   motivos: string[];
   stage: ProspectStage;
   contatadoEm: string | null;
@@ -161,6 +163,64 @@ export function presencaDe(l: LeadView): "Sem site" | "Só rede social" | "Site 
     ? "Só rede social"
     : "Site próprio";
 }
+
+/**
+ * Bairro, tirado do endereço que já está gravado.
+ *
+ * O Google devolve sempre no mesmo formato:
+ *   "R. Monte Alegre, 175 - Vila Monte Alegre, Ribeirão Preto - SP, 14051-260, Brasil"
+ *                           ^^^^^^^^^^^^^^^^^ é isto
+ *
+ * Serve para visita presencial: estando num bairro, dá para ver quem mais está
+ * por perto e resolver a pé. Não é proximidade de verdade — para raio em metros
+ * seria preciso guardar latitude e longitude, que não temos e exigiria
+ * migration. Bairro resolve o caso real sem tocar no banco: acerta em 311 dos
+ * 314 leads da carteira.
+ */
+export function bairroDe(l: LeadView): string | null {
+  if (!l.endereco) return null;
+  const m = l.endereco.match(/\s-\s([^,]+),\s*[^,]+\s-\s[A-Z]{2}/);
+  return m?.[1]?.trim() || null;
+}
+
+/* ────────────────────────── Proximidade ───────────────────────────────── */
+
+export type Ponto = { lat: number; lng: number };
+
+/**
+ * Distância em linha reta, em metros (fórmula de Haversine).
+ *
+ * Linha reta subestima o caminho a pé — a rua dá voltas. Na prática não
+ * atrapalha: para decidir "dá para ir andando", a ordem dos vizinhos é a mesma,
+ * e um raio de 1 km cobre com folga o que na rua dá 1,3 km.
+ */
+export function distanciaM(a: Ponto, b: Ponto): number {
+  const R = 6_371_000;
+  const rad = (g: number) => (g * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+/** Distância do lead até um ponto. `null` quando o lead não tem coordenada. */
+export function distanciaAte(l: LeadView, de: Ponto | null): number | null {
+  if (!de || l.lat == null || l.lng == null) return null;
+  return distanciaM(de, { lat: l.lat, lng: l.lng });
+}
+
+export const formatarDistancia = (m: number) =>
+  m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+
+/** Raios oferecidos na tela. A pé, de carro, e "a cidade toda". */
+export const RAIOS = [
+  { m: 500, rotulo: "500 m" },
+  { m: 1000, rotulo: "1 km" },
+  { m: 2000, rotulo: "2 km" },
+  { m: 5000, rotulo: "5 km" },
+] as const;
 
 const DIA = 86_400_000;
 

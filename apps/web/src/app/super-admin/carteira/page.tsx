@@ -37,6 +37,8 @@ export default async function CarteiraPage() {
       nota: l.nota ? Number(l.nota) : null,
       avaliacoes: l.avaliacoes,
       score: l.score,
+      lat: l.lat,
+      lng: l.lng,
       motivos: l.motivos,
       stage: l.stage,
       contatadoEm: l.contatadoEm?.toISOString() ?? null,
