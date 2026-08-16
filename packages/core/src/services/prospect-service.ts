@@ -48,17 +48,24 @@ const ENCERRADOS: ProspectStage[] = ["GANHO", "PERDIDO"];
 /**
  * Domínio de um site, sem `www` nem caminho.
  *
- * Rede social não conta: dezenas de barbearias diferentes têm o "site" no
- * instagram.com, e casar por aí uniria negócios que não têm nada a ver.
+ * Domínio COMPARTILHADO não identifica ninguém. Dezenas de barbearias têm o
+ * "site" no instagram.com — e o mesmo vale para as plataformas de agendamento:
+ * duas barbearias diferentes aparecem ambas em `chat.inbarberapp.com`, cada uma
+ * num caminho seu. Casar por aí uniria negócios que não têm nada a ver, e foi
+ * exatamente o que aconteceu numa busca real (Black Style virou "duplicata" da
+ * Passolongo só por usarem o mesmo fornecedor).
+ *
+ * Só domínio próprio conta como identidade.
  */
-const REDES = /^(instagram|facebook|linktr|linktree|wa|beacons|api\.whatsapp|m\.facebook|l\.instagram)\./;
+const COMPARTILHADOS =
+  /^(instagram|facebook|linktr|linktree|wa|beacons|api\.whatsapp|m\.facebook|l\.instagram|booksy|trinks|inbarberapp|chat\.inbarberapp|appbarber|sites\.appbarber|barberapp|salonsoft|agendeonline\.salonsoft|agendei|belasy|linkbio|bio\.link|taplink)\./;
 function dominioDe(site: string | null | undefined): string | null {
   if (!site) return null;
   try {
     const host = new URL(site.startsWith("http") ? site : `https://${site}`).hostname
       .toLowerCase()
       .replace(/^www\./, "");
-    return REDES.test(host) ? null : host;
+    return COMPARTILHADOS.test(host) ? null : host;
   } catch {
     return null;
   }
