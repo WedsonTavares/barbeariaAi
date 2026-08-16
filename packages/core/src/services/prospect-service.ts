@@ -29,6 +29,8 @@ export type ProspectEntrada = {
   avaliacoes?: number;
   score?: number;
   motivos?: string[];
+  lat?: number | null;
+  lng?: number | null;
 };
 
 export type ResultadoImportacao = { novos: number; atualizados: number; total: number };
@@ -191,6 +193,17 @@ export const prospectService = {
     return achados;
   },
 
+  /** Leads sem coordenada, para o preenchimento em lote. */
+  semCoordenada: (limite: number) =>
+    prisma.prospectLead.findMany({
+      where: { lat: null },
+      select: { id: true, placeId: true },
+      take: limite,
+    }),
+
+  setCoordenada: (id: string, lat: number, lng: number) =>
+    prisma.prospectLead.update({ where: { id }, data: { lat, lng } }),
+
   /** Histórico completo — só quando o painel do lead é aberto. */
   historico: (leadId: string) =>
     prisma.prospectInteraction.findMany({
@@ -231,6 +244,8 @@ export const prospectService = {
         avaliacoes: e.avaliacoes ?? 0,
         score: e.score ?? 0,
         motivos: e.motivos ?? [],
+        lat: e.lat ?? null,
+        lng: e.lng ?? null,
       };
       await prisma.prospectLead.upsert({
         where: { placeId: e.placeId },

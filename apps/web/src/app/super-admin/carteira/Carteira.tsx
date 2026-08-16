@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Upload, Download, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock,
-  HelpCircle, ChevronDown, MessageCircle,
+  HelpCircle, ChevronDown, MessageCircle, MapPin, LoaderCircle,
 } from "lucide-react";
 
 import type { ProspectStage } from "@barbearia-ai/core";
@@ -10,8 +10,9 @@ import { importarCsvAction, moverStageAction } from "./actions";
 import { PainelLead } from "./PainelLead";
 import {
   COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_CANAL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
-  ROTULO_ORDEM, ROTULO_RESULTADO, diasAte, estaAtrasado, estaLargado, formatarData,
-  ordenar, presencaDe, respostaWhatsappDe, type LeadView, type Ordem,
+  ROTULO_ORDEM, ROTULO_RESULTADO, RAIOS, bairroDe, diasAte, distanciaAte, estaAtrasado,
+  estaLargado, formatarData, formatarDistancia, ordenar, presencaDe, respostaWhatsappDe,
+  type LeadView, type Ordem, type Ponto,
 } from "./tipos";
 
 /** Quantos leads por página na lista. */
@@ -31,7 +32,7 @@ const RAPIDOS: { rotulo: string; filtro: { tipo: "prioridade" | "stage"; valor: 
 ];
 
 type Filtro =
-  | { tipo: "nicho" | "presenca" | "stage" | "motivo"; valor: string; rotulo: string }
+  | { tipo: "nicho" | "presenca" | "stage" | "motivo" | "bairro"; valor: string; rotulo: string }
   | { tipo: "prioridade" | "atrasados" | "largados"; valor: string; rotulo: string }
   | null;
 
@@ -42,6 +43,10 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
   const [mostrarAnalise, setMostrarAnalise] = useState(true);
   const [ordem, setOrdem] = useState<Ordem>("urgencia");
   const [pagina, setPagina] = useState(0);
+  /** Onde você está agora. Só existe depois de você autorizar o navegador. */
+  const [aqui, setAqui] = useState<Ponto | null>(null);
+  const [raio, setRaio] = useState(1000);
+  const [localizando, setLocalizando] = useState(false);
   const [aberto, setAberto] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
   const [pendente, iniciar] = useTransition();
@@ -57,17 +62,32 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
         case "presenca": return presencaDe(l) === filtro.valor;
         case "stage": return l.stage === filtro.valor;
         case "motivo": return l.motivoPerda === filtro.valor;
+        case "bairro": return bairroDe(l) === filtro.valor;
         case "prioridade": return l.score >= 80;
         case "atrasados": return estaAtrasado(l);
         case "largados": return estaLargado(l);
       }
     });
-    return ordenar(filtrados, ordem);
-  }, [leads, filtro, busca, ordem]);
+    // Proximidade é filtro à parte: combina com qualquer outro. Estando no
+    // bairro, dá para ver "quem está a 1 km E ainda não foi abordado".
+    const perto = aqui
+      ? filtrados.filter((l) => {
+          const d = distanciaAte(l, aqui);
+          return d !== null && d <= raio;
+        })
+      : filtrados;
+    // Perto de mim ordena por distância: o critério passa a ser o deslocamento.
+    if (aqui) {
+      return [...perto].sort(
+        (a, b) => (distanciaAte(a, aqui) ?? Infinity) - (distanciaAte(b, aqui) ?? Infinity)
+      );
+    }
+    return ordenar(perto, ordem);
+  }, [leads, filtro, busca, ordem, aqui, raio]);
 
   // Filtrar ou reordenar com a página 3 aberta mostraria um pedaço do meio de um
   // conjunto que o usuário acabou de trocar. Qualquer mudança volta para o começo.
-  useEffect(() => setPagina(0), [filtro, busca, ordem]);
+  useEffect(() => setPagina(0), [filtro, busca, ordem, aqui, raio]);
 
   const paginas = Math.max(1, Math.ceil(visiveis.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, paginas - 1);
@@ -87,6 +107,12 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
   const hoje = leads.filter((l) => !ENCERRADOS.includes(l.stage) && diasAte(l.proximaAcaoEm) === 0);
 
   const porNicho = agrupar(leads, (l) => l.nicho);
+  // Só bairro com 2+ leads: ir até um bairro para visitar UMA barbearia não
+  // compensa o deslocamento, e a lista ficaria com 90 linhas de ruído.
+  const porBairro = agrupar(
+    leads.filter((l) => bairroDe(l)),
+    (l) => bairroDe(l)!
+  ).filter(([, n]) => n >= 2);
   const porPresenca = agrupar(leads, presencaDe);
   const perdidos = leads.filter((l) => l.motivoPerda);
   const porMotivo = agrupar(perdidos, (l) => ROTULO_MOTIVO[l.motivoPerda!]);
@@ -111,6 +137,33 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
         if (inputArquivo.current) inputArquivo.current.value = "";
       });
     reader.readAsText(file, "utf-8");
+  }
+
+  /**
+   * Pede a posição ao navegador.
+   *
+   * Exige HTTPS e permissão explícita — a coordenada nunca sai do navegador,
+   * não é gravada nem enviada ao servidor. O filtro roda todo no cliente.
+   */
+  function localizar() {
+    if (!navigator.geolocation) {
+      return setMsg({ ok: false, texto: "Este navegador não informa localização." });
+    }
+    setLocalizando(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setAqui({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocalizando(false);
+      },
+      () => {
+        setLocalizando(false);
+        setMsg({
+          ok: false,
+          texto: "Não consegui a localização. Autorize o acesso no navegador e tente de novo.",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 }
+    );
   }
 
   function mover(id: string, stage: ProspectStage) {
@@ -152,6 +205,30 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
         >
           <Download className="size-4" /> Baixar CSV
         </button>
+        {total > 0 && (
+          <button
+            type="button"
+            onClick={aqui ? () => setAqui(null) : localizar}
+            disabled={localizando}
+            title={aqui ? "Voltar à lista completa" : "Mostra quem está por perto, para visita presencial"}
+            className={`${BOTAO_ACAO} ${aqui ? "border-[var(--color-primary)] bg-blue-50 text-[var(--color-primary)]" : ""}`}
+          >
+            {localizando ? <LoaderCircle className="size-4 animate-spin" /> : <MapPin className="size-4" />}
+            {localizando ? "Localizando..." : aqui ? "Perto de mim ✕" : "Perto de mim"}
+          </button>
+        )}
+        {aqui && (
+          <select
+            value={raio}
+            onChange={(e) => setRaio(Number(e.target.value))}
+            aria-label="Raio"
+            className="rounded-xl border border-black/10 bg-white px-2 py-1.5 text-sm font-bold shadow-sm"
+          >
+            {RAIOS.map((r) => (
+              <option key={r.m} value={r.m}>{r.rotulo}</option>
+            ))}
+          </select>
+        )}
         {total > 0 && (
           <button
             type="button"
@@ -262,6 +339,23 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                 ))}
               </Painel>
 
+              {/* Bairro é a única noção de proximidade que o endereço permite
+                  sem guardar coordenada. Resolve o caso de verdade: estando na
+                  região, quem mais dá para visitar a pé no mesmo dia. */}
+              {porBairro.length > 0 && (
+                <div className="lg:col-span-3">
+                  <Painel
+                    titulo="Onde ir"
+                    nota="Bairros com mais de um lead — visita presencial rende quando dá para andar entre eles."
+                  >
+                    {porBairro.slice(0, 10).map(([b, qtd]) => (
+                      <Barra key={b} rotulo={b} valor={qtd} maximo={porBairro[0]![1]}
+                        aoClicar={() => setFiltro({ tipo: "bairro", valor: b, rotulo: b })} />
+                    ))}
+                  </Painel>
+                </div>
+              )}
+
               {/* Só aparece quando há perda registrada — gráfico vazio não informa. */}
               {porMotivo.length > 0 && (
                 <div className="lg:col-span-3">
@@ -356,7 +450,7 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
 
             {modo === "lista" ? (
               <>
-                <Lista leads={daPagina} aoAbrir={setAberto} />
+                <Lista leads={daPagina} aoAbrir={setAberto} aqui={aqui} />
                 {paginas > 1 && (
                   <div className="flex items-center justify-between gap-3 border-t border-black/5 p-3">
                     <p className="text-xs text-[var(--color-muted)]">
@@ -403,7 +497,15 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
 
 /* ────────────────────────────── Lista ─────────────────────────────────── */
 
-function Lista({ leads, aoAbrir }: { leads: LeadView[]; aoAbrir: (id: string) => void }) {
+function Lista({
+  leads,
+  aoAbrir,
+  aqui = null,
+}: {
+  leads: LeadView[];
+  aoAbrir: (id: string) => void;
+  aqui?: Ponto | null;
+}) {
   if (!leads.length) {
     return <p className="p-6 text-center text-sm text-[var(--color-muted)]">Nada neste filtro.</p>;
   }
@@ -441,6 +543,14 @@ function Lista({ leads, aoAbrir }: { leads: LeadView[]; aoAbrir: (id: string) =>
                   <p className="font-semibold">{l.nome}</p>
                   <p className="text-xs text-[var(--color-muted)]">
                     {l.nicho} · {l.avaliacoes} aval. · {presencaDe(l)}
+                    {(() => {
+                      const d = distanciaAte(l, aqui);
+                      return d === null ? null : (
+                        <span className="ml-1 font-bold text-[var(--color-primary)]">
+                          · {formatarDistancia(d)} daqui
+                        </span>
+                      );
+                    })()}
                   </p>
                   {l.telefone && (
                     <span className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)]">
@@ -631,7 +741,7 @@ function Quadro({
  */
 function baixarCsv(leads: LeadView[]) {
   const cab = [
-    "place_id", "nome", "nicho", "etapa", "score", "telefone", "endereco",
+    "place_id", "nome", "nicho", "etapa", "score", "telefone", "bairro", "endereco",
     "nota", "avaliacoes", "presenca_digital", "site", "maps",
     "decisor", "decisor_cargo", "decisor_telefone",
     "ultimo_contato_em", "ultimo_contato_canal", "ultimo_contato_resultado", "ultimo_contato_resumo",
@@ -643,7 +753,8 @@ function baixarCsv(leads: LeadView[]) {
     const u = l.ultimaInteracao;
     const dias = ENCERRADOS.includes(l.stage) ? null : diasAte(l.proximaAcaoEm);
     return [
-      l.placeId, l.nome, l.nicho, ROTULO_ESTAGIO[l.stage], l.score, l.telefone ?? "", l.endereco ?? "",
+      l.placeId, l.nome, l.nicho, ROTULO_ESTAGIO[l.stage], l.score, l.telefone ?? "",
+      bairroDe(l) ?? "", l.endereco ?? "",
       l.nota ?? "", l.avaliacoes, presencaDe(l), l.site ?? "", l.maps ?? "",
       l.decisorNome ?? "", l.decisorCargo ?? "", l.decisorTelefone ?? "",
       u ? formatarData(u.criadoEm) : "", u ? ROTULO_CANAL[u.canal] : "",

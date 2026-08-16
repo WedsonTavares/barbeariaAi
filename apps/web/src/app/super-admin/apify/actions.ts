@@ -119,6 +119,8 @@ export async function importarAction(leads: Achado[]): Promise<ResultadoImportac
         avaliacoes: l.avaliacoes,
         score: l.score,
         motivos: l.motivos,
+        lat: l.lat,
+        lng: l.lng,
       }))
     );
 

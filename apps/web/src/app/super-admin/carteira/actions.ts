@@ -260,3 +260,52 @@ function parseCsv(texto: string): string[][] {
   if (campo || linha.length) { linha.push(campo); linhas.push(linha); }
   return linhas.filter((l) => l.some((c) => c.trim()));
 }
+
+/**
+ * Preenche latitude/longitude dos leads importados antes de existirem essas
+ * colunas, usando o `placeId` que já está guardado.
+ *
+ * Roda em lotes porque a Vercel corta a requisição por duração — melhor devolver
+ * "faltam 200" e deixar clicar de novo do que estourar no meio e não gravar
+ * nada. O que já gravou fica gravado.
+ *
+ * Usa `fieldMask=location`, que é o SKU Essentials da Places API: a categoria
+ * mais barata, com cota grátis alta. 300 leads não chegam perto do limite.
+ */
+export async function completarCoordenadasAction(): Promise<
+  { ok: true; preenchidos: number; restantes: number } | { ok: false; erro: string }
+> {
+  try {
+    await guarda();
+    const chave = process.env.GOOGLE_MAPS_API_KEY?.trim();
+    if (!chave) {
+      return { ok: false, erro: "GOOGLE_MAPS_API_KEY não está configurada no servidor." };
+    }
+
+    const pendentes = await services.prospectService.semCoordenada(60);
+    if (!pendentes.length) return { ok: true, preenchidos: 0, restantes: 0 };
+
+    let preenchidos = 0;
+    for (const p of pendentes) {
+      try {
+        const res = await fetch(`https://places.googleapis.com/v1/places/${p.placeId}`, {
+          headers: { "X-Goog-Api-Key": chave, "X-Goog-FieldMask": "location" },
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) continue;
+        const d = (await res.json()) as { location?: { latitude?: number; longitude?: number } };
+        if (d.location?.latitude == null || d.location?.longitude == null) continue;
+        await services.prospectService.setCoordenada(p.id, d.location.latitude, d.location.longitude);
+        preenchidos++;
+      } catch {
+        // Um lead que falha não pode interromper o lote: segue para o próximo.
+      }
+    }
+
+    revalidatePath(BASE);
+    const restantes = (await services.prospectService.semCoordenada(1)).length;
+    return { ok: true, preenchidos, restantes };
+  } catch (e) {
+    return falha(e, "completar coordenadas falhou");
+  }
+}
