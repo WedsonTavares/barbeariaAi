@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 
 import { buscarAction, importarAction, type Achado } from "./actions";
+import { NOTAS_MINIMAS } from "@/lib/apify";
 
 const TERMOS = ["barbearia", "salão de beleza", "manicure", "estética"];
 const LOCAIS = ["Ribeirão Preto, SP", "Sertãozinho, SP", "Franca, SP", "Araraquara, SP"];
@@ -21,7 +22,7 @@ export function BuscadorApify() {
   const [termo, setTermo] = useState("barbearia");
   const [local, setLocal] = useState("Ribeirão Preto, SP");
   const [limite, setLimite] = useState(50);
-  const [notaMinima, setNotaMinima] = useState(0);
+  const [notaMinima, setNotaMinima] = useState<string>("");
 
   const [leads, setLeads] = useState<Achado[] | null>(null);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
@@ -128,11 +129,18 @@ export function BuscadorApify() {
               onChange={(e) => setLimite(Number(e.target.value))} className={INPUT}
             />
           </Campo>
-          <Campo rotulo="Nota mínima" dica="0 = sem filtro">
-            <input
-              type="number" min={0} max={5} step="0.1" value={notaMinima} disabled={buscando}
-              onChange={(e) => setNotaMinima(Number(e.target.value))} className={INPUT}
-            />
+          {/* Lista fechada: o actor recusa nota como número livre. */}
+          <Campo rotulo="Nota mínima" dica="filtra na origem, gasta menos">
+            <select
+              value={notaMinima}
+              disabled={buscando}
+              onChange={(e) => setNotaMinima(e.target.value)}
+              className={INPUT}
+            >
+              {NOTAS_MINIMAS.map((n) => (
+                <option key={n.valor} value={n.valor}>{n.rotulo}</option>
+              ))}
+            </select>
           </Campo>
         </div>
 
