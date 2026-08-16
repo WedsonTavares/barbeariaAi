@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar, Briefcase, Braces, Globe } from "lucide-react";
+import { Building2, Plus, LayoutDashboard, Menu, X, ShieldCheck, Radar, Briefcase, Braces, Globe, Sparkles } from "lucide-react";
 
 const GRUPOS = [
   {
@@ -52,21 +52,31 @@ function isActive(pathname: string, href: string, exato: boolean) {
  * comum — um lista as telas de UMA loja, o outro administra TODAS. Compartilhar
  * o componente exigiria um monte de condicional pra ganhar nada.
  */
-export function SuperAdminSidebar({ apify = false }: { apify?: boolean }) {
+export function SuperAdminSidebar({
+  apify = false,
+  hermes = false,
+}: {
+  apify?: boolean;
+  hermes?: boolean;
+}) {
   const pathname = usePathname() ?? "";
   const [aberto, setAberto] = useState(false);
   const painelRef = useRef<HTMLDivElement>(null);
 
   /**
-   * A Apify entra como item extra no grupo que já existe, sem reordenar nada.
-   * Com a flag desligada o menu fica idêntico ao de antes — a extensão não
-   * anuncia a própria existência.
+   * As extensões entram como itens extras no grupo que já existe, sem reordenar
+   * nada. Com as flags desligadas o menu fica idêntico ao de antes — extensão
+   * desligada não anuncia a própria existência.
    */
-  const grupos = apify
+  const extras = [
+    ...(apify ? [{ href: "/super-admin/apify", label: "Apify", icon: Globe, exato: false }] : []),
+    ...(hermes
+      ? [{ href: "/super-admin/inteligencia", label: "Inteligência", icon: Sparkles, exato: false }]
+      : []),
+  ];
+  const grupos = extras.length
     ? GRUPOS.map((g) =>
-        g.label === "Crescimento"
-          ? { ...g, links: [...g.links, { href: "/super-admin/apify", label: "Apify", icon: Globe, exato: false }] }
-          : g
+        g.label === "Crescimento" ? { ...g, links: [...g.links, ...extras] } : g
       )
     : GRUPOS;
   const todosOsLinks = grupos.flatMap((g) => g.links);

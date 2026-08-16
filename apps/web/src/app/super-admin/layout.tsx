@@ -23,7 +23,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-surface)] md:flex-row">
-      <SuperAdminSidebar apify={flags.apify} />
+      <SuperAdminSidebar apify={flags.apify} hermes={flags.hermes} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

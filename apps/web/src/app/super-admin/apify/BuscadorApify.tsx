@@ -9,7 +9,13 @@ import { buscarAction, importarAction, type Achado } from "./actions";
 const TERMOS = ["barbearia", "salão de beleza", "manicure", "estética"];
 const LOCAIS = ["Ribeirão Preto, SP", "Sertãozinho, SP", "Franca, SP", "Araraquara, SP"];
 
-type Filtros = { semSite: boolean; comTelefone: boolean; notaMin: number; avaliacoesMin: number };
+type Filtros = {
+  semSite: boolean;
+  comTelefone: boolean;
+  notaMin: number;
+  avaliacoesMin: number;
+  categoria: string;
+};
 
 export function BuscadorApify() {
   const [termo, setTermo] = useState("barbearia");
@@ -24,8 +30,15 @@ export function BuscadorApify() {
   const [importando, iniciarImport] = useTransition();
 
   const [f, setF] = useState<Filtros>({
-    semSite: false, comTelefone: true, notaMin: 0, avaliacoesMin: 0,
+    semSite: false, comTelefone: true, notaMin: 0, avaliacoesMin: 0, categoria: "todas",
   });
+
+  /** Categorias presentes no resultado — o filtro só oferece o que existe. */
+  const categorias = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const l of leads ?? []) c.set(l.nicho, (c.get(l.nicho) ?? 0) + 1);
+    return [...c.entries()].sort((a, b) => b[1] - a[1]);
+  }, [leads]);
 
   const visiveis = useMemo(() => {
     if (!leads) return [];
@@ -34,6 +47,7 @@ export function BuscadorApify() {
       if (f.comTelefone && !l.telefone) return false;
       if (f.notaMin && (l.nota ?? 0) < f.notaMin) return false;
       if (f.avaliacoesMin && l.avaliacoes < f.avaliacoesMin) return false;
+      if (f.categoria !== "todas" && l.nicho !== f.categoria) return false;
       return true;
     });
   }, [leads, f]);
@@ -170,6 +184,19 @@ export function BuscadorApify() {
             <Chip ativo={f.avaliacoesMin > 0} onClick={() => setF({ ...f, avaliacoesMin: f.avaliacoesMin ? 0 : 50 })}>
               50+ avaliações
             </Chip>
+            {categorias.length > 1 && (
+              <select
+                value={f.categoria}
+                onChange={(e) => setF({ ...f, categoria: e.target.value })}
+                aria-label="Categoria"
+                className="rounded-full border border-black/10 px-2 py-1 text-xs font-bold outline-none"
+              >
+                <option value="todas">Todas as categorias</option>
+                {categorias.map(([c, n]) => (
+                  <option key={c} value={c}>{c} ({n})</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-b border-black/5 bg-[var(--color-surface)] px-4 py-2">
@@ -212,7 +239,14 @@ export function BuscadorApify() {
                   <tr key={l.id} className={`border-t border-black/5 align-top ${l.jaExiste ? "opacity-55" : ""}`}>
                     <td className="p-3">
                       {l.jaExiste ? (
-                        <span className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold">
+                        <span
+                          title={
+                            l.duplicataDe
+                              ? `${l.duplicataDe.motivo} — já na carteira como "${l.duplicataDe.nome}"`
+                              : "já na carteira"
+                          }
+                          className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold"
+                        >
                           já existe
                         </span>
                       ) : (
@@ -233,9 +267,17 @@ export function BuscadorApify() {
                       <p className="font-semibold">{l.nome}</p>
                       <p className="text-xs text-[var(--color-muted)]">
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold">{l.nicho}</span>{" "}
+                        <span className="rounded bg-blue-50 px-1.5 py-0.5 font-semibold text-[var(--color-primary)]">
+                          {l.origem}
+                        </span>{" "}
                         {l.avaliacoes} avaliações{l.nota ? ` · nota ${l.nota}` : ""}
                       </p>
                       <p className="mt-0.5 text-xs text-[var(--color-muted)]">{l.endereco}</p>
+                      {l.duplicataDe && (
+                        <p className="mt-0.5 text-[11px] font-semibold text-amber-700">
+                          {l.duplicataDe.motivo} que &ldquo;{l.duplicataDe.nome}&rdquo;
+                        </p>
+                      )}
                     </td>
                     <td className="max-w-[13rem] p-3">
                       {l.telefone ? (

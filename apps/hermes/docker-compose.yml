@@ -1,0 +1,49 @@
+# Deploy do Hermes na VPS. Vive em /opt/hermes/, isolado de tudo.
+#
+# O que este arquivo NÃO faz, de propósito:
+#   - não monta /var/run/docker.sock (n8n já teve esse problema; ver auditoria)
+#   - não monta /root, /app, nem .env de outro serviço
+#   - não entra na rede `n8n_default`, onde os containers se enxergam
+#   - não toca em nenhum container existente
+#
+# O Hermes fala com a internet (API do modelo) e com a aplicação na Vercel.
+# Não precisa alcançar n8n, Evolution, Redis nem Postgres da VPS — e por estar
+# em rede própria, não alcança mesmo.
+
+services:
+  hermes:
+    build: .
+    image: hermes-agent:local
+    container_name: hermes-agent
+    restart: unless-stopped
+    env_file: .env
+    # Só no loopback: quem publica para fora é o nginx, e só o /perguntar.
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      HOST: "0.0.0.0" # dentro do container; a publicação acima é que restringe
+      PORT: "8787"
+    networks:
+      - hermes-net
+    volumes:
+      - hermes-dados:/app/dados
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  hermes-net:
+    name: hermes-net
+
+volumes:
+  hermes-dados:
+    name: hermes-dados
