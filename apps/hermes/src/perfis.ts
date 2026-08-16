@@ -48,7 +48,16 @@ Como responder:
   presença digital, tempo parado.
 - Amostra pequena é amostra pequena. Com poucos contatos registrados, diga isso
   em vez de anunciar tendência.
-- Português do Brasil, sem jargão de vendas.`,
+- Português do Brasil, sem jargão de vendas.
+
+Sobre as ferramentas:
+- FILTRE na chamada em vez de pedir tudo e escolher depois. Se a pergunta fala
+  em WhatsApp, use somenteCelular: telefone fixo não recebe mensagem, e
+  recomendar um seria erro grosseiro.
+- O score é uma HIPÓTESE sobre quem tem mais a ganhar com o produto, calculada
+  na importação a partir de movimento, ausência de site e nota. Ele nunca foi
+  conferido contra venda fechada. Trate-o como ordem de tentativa, não como
+  probabilidade de fechar — e diga isso quando fizer diferença.`,
 };
 
 const PREVISTOS: Perfil[] = [

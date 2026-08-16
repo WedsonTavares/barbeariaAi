@@ -65,8 +65,30 @@ const FERRAMENTAS: Record<string, Ferramenta> = {
 
   "prospeccao.leads_prioritarios": async (args) => {
     const leads = await services.prospectService.listAll();
+
+    // Os filtros são aplicados AQUI, não pelo modelo lendo a lista inteira.
+    // Sem isso ele pedia 50 leads e escolhia no texto — gastando tokens e
+    // errando: numa pergunta sobre WhatsApp, colocou um telefone fixo em
+    // primeiro lugar, porque o score não sabe qual canal você quer usar.
+    const soCelular = args.somenteCelular === true || args.canal === "whatsapp";
+    const soSemSite = args.somenteSemSite === true;
+    const minAval = Number(args.minAvaliacoes);
+    const nicho = typeof args.nicho === "string" ? args.nicho.toLowerCase() : null;
+    const notaDe = Number(args.notaMinima);
+    const notaAte = Number(args.notaMaxima);
+
     return leads
-      .filter((l) => l.stage === "NOVO" && l.telefone)
+      .filter((l) => {
+        if (l.stage !== "NOVO" || !l.telefone) return false;
+        if (soCelular && !ehCelular(l.telefone)) return false;
+        if (soSemSite && l.site) return false;
+        if (Number.isFinite(minAval) && l.avaliacoes < minAval) return false;
+        if (nicho && !l.nicho.toLowerCase().includes(nicho)) return false;
+        const n = l.nota ? Number(l.nota) : null;
+        if (Number.isFinite(notaDe) && (n ?? 0) < notaDe) return false;
+        if (Number.isFinite(notaAte) && (n ?? 99) > notaAte) return false;
+        return true;
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, limiteDe(args, 10))
       .map((l) => ({
