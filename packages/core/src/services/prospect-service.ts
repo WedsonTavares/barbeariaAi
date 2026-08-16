@@ -70,6 +70,23 @@ export const prospectService = {
       include: { interacoes: { orderBy: { criadoEm: "desc" }, take: 1 } },
     }),
 
+  /**
+   * Quais destes `placeId` já estão na carteira.
+   *
+   * Serve ao preview de uma fonte externa: antes de importar, a tela precisa
+   * dizer o que é novo e o que já foi trabalhado. Só lê os ids, sem carregar a
+   * linha inteira — a resposta é usada para marcar uma etiqueta, não para
+   * mostrar dado.
+   */
+  existentes: async (placeIds: string[]): Promise<Set<string>> => {
+    if (!placeIds.length) return new Set();
+    const achados = await prisma.prospectLead.findMany({
+      where: { placeId: { in: placeIds } },
+      select: { placeId: true },
+    });
+    return new Set(achados.map((a) => a.placeId));
+  },
+
   /** Histórico completo — só quando o painel do lead é aberto. */
   historico: (leadId: string) =>
     prisma.prospectInteraction.findMany({

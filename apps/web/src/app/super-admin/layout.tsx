@@ -1,4 +1,5 @@
 import { getAuthContext } from "@/lib/tenant";
+import { flags } from "@/lib/flags";
 import { SuperAdminSidebar } from "./SuperAdminSidebar";
 
 /**
@@ -22,7 +23,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-surface)] md:flex-row">
-      <SuperAdminSidebar />
+      <SuperAdminSidebar apify={flags.apify} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
