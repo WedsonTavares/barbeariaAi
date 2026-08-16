@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { customerPhoneKey, phoneDigits, services } from "@barbearia-ai/core";
+import {
+  brPhoneMatchKey,
+  customerPhoneKey,
+  getTenantBySlug,
+  phoneDigits,
+  services,
+} from "@barbearia-ai/core";
 import { conferir } from "@/lib/hermes-assinatura";
 import { flags } from "@/lib/flags";
 
@@ -65,8 +71,30 @@ const FERRAMENTAS: Record<string, Ferramenta> = {
 
   "prospeccao.leads_prioritarios": async (args) => {
     const leads = await services.prospectService.listAll();
+
+    // Os filtros são aplicados AQUI, não pelo modelo lendo a lista inteira.
+    // Sem isso ele pedia 50 leads e escolhia no texto — gastando tokens e
+    // errando: numa pergunta sobre WhatsApp, colocou um telefone fixo em
+    // primeiro lugar, porque o score não sabe qual canal você quer usar.
+    const soCelular = args.somenteCelular === true || args.canal === "whatsapp";
+    const soSemSite = args.somenteSemSite === true;
+    const minAval = Number(args.minAvaliacoes);
+    const nicho = typeof args.nicho === "string" ? args.nicho.toLowerCase() : null;
+    const notaDe = Number(args.notaMinima);
+    const notaAte = Number(args.notaMaxima);
+
     return leads
-      .filter((l) => l.stage === "NOVO" && l.telefone)
+      .filter((l) => {
+        if (l.stage !== "NOVO" || !l.telefone) return false;
+        if (soCelular && !ehCelular(l.telefone)) return false;
+        if (soSemSite && l.site) return false;
+        if (Number.isFinite(minAval) && l.avaliacoes < minAval) return false;
+        if (nicho && !l.nicho.toLowerCase().includes(nicho)) return false;
+        const n = l.nota ? Number(l.nota) : null;
+        if (Number.isFinite(notaDe) && (n ?? 0) < notaDe) return false;
+        if (Number.isFinite(notaAte) && (n ?? 99) > notaAte) return false;
+        return true;
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, limiteDe(args, 10))
       .map((l) => ({
@@ -133,6 +161,69 @@ const FERRAMENTAS: Record<string, Ferramenta> = {
     return {
       semProximaAcao: { total: semPlano.length, exemplos: semPlano.slice(0, teto).map(enxuto) },
       followUpVencido: { total: vencidos.length, exemplos: vencidos.slice(0, teto).map(enxuto) },
+    };
+  },
+
+  /**
+   * O que os leads da carteira responderam no WhatsApp.
+   *
+   * Duas travas, e as duas importam:
+   *
+   * 1. Só o tenant de `PROSPECT_INBOX_TENANT_SLUG` — o SEU. Inbox é dado de
+   *    tenant, protegido por RLS; uma ferramenta de plataforma lendo a caixa de
+   *    entrada de loja cliente seria exatamente o furo que a RLS existe para
+   *    impedir. Sem a variável, esta ferramenta não devolve nada.
+   *
+   * 2. Só conversas que CASAM com um lead da carteira. O número que você usa
+   *    para prospectar é o mesmo da sua vida pessoal — sem este recorte, a
+   *    conversa da sua família iria para dentro do modelo. Não vai.
+   *
+   * O campo que decide o dia é `aguardandoVoce`: respondeu e ninguém retornou.
+   */
+  "prospeccao.conversas": async (args) => {
+    const slug = process.env.PROSPECT_INBOX_TENANT_SLUG?.trim();
+    if (!slug) {
+      return {
+        indisponivel:
+          "O inbox de prospecção não está configurado (PROSPECT_INBOX_TENANT_SLUG).",
+      };
+    }
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) return { indisponivel: `Loja "${slug}" não encontrada.` };
+
+    const [conversas, leads] = await Promise.all([
+      services.conversationService.list(tenant.id),
+      services.prospectService.listAll(),
+    ]);
+
+    const porChave = new Map(
+      leads.filter((l) => l.telefone).map((l) => [brPhoneMatchKey(l.telefone!), l])
+    );
+
+    const itens = conversas
+      .map((c) => {
+        const lead = porChave.get(brPhoneMatchKey(c.phone));
+        if (!lead) return null; // não é lead da carteira: fora, sempre
+        return {
+          lead: lead.nome,
+          etapa: lead.stage,
+          score: lead.score,
+          ultimaMensagemEm: c.lastMessageAt.toISOString(),
+          diasSemFalar: Math.round((Date.now() - c.lastMessageAt.getTime()) / DIA),
+          naoLidas: c.unread,
+          // unread > 0 significa que a última palavra foi dele e ninguém abriu.
+          aguardandoVoce: c.unread > 0,
+          proximaAcao: lead.proximaAcao,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => Number(b.aguardandoVoce) - Number(a.aguardandoVoce) || b.score - a.score);
+
+    return {
+      total: itens.length,
+      aguardandoVoce: itens.filter((i) => i.aguardandoVoce).length,
+      conversas: itens.slice(0, limiteDe(args, 20)),
+      nota: "Só conversas com leads da carteira. Contato pessoal não entra.",
     };
   },
 

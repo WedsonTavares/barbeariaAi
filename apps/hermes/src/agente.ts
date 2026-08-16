@@ -55,12 +55,36 @@ export async function responder(
     function: {
       name: f.nome.replace(/\./g, "__"),
       description: f.descricao,
-      parameters: {
-        type: "object",
-        properties: {
-          limite: { type: "number", description: "Quantos itens no máximo (opcional)." },
-        },
-      },
+      // Os filtros só são oferecidos à ferramenta que os entende. Declarar em
+      // todas faria o modelo tentar filtrar um resumo agregado, e receber o
+      // mesmo número de volta achando que filtrou.
+      parameters:
+        f.nome === "prospeccao.leads_prioritarios"
+          ? {
+              type: "object",
+              properties: {
+                limite: { type: "number", description: "Quantos no máximo. Padrão 10." },
+                somenteCelular: {
+                  type: "boolean",
+                  description:
+                    "Só quem tem celular. Use SEMPRE que a pergunta envolver WhatsApp — telefone fixo não recebe mensagem.",
+                },
+                somenteSemSite: { type: "boolean", description: "Só quem não tem site nenhum." },
+                minAvaliacoes: { type: "number", description: "Mínimo de avaliações no Google." },
+                notaMinima: { type: "number", description: "Nota mínima, ex.: 4.3" },
+                notaMaxima: { type: "number", description: "Nota máxima, ex.: 4.7" },
+                nicho: {
+                  type: "string",
+                  description: "Barbearia, Salão de beleza, Manicure ou Estética/Spa.",
+                },
+              },
+            }
+          : {
+              type: "object",
+              properties: {
+                limite: { type: "number", description: "Quantos itens no máximo (opcional)." },
+              },
+            },
     },
   }));
 
