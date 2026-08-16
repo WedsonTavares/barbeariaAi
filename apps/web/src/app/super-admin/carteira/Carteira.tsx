@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 
 import type { ProspectStage } from "@barbearia-ai/core";
-import { importarCsvAction, moverStageAction } from "./actions";
+import { completarCoordenadasAction, importarCsvAction, moverStageAction } from "./actions";
 import { PainelLead } from "./PainelLead";
 import {
   COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_CANAL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
@@ -125,6 +125,9 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
     return { ...f, qtd: leads.filter((l) => l.stage !== "PERDIDO" && idx(l.stage) >= i).length };
   });
 
+  /** Leads sem coordenada: enquanto houver, o botão de completar aparece. */
+  const semCoordenada = leads.filter((l) => l.lat == null).length;
+
   const leadAberto = leads.find((l) => l.id === aberto) ?? null;
 
   function enviarArquivo(file: File) {
@@ -164,6 +167,34 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 }
     );
+  }
+
+  /**
+   * Busca a coordenada dos leads importados antes das colunas existirem.
+   *
+   * O laço fica AQUI, no cliente, e não no servidor: a Vercel corta requisição
+   * por duração, e 300 chamadas ao Google não cabem numa só. Cada volta grava o
+   * lote e devolve quantos faltam — se a aba fechar no meio, o que já gravou
+   * está gravado, e clicar de novo continua de onde parou.
+   */
+  function completarCoordenadas() {
+    iniciar(async () => {
+      let total = 0;
+      for (let volta = 0; volta < 12; volta++) {
+        const r = await completarCoordenadasAction();
+        if (!r.ok) return setMsg({ ok: false, texto: r.erro });
+        total += r.preenchidos;
+        setMsg({
+          ok: true,
+          texto: r.restantes
+            ? `${total} localizados · faltam ${r.restantes}...`
+            : `${total} leads localizados. Recarregue para ver as distâncias.`,
+        });
+        // Nada preenchido e ainda restam: são leads cuja ficha o Google não
+        // devolve mais. Insistir só gastaria cota.
+        if (!r.restantes || r.preenchidos === 0) return;
+      }
+    });
   }
 
   function mover(id: string, stage: ProspectStage) {
@@ -215,6 +246,17 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
           >
             {localizando ? <LoaderCircle className="size-4 animate-spin" /> : <MapPin className="size-4" />}
             {localizando ? "Localizando..." : aqui ? "Perto de mim ✕" : "Perto de mim"}
+          </button>
+        )}
+        {semCoordenada > 0 && (
+          <button
+            type="button"
+            onClick={completarCoordenadas}
+            disabled={pendente}
+            title="Busca a localização no Google pelos dados que já temos. Uma vez só."
+            className={BOTAO_ACAO}
+          >
+            <MapPin className="size-4" /> Localizar {semCoordenada}
           </button>
         )}
         {aqui && (
