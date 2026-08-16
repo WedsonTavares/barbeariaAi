@@ -19,6 +19,8 @@ export const FERRAMENTAS = {
   "prospeccao.motivos_de_perda": "Por que os leads foram perdidos, agrupado por motivo.",
   "prospeccao.esquecidos":
     "Leads ativos sem próxima ação marcada, ou com follow-up vencido. Os que somem do processo.",
+  "prospeccao.conversas":
+    "Conversas de WhatsApp com leads da carteira: quem respondeu, há quantos dias, e quem está AGUARDANDO retorno seu. Use para 'quem respondeu e eu não retornei'.",
   "lojas.resumo": "Lojas da plataforma: quantas ativas, assinatura, WhatsApp conectado.",
 } as const;
 

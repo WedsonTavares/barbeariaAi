@@ -32,6 +32,7 @@ const COMERCIAL: Perfil = {
     "prospeccao.funil",
     "prospeccao.motivos_de_perda",
     "prospeccao.esquecidos",
+    "prospeccao.conversas",
     "lojas.resumo",
   ],
   instrucoes: `Você é a inteligência comercial de uma plataforma de CRM para barbearias e salões.
