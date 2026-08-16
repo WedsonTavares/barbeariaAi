@@ -36,14 +36,33 @@ function token(): string {
   return t;
 }
 
+/**
+ * Nota mínima aceita pelo actor.
+ *
+ * A API não recebe número: é uma lista fechada de apelidos. Mandar `4.5` ou
+ * `07` devolve 400 com "must be equal to one of the allowed values" — foi o que
+ * aconteceu na primeira busca com filtro. A tela oferece só estes valores.
+ */
+export const NOTAS_MINIMAS = [
+  { valor: "", rotulo: "Qualquer nota" },
+  { valor: "two", rotulo: "2,0 ou mais" },
+  { valor: "twoAndHalf", rotulo: "2,5 ou mais" },
+  { valor: "three", rotulo: "3,0 ou mais" },
+  { valor: "threeAndHalf", rotulo: "3,5 ou mais" },
+  { valor: "four", rotulo: "4,0 ou mais" },
+  { valor: "fourAndHalf", rotulo: "4,5 ou mais" },
+] as const;
+
+export type NotaMinima = (typeof NOTAS_MINIMAS)[number]["valor"];
+
 export type BuscaApify = {
   /** O que procurar: "barbearia", "salão de beleza"… */
   termo: string;
   /** Cidade/região por extenso: "Ribeirão Preto, SP". */
   local: string;
   limite: number;
-  /** Só lugares com nota igual ou acima. 0 = sem filtro. */
-  notaMinima?: number;
+  /** Um dos valores de `NOTAS_MINIMAS`. Vazio = sem filtro. */
+  notaMinima?: string;
 };
 
 /** O que o actor de Google Maps devolve, no recorte que usamos. */
@@ -122,7 +141,10 @@ export async function buscarLocais(busca: BuscaApify): Promise<LugarBruto[]> {
     // dia em que o padrão mudar — telefone e site são a razão de existir aqui.
     scrapeContacts: true,
   };
-  if (busca.notaMinima && busca.notaMinima > 0) entrada.placeMinimumStars = String(busca.notaMinima);
+  // Só entra se for um apelido reconhecido. Valor estranho vindo do cliente é
+  // descartado em silêncio em vez de derrubar a busca inteira com 400.
+  const nota = NOTAS_MINIMAS.find((n) => n.valor === busca.notaMinima)?.valor;
+  if (nota) entrada.placeMinimumStars = nota;
 
   const url = `${BASE}/acts/${encodeURIComponent(actor)}/run-sync-get-dataset-items?token=${encodeURIComponent(token())}`;
 
