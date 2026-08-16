@@ -273,7 +273,7 @@ function parseCsv(texto: string): string[][] {
  * mais barata, com cota grátis alta. 300 leads não chegam perto do limite.
  */
 export async function completarCoordenadasAction(): Promise<
-  { ok: true; preenchidos: number; restantes: number } | { ok: false; erro: string }
+  { ok: true; preenchidos: number; restantes: number; motivo?: string } | { ok: false; erro: string }
 > {
   try {
     await guarda();
@@ -286,26 +286,59 @@ export async function completarCoordenadasAction(): Promise<
     if (!pendentes.length) return { ok: true, preenchidos: 0, restantes: 0 };
 
     let preenchidos = 0;
+    // Guarda a PRIMEIRA falha para explicar por que o lote não rendeu. Sem
+    // isto, um lote que falha inteiro devolve "0 localizados" — que não diz se
+    // a cota estourou, se a chave perdeu permissão ou se a ficha sumiu do
+    // Google. Foi exatamente o que aconteceu no primeiro uso.
+    let motivo: string | undefined;
+
     for (const p of pendentes) {
       try {
         const res = await fetch(`https://places.googleapis.com/v1/places/${p.placeId}`, {
           headers: { "X-Goog-Api-Key": chave, "X-Goog-FieldMask": "location" },
           signal: AbortSignal.timeout(8_000),
         });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          if (!motivo) {
+            const corpo = await res.text().catch(() => "");
+            motivo = explicar(res.status, corpo);
+            console.error(`[carteira] places ${res.status} em ${p.placeId}: ${corpo.slice(0, 200)}`);
+          }
+          continue;
+        }
         const d = (await res.json()) as { location?: { latitude?: number; longitude?: number } };
-        if (d.location?.latitude == null || d.location?.longitude == null) continue;
+        if (d.location?.latitude == null || d.location?.longitude == null) {
+          motivo ??= "O Google respondeu sem coordenada para esses estabelecimentos.";
+          continue;
+        }
         await services.prospectService.setCoordenada(p.id, d.location.latitude, d.location.longitude);
         preenchidos++;
-      } catch {
-        // Um lead que falha não pode interromper o lote: segue para o próximo.
+      } catch (e) {
+        motivo ??= "Falha de rede ao falar com o Google.";
+        console.error(`[carteira] places falhou em ${p.placeId}`, e);
       }
     }
 
     revalidatePath(BASE);
-    const restantes = (await services.prospectService.semCoordenada(1)).length;
-    return { ok: true, preenchidos, restantes };
+    return {
+      ok: true,
+      preenchidos,
+      restantes: await services.prospectService.contarSemCoordenada(),
+      ...(preenchidos === 0 && motivo ? { motivo } : {}),
+    };
   } catch (e) {
     return falha(e, "completar coordenadas falhou");
   }
+}
+
+/** Traduz o erro da Places API para algo acionável. */
+function explicar(status: number, corpo: string): string {
+  if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(corpo)) {
+    return "A cota da Places API acabou. Ela renova amanhã — ou aumente o limite no Google Cloud (APIs e serviços → Cotas).";
+  }
+  if (status === 403) {
+    return "A chave não tem permissão para a Places API (New), ou está restrita a outro site. Verifique no Google Cloud → Credenciais.";
+  }
+  if (status === 404) return "Essas fichas não existem mais no Google.";
+  return `O Google respondeu ${status}.`;
 }

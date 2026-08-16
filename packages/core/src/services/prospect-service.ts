@@ -201,6 +201,9 @@ export const prospectService = {
       take: limite,
     }),
 
+  /** Quantos ainda faltam. `semCoordenada(1).length` só dizia 0 ou 1. */
+  contarSemCoordenada: () => prisma.prospectLead.count({ where: { lat: null } }),
+
   setCoordenada: (id: string, lat: number, lng: number) =>
     prisma.prospectLead.update({ where: { id }, data: { lat, lng } }),
 

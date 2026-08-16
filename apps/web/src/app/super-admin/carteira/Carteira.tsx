@@ -184,15 +184,25 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
         const r = await completarCoordenadasAction();
         if (!r.ok) return setMsg({ ok: false, texto: r.erro });
         total += r.preenchidos;
+
+        // Lote inteiro sem preencher: para e DIZ o porquê. Repetir não
+        // resolveria — se a cota acabou, insistir só gasta o que sobrou.
+        if (r.preenchidos === 0) {
+          return setMsg({
+            ok: false,
+            texto: r.motivo
+              ? `${total} localizados. Parou: ${r.motivo}`
+              : `${total} localizados. Faltam ${r.restantes}, mas o Google não devolveu esses.`,
+          });
+        }
+
         setMsg({
           ok: true,
           texto: r.restantes
             ? `${total} localizados · faltam ${r.restantes}...`
-            : `${total} leads localizados. Recarregue para ver as distâncias.`,
+            : `${total} leads localizados. Recarregue a página para ver as distâncias.`,
         });
-        // Nada preenchido e ainda restam: são leads cuja ficha o Google não
-        // devolve mais. Insistir só gastaria cota.
-        if (!r.restantes || r.preenchidos === 0) return;
+        if (!r.restantes) return;
       }
     });
   }
