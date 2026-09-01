@@ -24,6 +24,12 @@ export { reportService, type MonthlyRow, type ServiceReportRow } from "./report-
 export { overviewService, type OverviewDay, type OverviewSummary, type OverviewTrend } from "./overview-service";
 export { tenantService, TenantConflictError, RESERVED_SLUGS } from "./tenant-service";
 export { prospectService, type ProspectEntrada, type ResultadoImportacao } from "./prospect-service";
+export {
+  platformSettingService,
+  CHAVES_PLATAFORMA,
+  type ChavePlataforma,
+  type InfoSegredo,
+} from "./platform-setting-service";
 export { notificationService, pushNotification } from "./notification-service";
 export { conversationService, BOT_SILENCING_TAGS, CONVERSATION_STAGES, STAGE_TAG } from "./conversation-service";
 export { botService, botConfigured } from "./bot-service";

@@ -307,6 +307,22 @@ model ProspectLead {
   /// Só preenchido quando o estágio vira PERDIDO. Alimenta o gráfico de perdas.
   motivoPerda ProspectMotivoPerda?
 
+  /// ─── Auditoria do site ───────────────────────────────────────────────
+  /// Preenchida sob demanda pela Carteira, nunca pela importação. Por isso fica
+  /// FORA do update de `importar`, junto com o que é seu (estágio, histórico,
+  /// observação): reimportar a região não pode apagar o diagnóstico.
+  siteAuditadoEm DateTime?
+  /// Status HTTP da última leitura. 0 = não respondeu.
+  siteStatus     Int?
+  /// Milissegundos até o HTML chegar — é a demora que o cliente sente.
+  siteMs         Int?
+  /// 0–100, QUANTO MAIOR MAIS O SITE PRECISA DE AJUDA. Nulo quando não deu para
+  /// julgar (o site bloqueou o robô): zero ali diria "site perfeito", que é
+  /// exatamente a leitura errada.
+  siteOportunidade Int?
+  siteProblemas    String[] @default([])
+  siteBons         String[] @default([])
+
   interacoes ProspectInteraction[]
 
   criadoEm     DateTime @default(now())
@@ -315,6 +331,26 @@ model ProspectLead {
   @@index([stage])
   @@index([nicho])
   @@index([proximaAcaoEm])
+  @@index([siteAuditadoEm])
+}
+
+/// Configuração da PLATAFORMA, trocável pela tela do super admin sem redeploy.
+///
+/// Nasceu de um problema concreto: os créditos da Apify acabam e a saída é usar
+/// outra conta. Com a chave só em variável de ambiente, trocar exige entrar na
+/// Vercel e esperar um deploy — trava a prospecção por um motivo que não tem
+/// nada de técnico.
+///
+/// É tabela de PLATAFORMA, como `ProspectLead`: sem `tenantId`, fora da RLS por
+/// tenant, e só o super admin alcança (`requireSuperAdmin` no app).
+/// O valor vai SEMPRE cifrado (AES-256-GCM) e nunca volta inteiro para a tela.
+model PlatformSetting {
+  chave        String @id
+  valorCifrado String
+  /// Quem trocou (id do Clerk), para a troca não virar mistério depois.
+  atualizadoPor String?
+  atualizadoEm  DateTime @updatedAt
+  criadoEm      DateTime @default(now())
 }
 
 model Tenant {

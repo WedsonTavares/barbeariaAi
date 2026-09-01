@@ -2,16 +2,20 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Upload, Download, Phone, AlertTriangle, Check, X, LayoutList, Columns3, Clock,
-  HelpCircle, ChevronDown, MessageCircle, MapPin, LoaderCircle,
+  HelpCircle, ChevronDown, MessageCircle, MapPin, LoaderCircle, Globe, ExternalLink,
 } from "lucide-react";
 
 import type { ProspectStage } from "@barbearia-ai/core";
-import { completarCoordenadasAction, importarCsvAction, moverStageAction } from "./actions";
+import {
+  auditarSiteAction, auditarSitesAction, completarCoordenadasAction, importarCsvAction,
+  moverStageAction,
+} from "./actions";
 import { PainelLead } from "./PainelLead";
 import {
   COR_ESTAGIO, ENCERRADOS, FUNIL, ROTULO_CANAL, ROTULO_ESTAGIO, ROTULO_MOTIVO,
   ROTULO_ORDEM, ROTULO_RESULTADO, RAIOS, bairroDe, diasAte, distanciaAte, estaAtrasado,
-  estaLargado, formatarData, formatarDistancia, ordenar, presencaDe, respostaWhatsappDe,
+  estaLargado, estadoSiteDe, formatarData, formatarDistancia, ofertaDe, ordenar, presencaDe,
+  respostaWhatsappDe, vereditoSite,
   type LeadView, type Ordem, type Ponto,
 } from "./tipos";
 
@@ -39,7 +43,10 @@ type Filtro =
 export function Carteira({ leads }: { leads: LeadView[] }) {
   const [filtro, setFiltro] = useState<Filtro>(null);
   const [busca, setBusca] = useState("");
-  const [modo, setModo] = useState<"lista" | "quadro">("lista");
+  /** "sites" é a terceira visão: quem tem site, o link, e o que há para melhorar. */
+  const [modo, setModo] = useState<"lista" | "quadro" | "sites">("lista");
+  /** Lead cujo site está sendo relido agora — só para o botão daquela linha. */
+  const [analisando, setAnalisando] = useState<string | null>(null);
   const [mostrarAnalise, setMostrarAnalise] = useState(true);
   const [ordem, setOrdem] = useState<Ordem>("urgencia");
   const [pagina, setPagina] = useState(0);
@@ -128,6 +135,17 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
   /** Leads sem coordenada: enquanto houver, o botão de completar aparece. */
   const semCoordenada = leads.filter((l) => l.lat == null).length;
 
+  /**
+   * Sites com link e ainda sem diagnóstico.
+   *
+   * Conta sobre a carteira inteira, não sobre o que está filtrado na tela: o
+   * lote do servidor pega os próximos por score, ignorando o filtro daqui, e um
+   * número que não bate com o que o botão faz é pior do que número nenhum.
+   */
+  const sitesPorAnalisar = leads.filter(
+    (l) => l.site && presencaDe(l) === "Site próprio" && !l.siteAuditadoEm
+  ).length;
+
   const leadAberto = leads.find((l) => l.id === aberto) ?? null;
 
   function enviarArquivo(file: File) {
@@ -207,6 +225,56 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
     });
   }
 
+  /**
+   * Analisa os sites em lotes, com o laço AQUI no cliente.
+   *
+   * Mesmo desenho do preenchimento de coordenadas, pelo mesmo motivo: cada site
+   * pode levar 10 s e a Vercel corta requisição por duração. Cada volta grava
+   * seu lote e diz quantos faltam; fechar a aba no meio não perde o que já foi.
+   */
+  function analisarSites() {
+    setMsg(null);
+    iniciar(async () => {
+      let total = 0;
+      for (let volta = 0; volta < 45; volta++) {
+        const r = await auditarSitesAction();
+        if (!r.ok) return setMsg({ ok: false, texto: r.erro });
+        total += r.analisados;
+
+        if (!r.restantes) {
+          return setMsg({
+            ok: true,
+            texto: `${total} ${total === 1 ? "site analisado" : "sites analisados"}. Recarregue a página para ver o diagnóstico.`,
+          });
+        }
+        // Lote inteiro sem gravar nada: parar é melhor do que rodar 45 voltas
+        // batendo no mesmo obstáculo.
+        if (r.analisados === 0) {
+          return setMsg({
+            ok: false,
+            texto: `${total} analisados. Parou com ${r.restantes} restantes — nenhum site do último lote respondeu.`,
+          });
+        }
+        setMsg({ ok: true, texto: `${total} analisados · faltam ${r.restantes}...` });
+      }
+    });
+  }
+
+  /** Relê UM site: o dono mexeu no site, ou a leitura anterior deu indeterminado. */
+  function analisarUm(id: string) {
+    setAnalisando(id);
+    setMsg(null);
+    iniciar(async () => {
+      const r = await auditarSiteAction(id);
+      setAnalisando(null);
+      setMsg(
+        r.ok
+          ? { ok: true, texto: `${r.aviso ?? "Analisado."} Recarregue para ver o resultado.` }
+          : { ok: false, texto: r.erro }
+      );
+    });
+  }
+
   function mover(id: string, stage: ProspectStage) {
     iniciar(async () => {
       const r = await moverStageAction(id, stage);
@@ -256,6 +324,31 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
           >
             {localizando ? <LoaderCircle className="size-4 animate-spin" /> : <MapPin className="size-4" />}
             {localizando ? "Localizando..." : aqui ? "Perto de mim ✕" : "Perto de mim"}
+          </button>
+        )}
+        {total > 0 && (
+          <button
+            type="button"
+            onClick={() => setModo(modo === "sites" ? "lista" : "sites")}
+            title="Quem tem site, o link para abrir, e o que há para melhorar nele"
+            className={`${BOTAO_ACAO} ${
+              modo === "sites" ? "border-[var(--color-primary)] bg-blue-50 text-[var(--color-primary)]" : ""
+            }`}
+          >
+            <Globe className="size-4" /> {modo === "sites" ? "Sites ✕" : "Sites"}
+          </button>
+        )}
+        {/* Só na visão de Sites: fora dela o botão não teria contexto nenhum. */}
+        {modo === "sites" && sitesPorAnalisar > 0 && (
+          <button
+            type="button"
+            onClick={analisarSites}
+            disabled={pendente}
+            title="Abre cada site e anota o que há para melhorar. Uma vez só."
+            className={BOTAO_ACAO}
+          >
+            {pendente ? <LoaderCircle className="size-4 animate-spin" /> : <Globe className="size-4" />}
+            Analisar {sitesPorAnalisar}
           </button>
         )}
         {semCoordenada > 0 && (
@@ -446,9 +539,33 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                 )}
               </div>
 
+              {/* Na visão de Sites os atalhos que importam são outros: o que
+                  decide a conversa ali é ter ou não ter site, não a etapa. */}
+              {modo === "sites"
+                ? (["Sem site", "Só rede social", "Site próprio"] as const).map((pres) => {
+                    const ativo = filtro?.tipo === "presenca" && filtro.valor === pres;
+                    return (
+                      <button
+                        key={pres}
+                        type="button"
+                        onClick={() =>
+                          setFiltro(ativo ? null : { tipo: "presenca", valor: pres, rotulo: pres })
+                        }
+                        className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                          ativo
+                            ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                            : "border-black/10 hover:bg-[var(--color-surface)]"
+                        }`}
+                      >
+                        {pres}
+                      </button>
+                    );
+                  })
+                : null}
+
               {/* Atalhos do dia a dia. São alternadores: clicar no que já está
                   ativo desliga, em vez de obrigar a ir no chip para limpar. */}
-              {RAPIDOS.map((r) => {
+              {modo !== "sites" && RAPIDOS.map((r) => {
                 const ativo = filtro?.tipo === r.filtro.tipo && filtro.valor === r.filtro.valor;
                 return (
                   <button
@@ -471,7 +588,7 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                 placeholder="Buscar..."
                 className="w-36 rounded-xl border border-black/10 px-3 py-1.5 text-sm outline-none focus:border-[var(--color-primary)]"
               />
-              {modo === "lista" && (
+              {modo !== "quadro" && (
                 <select
                   value={ordem}
                   onChange={(e) => setOrdem(e.target.value as Ordem)}
@@ -484,12 +601,18 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
                 </select>
               )}
               <div className="flex overflow-hidden rounded-xl border border-black/10">
-                {([["lista", LayoutList], ["quadro", Columns3]] as const).map(([m, Icon]) => (
+                {(
+                  [
+                    ["lista", LayoutList, "Ver em lista"],
+                    ["quadro", Columns3, "Ver em quadro"],
+                    ["sites", Globe, "Ver os sites"],
+                  ] as const
+                ).map(([m, Icon, rotulo]) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setModo(m)}
-                    aria-label={m === "lista" ? "Ver em lista" : "Ver em quadro"}
+                    aria-label={rotulo}
                     className={`grid size-8 place-items-center ${
                       modo === m ? "bg-[var(--color-primary)] text-white" : "hover:bg-[var(--color-surface)]"
                     }`}
@@ -500,9 +623,19 @@ export function Carteira({ leads }: { leads: LeadView[] }) {
               </div>
             </div>
 
-            {modo === "lista" ? (
+            {modo !== "quadro" ? (
               <>
-                <Lista leads={daPagina} aoAbrir={setAberto} aqui={aqui} />
+                {modo === "sites" ? (
+                  <Sites
+                    leads={daPagina}
+                    aoAbrir={setAberto}
+                    aoAnalisar={analisarUm}
+                    analisando={analisando}
+                    pendente={pendente}
+                  />
+                ) : (
+                  <Lista leads={daPagina} aoAbrir={setAberto} aqui={aqui} />
+                )}
                 {paginas > 1 && (
                   <div className="flex items-center justify-between gap-3 border-t border-black/5 p-3">
                     <p className="text-xs text-[var(--color-muted)]">
@@ -666,6 +799,195 @@ function Lista({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ─────────────────────────────── Sites ────────────────────────────────── */
+
+/**
+ * A visão que responde "o que eu ofereço para quem JÁ tem site".
+ *
+ * Mostra os dois lados de propósito — quem tem e quem não tem. Esconder os sem
+ * site faria perder a comparação que dá o argumento: numa lista onde metade não
+ * tem nada e a outra metade tem site que não abre no celular, a oferta é a
+ * mesma conversa vista de dois ângulos.
+ *
+ * O link vai clicável e abre em aba nova. Nenhum diagnóstico automático
+ * substitui você olhar o site por dez segundos antes de ligar — ele só diz em
+ * quais dos 300 vale a pena gastar esses dez segundos.
+ */
+function Sites({
+  leads,
+  aoAbrir,
+  aoAnalisar,
+  analisando,
+  pendente,
+}: {
+  leads: LeadView[];
+  aoAbrir: (id: string) => void;
+  aoAnalisar: (id: string) => void;
+  analisando: string | null;
+  pendente: boolean;
+}) {
+  if (!leads.length) {
+    return <p className="p-6 text-center text-sm text-[var(--color-muted)]">Nada neste filtro.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-[var(--color-surface)] text-left text-[11px] uppercase text-[var(--color-muted)]">
+          <tr>
+            <th className="p-3">Empresa</th>
+            <th className="p-3">Site</th>
+            <th className="p-3">Diagnóstico</th>
+            <th className="p-3">O que oferecer</th>
+            <th className="p-3" />
+          </tr>
+        </thead>
+        <tbody>
+          {leads.map((l) => {
+            const estado = estadoSiteDe(l);
+            const temLink = Boolean(l.site);
+            return (
+              <tr key={l.id} className="border-t border-black/5 align-top">
+                <td className="p-3">
+                  <button
+                    type="button"
+                    onClick={() => aoAbrir(l.id)}
+                    className="text-left font-semibold hover:underline"
+                  >
+                    {l.nome}
+                  </button>
+                  <p className="text-xs text-[var(--color-muted)]">
+                    {l.nicho} · score {l.score} · {presencaDe(l)}
+                  </p>
+                </td>
+
+                <td className="max-w-[15rem] p-3">
+                  {temLink ? (
+                    <a
+                      href={l.site!}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)] hover:underline"
+                    >
+                      <ExternalLink className="size-3 shrink-0" />
+                      <span className="truncate">{l.site!.replace(/^https?:\/\//, "")}</span>
+                    </a>
+                  ) : (
+                    <span className="text-xs text-[var(--color-muted)]">—</span>
+                  )}
+                  {l.siteMs != null && l.siteMs > 0 && (
+                    <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                      abriu em {(l.siteMs / 1000).toFixed(1).replace(".", ",")} s
+                      {l.siteStatus ? ` · HTTP ${l.siteStatus}` : ""}
+                    </p>
+                  )}
+                </td>
+
+                <td className="max-w-[22rem] p-3">
+                  <Diagnostico estado={estado} lead={l} />
+                </td>
+
+                <td className="max-w-[12rem] p-3 text-xs text-[var(--color-muted)]">
+                  {ofertaDe(l)}
+                </td>
+
+                <td className="p-3">
+                  {temLink && (
+                    <button
+                      type="button"
+                      onClick={() => aoAnalisar(l.id)}
+                      disabled={pendente}
+                      className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-black/10 px-2 py-1 text-[11px] font-bold hover:bg-[var(--color-surface)] disabled:opacity-40"
+                    >
+                      {analisando === l.id ? (
+                        <LoaderCircle className="size-3 animate-spin" />
+                      ) : (
+                        <Globe className="size-3" />
+                      )}
+                      {l.siteAuditadoEm ? "Reanalisar" : "Analisar"}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * O veredito de um site.
+ *
+ * Cinco estados, cada um com uma frase diferente. O que este componente NUNCA
+ * faz é dizer que um site está quebrado quando a leitura foi bloqueada — nessa
+ * hora ele manda você abrir o link, porque é o que um colega honesto faria.
+ */
+function Diagnostico({ estado, lead: l }: { estado: ReturnType<typeof estadoSiteDe>; lead: LeadView }) {
+  if (estado === "sem-site") {
+    return (
+      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-[var(--color-primary)]">
+        não tem site
+      </span>
+    );
+  }
+
+  if (estado === "rede-social") {
+    return (
+      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+        só rede social — sem site próprio
+      </span>
+    );
+  }
+
+  if (estado === "nao-analisado") {
+    return (
+      <span className="text-xs text-[var(--color-muted)]">
+        ainda não analisado
+      </span>
+    );
+  }
+
+  if (estado === "indeterminado") {
+    return (
+      <div>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
+          não deu para julgar
+        </span>
+        {l.siteProblemas.map((p) => (
+          <p key={p} className="mt-1 text-[11px] text-[var(--color-muted)]">{p}</p>
+        ))}
+      </div>
+    );
+  }
+
+  const veredito = vereditoSite(l.siteOportunidade ?? 0);
+  return (
+    <div>
+      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${veredito.cor}`}>
+        {veredito.rotulo}
+      </span>
+      {l.siteProblemas.length > 0 ? (
+        <ul className="mt-1 space-y-0.5">
+          {/* Três é o que cabe numa frase ao telefone. O resto está no site. */}
+          {l.siteProblemas.slice(0, 3).map((p) => (
+            <li key={p} className="text-[11px] text-[var(--color-muted)]">· {p}</li>
+          ))}
+          {l.siteProblemas.length > 3 && (
+            <li className="text-[11px] text-[var(--color-muted)]">
+              · e mais {l.siteProblemas.length - 3}
+            </li>
+          )}
+        </ul>
+      ) : (
+        <p className="mt-1 text-[11px] text-[var(--color-muted)]">
+          {l.siteBons.slice(0, 3).join(" · ") || "nada a apontar"}
+        </p>
+      )}
     </div>
   );
 }

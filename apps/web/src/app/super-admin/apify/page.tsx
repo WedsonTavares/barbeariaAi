@@ -3,6 +3,7 @@ import { Globe } from "lucide-react";
 import { getAuthContext } from "@/lib/tenant";
 import { flags } from "@/lib/flags";
 import { BuscadorApify } from "./BuscadorApify";
+import { ChaveApify } from "./ChaveApify";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,12 @@ export default async function ApifyPage() {
       </header>
 
       {flags.apify ? (
-        <BuscadorApify />
+        <>
+          {/* A troca de chave vem antes da busca de propósito: quando os
+              créditos acabam, é aqui que o trabalho destrava. */}
+          <ChaveApify />
+          <BuscadorApify />
+        </>
       ) : (
         <section className="mt-6 rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
           <h2 className="font-bold">Extensão desligada</h2>
@@ -50,12 +56,15 @@ export default async function ApifyPage() {
             Para ativar, defina no servidor:
           </p>
           <pre className="mt-3 overflow-x-auto rounded-xl bg-[var(--color-surface)] p-3 text-xs">
-            {`FEATURE_APIFY=true\nAPIFY_TOKEN=<seu token da Apify>`}
+            {`FEATURE_APIFY=true`}
           </pre>
           <p className="mt-3 text-xs text-[var(--color-muted)]">
-            O token fica só no servidor — nunca é enviado ao navegador. Crie em{" "}
-            <strong>apify.com → Settings → Integrations</strong>. Enquanto estiver desligada,
-            nada muda no restante do sistema.
+            Só a flag é obrigatória. A <strong>chave da Apify</strong> você cola nesta
+            mesma tela depois de ligar — ela fica cifrada no banco e é trocável a
+            qualquer momento, sem redeploy. Se preferir, ainda dá para deixá-la no
+            servidor como <code>APIFY_TOKEN</code>; a da tela tem prioridade. Em
+            nenhum dos dois casos ela é enviada ao navegador. Enquanto a flag
+            estiver desligada, nada muda no restante do sistema.
           </p>
         </section>
       )}

@@ -7,6 +7,12 @@ import type { LugarBruto } from "./places";
  * `NEXT_PUBLIC_APIFY_TOKEN` e nem deve existir. Quem fala com a Apify é a
  * server action; a tela só recebe o resultado já normalizado.
  *
+ * O token chega por PARÂMETRO, não é lido daqui. Duas razões: quem resolve de
+ * onde ele vem (banco ou ambiente) é `apify-token.ts`, e — a razão prática —
+ * este arquivo é importado por um componente cliente por causa de
+ * `NOTAS_MINIMAS`. Se ele puxasse o `@barbearia-ai/core` para ler o banco, o
+ * Prisma iria junto para o bundle do navegador e o build quebraria.
+ *
  * A saída é `LugarBruto`, o mesmo formato do Google Places, de propósito: assim
  * `nichoDe`, `pontuar` e `paraLead` são reusados sem alteração e o score de um
  * lead da Apify é comparável ao de um lead do Places. Duas escalas de score
@@ -21,20 +27,10 @@ export class ApifyError extends Error {}
  * com o tempo e não vale prender o código a um id.
  */
 const ACTOR_PADRAO = "compass~crawler-google-places";
-const BASE = "https://api.apify.com/v2";
+export const BASE = "https://api.apify.com/v2";
 
 /** A Apify cobra por resultado; teto duro para um clique não virar uma conta. */
 const LIMITE_MAXIMO = 300;
-
-function token(): string {
-  const t = process.env.APIFY_TOKEN?.trim();
-  if (!t) {
-    throw new ApifyConfigError(
-      "APIFY_TOKEN não está definido. Crie o token em apify.com → Settings → Integrations e adicione nas variáveis de ambiente do servidor."
-    );
-  }
-  return t;
-}
 
 /**
  * Nota mínima aceita pelo actor.
@@ -132,7 +128,7 @@ export function paraLugarBruto(item: ItemApify): LugarBruto | null {
  * requisição, o que dispensa guardar `runId` e ficar consultando estado. O
  * preço é o teto de tempo — por isso o limite baixo e o timeout explícito.
  */
-export async function buscarLocais(busca: BuscaApify): Promise<LugarBruto[]> {
+export async function buscarLocais(busca: BuscaApify, token: string): Promise<LugarBruto[]> {
   const actor = process.env.APIFY_GOOGLE_MAPS_ACTOR?.trim() || ACTOR_PADRAO;
   const limite = Math.min(Math.max(1, Math.trunc(busca.limite)), LIMITE_MAXIMO);
 
@@ -151,7 +147,7 @@ export async function buscarLocais(busca: BuscaApify): Promise<LugarBruto[]> {
   const nota = NOTAS_MINIMAS.find((n) => n.valor === busca.notaMinima)?.valor;
   if (nota) entrada.placeMinimumStars = nota;
 
-  const url = `${BASE}/acts/${encodeURIComponent(actor)}/run-sync-get-dataset-items?token=${encodeURIComponent(token())}`;
+  const url = `${BASE}/acts/${encodeURIComponent(actor)}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
 
   let res: Response;
   try {
@@ -177,7 +173,9 @@ export async function buscarLocais(busca: BuscaApify): Promise<LugarBruto[]> {
     const corpo = await res.text().catch(() => "");
     // O token não pode vazar para a tela nem para o log de erro.
     if (res.status === 401 || res.status === 403) {
-      throw new ApifyConfigError("A Apify recusou o token. Confira o APIFY_TOKEN no servidor.");
+      throw new ApifyConfigError(
+        "A Apify recusou a chave. Ela pode ter expirado ou ficado sem crédito — troque em Prospecção · Apify → Chave da conta."
+      );
     }
     if (res.status === 404) {
       throw new ApifyConfigError(`Actor "${actor}" não encontrado na sua conta Apify.`);

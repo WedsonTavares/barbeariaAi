@@ -5,6 +5,7 @@ import { requireSuperAdmin, services } from "@barbearia-ai/core";
 import { getAuthContext } from "@/lib/tenant";
 import { flags } from "@/lib/flags";
 import { ApifyConfigError, ApifyError, buscarLocais, type BuscaApify } from "@/lib/apify";
+import { estadoDaChave, testarChave, tokenApify, type EstadoChave } from "@/lib/apify-token";
 import { paraLead, type Lead } from "@/lib/places";
 
 /**
@@ -57,7 +58,7 @@ export async function buscarAction(busca: BuscaApify): Promise<ResultadoBusca> {
     if (!busca.termo?.trim()) return { ok: false, erro: "Diga o que procurar (ex.: barbearia)." };
     if (!busca.local?.trim()) return { ok: false, erro: "Diga onde procurar (ex.: Ribeirão Preto, SP)." };
 
-    const brutos = await buscarLocais(busca);
+    const brutos = await buscarLocais(busca, await tokenApify());
     if (!brutos.length) return { ok: true, leads: [], novos: 0 };
 
     const candidatos = brutos.map(paraLead);
@@ -131,5 +132,85 @@ export async function importarAction(leads: Achado[]): Promise<ResultadoImportac
     };
   } catch (e) {
     return falha(e, "importação falhou");
+  }
+}
+
+/* ─────────────────────────── Chave da conta ───────────────────────────────
+   Os créditos da Apify acabam e a saída é usar outra conta. Trocar isso pela
+   variável de ambiente da Vercel exige um redeploy, e o redeploy acontece
+   justamente quando você está no meio da prospecção. Aqui a troca é imediata.
+
+   A chave NUNCA volta para a tela: sai daqui só a máscara e a data. E toda
+   troca passa por uma conferência na Apify antes de gravar — salvar uma chave
+   quebrada e descobrir isso quatro minutos depois é o erro que isto evita. */
+
+export async function estadoDaChaveAction(): Promise<EstadoChave> {
+  await guarda();
+  return estadoDaChave();
+}
+
+export type ResultadoChave = { ok: true; aviso: string } | { ok: false; erro: string };
+
+export async function salvarChaveAction(token: string): Promise<ResultadoChave> {
+  try {
+    await guarda();
+
+    const limpo = token.trim();
+    if (!limpo) return { ok: false, erro: "Cole a chave da Apify." };
+    // Espaço no meio é copiar-e-colar quebrado, não uma chave estranha — e o
+    // erro da Apify para isso ("token inválido") não ajudaria a perceber.
+    if (/\s/.test(limpo)) {
+      return { ok: false, erro: "A chave tem espaço no meio. Copie de novo, inteira, sem quebra de linha." };
+    }
+
+    const teste = await testarChave(limpo);
+    if (!teste.ok) return { ok: false, erro: teste.erro };
+
+    const ctx = await getAuthContext();
+    await services.platformSettingService.set(
+      services.CHAVES_PLATAFORMA.apifyToken,
+      limpo,
+      ctx.userId ?? null
+    );
+
+    revalidatePath("/super-admin/apify");
+    return { ok: true, aviso: `Chave trocada. As buscas passam a usar a conta "${teste.conta}".` };
+  } catch (e) {
+    return falha(e, "salvar chave falhou");
+  }
+}
+
+/** Confere sem gravar — para saber se a conta ainda tem chave válida. */
+export async function conferirChaveAtualAction(): Promise<ResultadoChave> {
+  try {
+    await guarda();
+    const teste = await testarChave(await tokenApify());
+    return teste.ok
+      ? { ok: true, aviso: `Chave válida — conta "${teste.conta}".` }
+      : { ok: false, erro: teste.erro };
+  } catch (e) {
+    return falha(e, "conferir chave falhou");
+  }
+}
+
+/**
+ * Apaga a chave guardada e volta para a variável de ambiente.
+ *
+ * Existe para o caso de você querer desfazer a troca sem ter guardado a chave
+ * antiga — o `APIFY_TOKEN` do servidor continua lá, intacto, esperando.
+ */
+export async function removerChaveAction(): Promise<ResultadoChave> {
+  try {
+    await guarda();
+    await services.platformSettingService.limpar(services.CHAVES_PLATAFORMA.apifyToken);
+    revalidatePath("/super-admin/apify");
+    return {
+      ok: true,
+      aviso: process.env.APIFY_TOKEN?.trim()
+        ? "Chave removida. Voltou a valer a APIFY_TOKEN do servidor."
+        : "Chave removida. Não há mais nenhuma chave configurada — a busca vai recusar até você colar outra.",
+    };
+  } catch (e) {
+    return falha(e, "remover chave falhou");
   }
 }

@@ -193,6 +193,58 @@ export const prospectService = {
     return achados;
   },
 
+  /**
+   * Sites ainda não auditados, para o lote da tela de Sites.
+   *
+   * Só quem TEM site: quem não tem já está diagnosticado pela ausência, e
+   * mandar o auditor buscar `null` seria gastar volta de laço para nada.
+   */
+  sitesPorAuditar: (limite: number) =>
+    prisma.prospectLead.findMany({
+      where: { site: { not: null }, siteAuditadoEm: null },
+      select: { id: true, site: true },
+      orderBy: { score: "desc" },
+      take: limite,
+    }),
+
+  /** Quantos sites ainda faltam auditar — a tela mostra o quanto sobra. */
+  contarSitesPorAuditar: () =>
+    prisma.prospectLead.count({ where: { site: { not: null }, siteAuditadoEm: null } }),
+
+  /** O site de um lead, para reanalisar um só. */
+  siteDe: (id: string) =>
+    prisma.prospectLead.findUnique({ where: { id }, select: { id: true, site: true } }),
+
+  /**
+   * Grava o diagnóstico do site.
+   *
+   * `siteAuditadoEm` é carimbado mesmo quando deu indeterminado, de propósito:
+   * sem isso o lote pegaria o mesmo site bloqueado a cada volta e nunca
+   * avançaria. O diagnóstico diz que não deu para julgar; a tela mostra isso e
+   * o botão de reanalisar continua ali.
+   */
+  salvarAuditoriaDeSite: (
+    id: string,
+    a: {
+      status: number | null;
+      ms: number;
+      oportunidade: number | null;
+      problemas: string[];
+      bons: string[];
+    }
+  ) =>
+    prisma.prospectLead.update({
+      where: { id },
+      data: {
+        siteAuditadoEm: new Date(),
+        siteStatus: a.status,
+        siteMs: a.ms,
+        siteOportunidade: a.oportunidade,
+        siteProblemas: a.problemas,
+        siteBons: a.bons,
+      },
+    }),
+
   /** Leads sem coordenada, para o preenchimento em lote. */
   semCoordenada: (limite: number) =>
     prisma.prospectLead.findMany({

@@ -30,6 +30,16 @@ export type LeadView = {
   decisorNome: string | null;
   decisorCargo: string | null;
   decisorTelefone: string | null;
+  /** ─── Diagnóstico do site ────────────────────────────────────────────
+   *  Tudo nulo/vazio enquanto ninguém mandou analisar. A tela distingue
+   *  "ainda não olhei" de "olhei e está bom" — são conversas diferentes. */
+  siteAuditadoEm: string | null;
+  siteStatus: number | null;
+  siteMs: number | null;
+  /** 0–100. Quanto MAIOR, mais o site precisa de ajuda. Nulo = não deu para julgar. */
+  siteOportunidade: number | null;
+  siteProblemas: string[];
+  siteBons: string[];
   /** Resumo do último toque, para a lista e o card sem carregar o histórico. */
   ultimaInteracao: {
     resumo: string;
@@ -162,6 +172,44 @@ export function presencaDe(l: LeadView): "Sem site" | "Só rede social" | "Site 
   return /instagram\.|facebook\.|linktr\.ee|linktree|wa\.me|beacons\.|api\.whatsapp/.test(l.site.toLowerCase())
     ? "Só rede social"
     : "Site próprio";
+}
+
+/* ──────────────────────── Diagnóstico do site ─────────────────────────── */
+
+/**
+ * Em que estado está o site do lead — a pergunta da tela de Sites.
+ *
+ * Cinco estados, não três, porque "não tem site" e "tem site que eu ainda não
+ * olhei" levam a ações opostas: um você já sabe o que oferecer, o outro precisa
+ * de um clique antes. E "não deu para julgar" existe para a tela nunca afirmar
+ * que um site está quebrado quando ele só recusou nosso robô.
+ */
+export type EstadoSite =
+  | "sem-site"
+  | "rede-social"
+  | "nao-analisado"
+  | "indeterminado"
+  | "analisado";
+
+export function estadoSiteDe(l: LeadView): EstadoSite {
+  const presenca = presencaDe(l);
+  if (presenca === "Sem site") return "sem-site";
+  if (!l.siteAuditadoEm) return presenca === "Só rede social" ? "rede-social" : "nao-analisado";
+  if (l.siteOportunidade === null) return "indeterminado";
+  return "analisado";
+}
+
+/**
+ * Veredito em uma frase, na faixa em que ele muda de conversa.
+ *
+ * Os cortes são grosseiros de propósito: a diferença entre 44 e 47 não muda
+ * nada no que você vai falar ao telefone, e mostrar o número cru convidaria a
+ * tratar como precisão que ele não tem.
+ */
+export function vereditoSite(oportunidade: number): { rotulo: string; cor: string } {
+  if (oportunidade >= 60) return { rotulo: "precisa de reforma", cor: "bg-red-100 text-red-800" };
+  if (oportunidade >= 25) return { rotulo: "dá para melhorar", cor: "bg-amber-100 text-amber-800" };
+  return { rotulo: "está bom", cor: "bg-emerald-100 text-emerald-800" };
 }
 
 /**

@@ -35,6 +35,16 @@ ALTER TABLE "ProspectInteraction" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS prospect_interaction_app_access ON "ProspectInteraction";
 CREATE POLICY prospect_interaction_app_access ON "ProspectInteraction" FOR ALL TO app_runtime USING (true) WITH CHECK (true);
 
+-- PlatformSetting: configuração da plataforma (chave da Apify). Mesmo caso do
+-- `ProspectLead`: não tem tenantId, então não entra no laço de isolamento — não
+-- há tenant a que pertencer. RLS ligada com policy restrita ao app_runtime para
+-- o Supabase não expor a tabela via PostgREST a anon/authenticated.
+-- ⚠️ Guarda segredo cifrado. Só o super admin escreve aqui (requireSuperAdmin).
+GRANT SELECT, INSERT, UPDATE, DELETE ON "PlatformSetting" TO app_runtime;
+ALTER TABLE "PlatformSetting" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS platform_setting_app_access ON "PlatformSetting";
+CREATE POLICY platform_setting_app_access ON "PlatformSetting" FOR ALL TO app_runtime USING (true) WITH CHECK (true);
+
 -- Metadados do Prisma. Não é tabela de tenant, mas fica em `public` e por isso
 -- é exposta ao PostgREST — o linter do Supabase acusa como crítico e está certo.
 -- Ninguém precisa lê-la pela API: as migrations rodam pelo DIRECT_URL como dono,
