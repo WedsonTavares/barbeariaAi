@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  auditarSite,
   requireSuperAdmin,
   services,
   type ProspectCanal,
@@ -273,7 +274,7 @@ function parseCsv(texto: string): string[][] {
  * mais barata, com cota grátis alta. 300 leads não chegam perto do limite.
  */
 export async function completarCoordenadasAction(): Promise<
-  { ok: true; preenchidos: number; restantes: number } | { ok: false; erro: string }
+  { ok: true; preenchidos: number; restantes: number; motivo?: string } | { ok: false; erro: string }
 > {
   try {
     await guarda();
@@ -286,26 +287,132 @@ export async function completarCoordenadasAction(): Promise<
     if (!pendentes.length) return { ok: true, preenchidos: 0, restantes: 0 };
 
     let preenchidos = 0;
+    // Guarda a PRIMEIRA falha para explicar por que o lote não rendeu. Sem
+    // isto, um lote que falha inteiro devolve "0 localizados" — que não diz se
+    // a cota estourou, se a chave perdeu permissão ou se a ficha sumiu do
+    // Google. Foi exatamente o que aconteceu no primeiro uso.
+    let motivo: string | undefined;
+
     for (const p of pendentes) {
       try {
         const res = await fetch(`https://places.googleapis.com/v1/places/${p.placeId}`, {
           headers: { "X-Goog-Api-Key": chave, "X-Goog-FieldMask": "location" },
           signal: AbortSignal.timeout(8_000),
         });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          if (!motivo) {
+            const corpo = await res.text().catch(() => "");
+            motivo = explicar(res.status, corpo);
+            console.error(`[carteira] places ${res.status} em ${p.placeId}: ${corpo.slice(0, 200)}`);
+          }
+          continue;
+        }
         const d = (await res.json()) as { location?: { latitude?: number; longitude?: number } };
-        if (d.location?.latitude == null || d.location?.longitude == null) continue;
+        if (d.location?.latitude == null || d.location?.longitude == null) {
+          motivo ??= "O Google respondeu sem coordenada para esses estabelecimentos.";
+          continue;
+        }
         await services.prospectService.setCoordenada(p.id, d.location.latitude, d.location.longitude);
         preenchidos++;
-      } catch {
-        // Um lead que falha não pode interromper o lote: segue para o próximo.
+      } catch (e) {
+        motivo ??= "Falha de rede ao falar com o Google.";
+        console.error(`[carteira] places falhou em ${p.placeId}`, e);
       }
     }
 
     revalidatePath(BASE);
-    const restantes = (await services.prospectService.semCoordenada(1)).length;
-    return { ok: true, preenchidos, restantes };
+    return {
+      ok: true,
+      preenchidos,
+      restantes: await services.prospectService.contarSemCoordenada(),
+      ...(preenchidos === 0 && motivo ? { motivo } : {}),
+    };
   } catch (e) {
     return falha(e, "completar coordenadas falhou");
   }
+}
+
+/* ───────────────────────── Auditoria de site ──────────────────────────────
+   "Esse site precisa de melhoria?" — a pergunta que decide o que oferecer a
+   quem JÁ tem site. Quem não tem já está resolvido pela ausência.
+
+   Em lotes PARALELOS pequenos, não em um laço grande: cada site pode levar até
+   10 s, e 300 deles em sequência não cabem em requisição nenhuma. Oito por vez
+   fecha em ~12 s no pior caso, grava o que conseguiu e devolve quantos faltam —
+   o mesmo desenho já provado no preenchimento de coordenadas. Se a aba fechar
+   no meio, o que gravou está gravado. */
+
+/** Sites por volta. Oito é educado com os servidores alheios e cabe no tempo. */
+const SITES_POR_LOTE = 8;
+
+export type ResultadoAuditoria =
+  | { ok: true; analisados: number; restantes: number }
+  | { ok: false; erro: string };
+
+export async function auditarSitesAction(): Promise<ResultadoAuditoria> {
+  try {
+    await guarda();
+
+    const pendentes = await services.prospectService.sitesPorAuditar(SITES_POR_LOTE);
+    if (!pendentes.length) return { ok: true, analisados: 0, restantes: 0 };
+
+    // `allSettled` e não `all`: um site que estoura de um jeito imprevisto não
+    // pode levar junto os outros sete que já foram lidos com sucesso.
+    const leituras = await Promise.allSettled(
+      pendentes.map(async (p) => {
+        const auditoria = await auditarSite(p.site ?? "");
+        await services.prospectService.salvarAuditoriaDeSite(p.id, auditoria);
+      })
+    );
+
+    const analisados = leituras.filter((r) => r.status === "fulfilled").length;
+    for (const r of leituras) {
+      if (r.status === "rejected") console.error("[carteira] auditoria de site falhou", r.reason);
+    }
+
+    revalidatePath(BASE);
+    return {
+      ok: true,
+      analisados,
+      restantes: await services.prospectService.contarSitesPorAuditar(),
+    };
+  } catch (e) {
+    return falha(e, "auditoria de sites falhou");
+  }
+}
+
+/** Reanalisa UM site — para quando o dono mexeu no site, ou deu indeterminado. */
+export async function auditarSiteAction(leadId: string): Promise<Resultado> {
+  try {
+    await guarda();
+    const lead = await services.prospectService.siteDe(leadId);
+    if (!lead?.site) return { ok: false, erro: "Este lead não tem site cadastrado." };
+
+    const auditoria = await auditarSite(lead.site);
+    await services.prospectService.salvarAuditoriaDeSite(leadId, auditoria);
+
+    revalidatePath(BASE);
+    return {
+      ok: true,
+      aviso: auditoria.indeterminado
+        ? "O site não deixou ler automaticamente. Abra o link e confira à mão."
+        : auditoria.problemas.length
+          ? `${auditoria.problemas.length} ${auditoria.problemas.length === 1 ? "ponto" : "pontos"} a melhorar.`
+          : "Nada a apontar — o site está em ordem.",
+    };
+  } catch (e) {
+    return falha(e, "auditoria de site falhou");
+  }
+}
+
+/** Traduz o erro da Places API para algo acionável. */
+function explicar(status: number, corpo: string): string {
+  if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(corpo)) {
+    return "A cota da Places API acabou. Ela renova amanhã — ou aumente o limite no Google Cloud (APIs e serviços → Cotas).";
+  }
+  if (status === 403) {
+    return "A chave não tem permissão para a Places API (New), ou está restrita a outro site. Verifique no Google Cloud → Credenciais.";
+  }
+  if (status === 404) return "Essas fichas não existem mais no Google.";
+  return `O Google respondeu ${status}.`;
 }

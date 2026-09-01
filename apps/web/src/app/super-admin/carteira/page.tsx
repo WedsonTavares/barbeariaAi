@@ -49,6 +49,12 @@ export default async function CarteiraPage() {
       decisorNome: l.decisorNome,
       decisorCargo: l.decisorCargo,
       decisorTelefone: l.decisorTelefone,
+      siteAuditadoEm: l.siteAuditadoEm?.toISOString() ?? null,
+      siteStatus: l.siteStatus,
+      siteMs: l.siteMs,
+      siteOportunidade: l.siteOportunidade,
+      siteProblemas: l.siteProblemas,
+      siteBons: l.siteBons,
       ultimaInteracao: ultima
         ? {
             resumo: ultima.resumo,

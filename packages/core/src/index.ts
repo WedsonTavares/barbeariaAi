@@ -19,6 +19,15 @@ export * from "./time";
 export * from "./phone";
 export * from "./text";
 export * from "./whatsapp";
+// Auditoria do site do lead: pura o bastante para ser testada, e usada pela
+// Carteira do super admin para dizer o que oferecer a quem já tem site.
+export {
+  auditarSite,
+  analisarLeitura,
+  ehRedeSocial,
+  type AuditoriaSite,
+  type LeituraSite,
+} from "./site-audit";
 export * as schemas from "./schemas";
 export * as services from "./services";
 // Tipos que a UI precisa nomear (props de componentes da Visão Geral).
